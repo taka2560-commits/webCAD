@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web CAD</title>
+    <style>
+        :root { --bg-color:#212830;--panel-bg:#333842;--border-color:#181c21;--text-color:#e0e0e0;--highlight-color:#528bff;--ucs-color:#ffcc00;--crosshair-color:#ffffff;--btn-hover:rgba(255,255,255,0.1); }
+        body,html { margin:0;padding:0;height:100%;font-family:'Segoe UI',sans-serif;background-color:var(--bg-color);color:var(--text-color);overflow:hidden;display:flex;flex-direction:column; }
+        #top-bar { min-height:40px;background-color:var(--panel-bg);border-bottom:1px solid var(--border-color);display:flex;flex-wrap:wrap;align-items:center;padding:4px 10px;gap:6px; }
+        .top-btn { background-color:transparent;border:1px solid #555;color:var(--text-color);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:5px; }
+        .top-btn:hover { background-color:var(--btn-hover);border-color:#888; }
+        .control-group { display:flex;align-items:center;gap:5px;font-size:12px;background-color:#2a2e35;padding:4px 8px;border-radius:4px;border:1px solid #444; }
+        select { background-color:#1e2227;color:white;border:1px solid #555;padding:2px 5px;outline:none; }
+        #middle-area { flex:1;display:flex;position:relative;overflow:hidden; }
+        #toolbar { width:65px;background-color:var(--panel-bg);border-right:1px solid var(--border-color);display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:5px;overflow-y:auto; }
+        #toolbar::-webkit-scrollbar { width:4px; } #toolbar::-webkit-scrollbar-thumb { background:#555;border-radius:4px; }
+        .tool-btn { width:54px;height:50px;background-color:transparent;border:1px solid transparent;color:var(--text-color);border-radius:4px;cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;flex-shrink:0; }
+        .tool-btn:hover { background-color:var(--btn-hover);border-color:var(--border-color); }
+        .tool-btn.active { background-color:rgba(82,139,255,0.3);border-color:var(--highlight-color); }
+        .tool-icon { font-size:18px;font-weight:bold;margin-bottom:2px; } .tool-cmd { font-size:9px;color:#aaa; }
+        .tool-sep { height:1px;width:80%;background-color:#444;margin:5px 0; }
+        #canvas-container { flex:1;position:relative;background-color:#000;overflow:hidden;cursor:none; }
+        canvas { display:block; }
+        #properties-panel, #layer-panel { width:250px; background-color:var(--panel-bg); border-left:1px solid var(--border-color); display:flex; flex-direction:column; overflow-y:auto; transition:width 0.2s; }
+        #properties-panel.collapsed, #layer-panel.collapsed { width:0; overflow:hidden; border-left:none; }
+        .props-header { background-color:#2a2e35; padding:5px 10px; font-weight:bold; font-size:12px; border-bottom:1px solid #111; display:flex; justify-content:space-between; align-items:center; }
+        .props-content { padding:10px; font-size:11px; }
+        .prop-row { display:flex; margin-bottom:5px; align-items:center; }
+        .prop-label { width:80px; color:#aaa; }
+        .prop-val { flex:1; background-color:#1e2227; color:#fff; border:1px solid #444; padding:2px 5px; outline:none; }
+        #command-line-area { height:120px;background-color:var(--bg-color);border-top:1px solid var(--border-color);display:flex;flex-direction:column;font-family:'Consolas',monospace;font-size:13px; }
+        #command-log { flex:1;padding:5px 10px;overflow-y:auto;color:#aaa;display:flex;flex-direction:column;justify-content:flex-end; }
+        #command-input-wrapper { display:flex;padding:5px 10px;background-color:#fff;color:#000; }
+        #command-prompt { margin-right:5px;font-weight:bold;color:#333; }
+        #command-input { flex:1;border:none;outline:none;background:transparent;font-family:inherit;font-size:inherit;font-weight:bold; }
+        #status-bar { height:24px;background-color:var(--panel-bg);border-bottom:1px solid var(--border-color);display:flex;align-items:center;padding:0 10px;font-size:12px;justify-content:space-between; }
+        .status-btn { background:transparent; border:none; color:#aaa; cursor:pointer; padding:2px 6px; font-size:11px; }
+        .status-btn:hover { color:#fff; background:var(--btn-hover); }
+        .status-btn.active { color:var(--highlight-color); font-weight:bold; }
+        #osnap-panel { display:none; position:absolute; top:25px; left:0; background:var(--panel-bg); border:1px solid var(--border-color); padding:10px; z-index:100; box-shadow:0 0 10px rgba(0,0,0,0.5); }
+        #osnap-panel label { display:block; margin-bottom:5px; font-size:12px; cursor:pointer; }
+        #ucs-label { margin-right:10px; font-weight:bold; }
+    </style>
+    <!-- PWA Settings -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#212830">
+    <link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+    <input type="file" id="dxf-file-input" accept=".dxf,.dwg" style="display:none;">
+    <div id="top-bar">
+        <button class="top-btn" id="btn-load-dxf" title="ファイルを開く (DXF/DWG)">📁 開く</button>
+        <button class="top-btn" onclick="closeDrawing()" title="図面を閉じて新規作成">✕ 閉じる</button>
+        <button class="top-btn" onclick="togglePropertiesPanel()" title="プロパティパネル表示切替">📋 プロパティ</button>
+        <div class="control-group">
+            <span style="color:#aaa;">保存:</span>
+            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="exportDxf()" title="DXF形式で保存">DXF</button>
+            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="exportDwg()" title="DWG形式で保存">DWG</button>
+        </div>
+        <div class="control-group">
+            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="undo()" title="元に戻す (Ctrl+Z)">↩ 戻す</button>
+            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="redo()" title="やり直し (Ctrl+Y)">↪ やり直し</button>
+        </div>
+        <div class="control-group">
+            <span style="color:#aaa;">座標系:</span>
+            <span id="ucs-status-display" style="font-weight:bold;color:var(--highlight-color);width:30px;text-align:center;">WCS</span>
+            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="issueCommand('WCS')" title="ワールド座標系に戻す">リセット</button>
+            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="issueCommand('UCS')" title="新しい原点を指定">原点移動</button>
+        </div>
+        <div class="control-group">
+            <span style="color:#aaa;">画層:</span>
+            <div id="current-layer-color" style="width:12px;height:12px;background-color:white;border-radius:2px;"></div>
+            <select id="layer-select"></select>
+            <button class="status-btn" onclick="toggleLayerPanel()" style="padding:0 5px;" title="画層一覧/表示設定">👁️</button>
+        </div>
+        <button class="top-btn" onclick="zoomToOrigin()" title="原点へズーム">🔍 原点</button>
+        <button class="top-btn" onclick="zoomExtents()" title="全体表示">🔍 全体</button>
+        <span id="drawing-name" style="color:#aaa;font-size:11px;margin-left:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;" title="">新規図面</span>
+    </div>
+    <div id="status-bar">
+        <div><span id="ucs-label" style="color:var(--highlight-color);">WCS</span> モデル空間</div>
+        <div style="display:flex;align-items:center;gap:15px;">
+            <button id="btn-ortho" class="status-btn" title="直交モード (F8)" onclick="toggleOrtho()">ORTHO</button>
+            <div style="position:relative;">
+                <button id="btn-osnap" class="status-btn active" title="オブジェクトスナップ (F3)" onclick="toggleOsnapMain()">OSNAP</button>
+                <button class="status-btn" style="padding:0 2px" onclick="toggleOsnapPanel()">▼</button>
+                <div id="osnap-panel">
+                    <label><input type="checkbox" id="osnap-end" checked> 端点</label>
+                    <label><input type="checkbox" id="osnap-mid" checked> 中点</label>
+                    <label><input type="checkbox" id="osnap-cen" checked> 中心</label>
+                    <label><input type="checkbox" id="osnap-int" checked> 交点</label>
+                    <label><input type="checkbox" id="osnap-near" checked> 近接点</label>
+                    <label><input type="checkbox" id="osnap-perp" checked> 垂線</label>
+                </div>
+            </div>
+            <span id="snap-indicator" style="color:#00ff00;width:40px;"></span>
+            <span id="coords-display" style="width:120px;text-align:right;">0.0000, 0.0000</span>
+        </div>
+    </div>
+    <div id="middle-area">
+        <div id="toolbar">
+            <!-- 作図コマンド -->
+            <button class="tool-btn" onclick="toggleCommand('LINE')" title="線分 (L)"><div class="tool-icon">／</div><div class="tool-cmd">LINE</div></button>
+            <button class="tool-btn" onclick="toggleCommand('PLINE')" title="ポリライン (PL)"><div class="tool-icon">∧</div><div class="tool-cmd">PLINE</div></button>
+            <button class="tool-btn" onclick="toggleCommand('RECTANG')" title="長方形 (REC)"><div class="tool-icon">□</div><div class="tool-cmd">RECT</div></button>
+            <button class="tool-btn" onclick="toggleCommand('CIRCLE')" title="円 (C)"><div class="tool-icon">◯</div><div class="tool-cmd">CIRCLE</div></button>
+            <button class="tool-btn" onclick="toggleCommand('ARC')" title="円弧 (A)"><div class="tool-icon">⌒</div><div class="tool-cmd">ARC</div></button>
+            <button class="tool-btn" onclick="toggleCommand('ELLIPSE')" title="楕円 (EL)"><div class="tool-icon">⬭</div><div class="tool-cmd">ELLIP</div></button>
+            <button class="tool-btn" onclick="toggleCommand('TEXT')" title="文字 (T)"><div class="tool-icon">A</div><div class="tool-cmd">TEXT</div></button>
+            <button class="tool-btn" onclick="toggleCommand('HATCH')" title="ハッチング (H)"><div class="tool-icon" style="background:repeating-linear-gradient(45deg, transparent, transparent 2px, #fff 2px, #fff 3px); width:16px; height:16px; margin-bottom:2px;"></div><div class="tool-cmd">HATCH</div></button>
+            <div class="tool-sep"></div>
+            <!-- 編集 -->
+            <button class="tool-btn" onclick="toggleCommand('ERASE')" title="削除 (E)"><div class="tool-icon" style="color:#ff6b6b;">✖</div><div class="tool-cmd">ERASE</div></button>
+            <button class="tool-btn" onclick="toggleCommand('MOVE')" title="移動 (M)"><div class="tool-icon" style="color:#ffff00;">✥</div><div class="tool-cmd">MOVE</div></button>
+            <button class="tool-btn" onclick="toggleCommand('COPY')" title="コピー (CO)"><div class="tool-icon" style="color:#ffff00;">⊞</div><div class="tool-cmd">COPY</div></button>
+            <button class="tool-btn" onclick="toggleCommand('OFFSET')" title="オフセット (O)"><div class="tool-icon" style="color:#ffff00;">◱</div><div class="tool-cmd">OFFSET</div></button>
+            <button class="tool-btn" onclick="toggleCommand('ROTATE')" title="回転 (RO)"><div class="tool-icon" style="color:#ffff00;">↻</div><div class="tool-cmd">ROTATE</div></button>
+            <div class="tool-sep"></div>
+            <!-- 寸法コマンド -->
+            <button class="tool-btn" onclick="toggleCommand('DIMLINEAR')" title="平行寸法 (DLI)"><div class="tool-icon" style="color:#00ffff;">↔</div><div class="tool-cmd">DIMLIN</div></button>
+            <button class="tool-btn" onclick="toggleCommand('DIMALIGNED')" title="整列寸法 (DAL)"><div class="tool-icon" style="color:#00ffff;">⤢</div><div class="tool-cmd">DIMALN</div></button>
+            <button class="tool-btn" onclick="toggleCommand('DIMRADIUS')" title="半径寸法 (DRA)"><div class="tool-icon" style="color:#00ffff;">R</div><div class="tool-cmd">DIMRAD</div></button>
+            <button class="tool-btn" onclick="toggleCommand('DIMDIAMETER')" title="直径寸法 (DDI)"><div class="tool-icon" style="color:#00ffff;">⌀</div><div class="tool-cmd">DIMDIA</div></button>
+            <button class="tool-btn" onclick="toggleCommand('DIMANGULAR')" title="角度寸法 (DAN)"><div class="tool-icon" style="color:#00ffff;">∠</div><div class="tool-cmd">DIMANG</div></button>
+            <button class="tool-btn" onclick="toggleCommand('DIMORDINATE')" title="座標寸法 (DOR)"><div class="tool-icon" style="color:#00ffff;">XY</div><div class="tool-cmd">DIMORD</div></button>
+        </div>
+        <div id="canvas-container"><canvas id="cad-canvas"></canvas></div>
+        <div id="properties-panel" class="collapsed">
+            <div class="props-header">
+                <span>プロパティ</span>
+                <button class="status-btn" onclick="togglePropertiesPanel()" style="padding:0;">✖</button>
+            </div>
+            <div class="props-content" id="props-content">
+                <div style="color:#888; text-align:center; padding:20px 0;">図形が選択されていません</div>
+            </div>
+        </div>
+        <div id="layer-panel" class="collapsed">
+            <div class="props-header">
+                <span>画層プロパティ</span>
+                <button class="status-btn" onclick="toggleLayerPanel()" style="padding:0;">✖</button>
+            </div>
+            <div class="props-content" id="layer-list" style="padding:0;">
+                <!-- Layers will be generated here -->
+            </div>
+        </div>
+    </div>
+    <div id="command-line-area">
+        <div id="command-log">
+            <div>Web CADシステム v2.0 初期化完了。</div>
+            <div>・作図: LINE(L), CIRCLE(C), RECTANG(REC), ARC(A), PLINE(PL)</div>
+            <div>・寸法: DIMLIN(DLI), DIMALN(DAL), DIMRAD(DRA), DIMDIA(DDI), DIMANG(DAN), DIMORD(DOR)</div>
+            <div>・ファイル: DXF/DWG読み込み・エクスポート対応</div>
+        </div>
+        <div id="command-input-wrapper"><span id="command-prompt">コマンド:</span><input type="text" id="command-input" autocomplete="off" autofocus></div>
+    </div>
+
+    <!-- 外部ライブラリ (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/dxf-parser/dist/dxf-parser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dxf-writer@1.4.0/dist/Drawing.min.js"></script>
+    <!-- CADモジュール -->
+    <script src="cad-dimension.js"></script>
+    <script src="cad-io.js"></script>
+    <script src="cad-core.js"></script>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('ServiceWorker registration successful'))
+                .catch(err => console.log('ServiceWorker registration failed: ', err));
+            });
+        }
+    </script>
+</body>
+</html>
