@@ -11,7 +11,7 @@
         .top-btn { background-color:transparent;border:1px solid #555;color:var(--text-color);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:5px; }
         .top-btn:hover { background-color:var(--btn-hover);border-color:#888; }
         .control-group { display:flex;align-items:center;gap:5px;font-size:12px;background-color:#2a2e35;padding:4px 8px;border-radius:4px;border:1px solid #444; }
-        select { background-color:#1e2227;color:white;border:1px solid #555;padding:2px 5px;outline:none; }
+        select { background-color:#1e2227;color:white;border:1px solid #555;padding:2px 5px;outline:none;max-width:80px; }
         #middle-area { flex:1;display:flex;position:relative;overflow:hidden; }
         #toolbar { width:65px;background-color:var(--panel-bg);border-right:1px solid var(--border-color);display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:5px;overflow-y:auto; }
         #toolbar::-webkit-scrollbar { width:4px; } #toolbar::-webkit-scrollbar-thumb { background:#555;border-radius:4px; }
@@ -38,9 +38,102 @@
         .status-btn { background:transparent; border:none; color:#aaa; cursor:pointer; padding:2px 6px; font-size:11px; }
         .status-btn:hover { color:#fff; background:var(--btn-hover); }
         .status-btn.active { color:var(--highlight-color); font-weight:bold; }
-        #osnap-panel { display:none; position:absolute; top:25px; left:0; background:var(--panel-bg); border:1px solid var(--border-color); padding:10px; z-index:100; box-shadow:0 0 10px rgba(0,0,0,0.5); }
-        #osnap-panel label { display:block; margin-bottom:5px; font-size:12px; cursor:pointer; }
-        #ucs-label { margin-right:10px; font-weight:bold; }
+        #osnap-panel { display:none; position:fixed; background:var(--panel-bg); border:1px solid var(--border-color); padding:10px; z-index:999999 !important; box-shadow:0 5px 25px rgba(0,0,0,0.8); pointer-events: auto; }
+        #osnap-panel label { display:block; margin-bottom:12px; font-size:14px; cursor:pointer; min-width:120px; padding:4px 0; color: #fff; }
+        #osnap-panel input { transform: scale(1.3); margin-right: 12px; cursor: pointer; }
+        #ucs-label { margin-right:5px; font-weight:bold; }
+        #coords-display { font-family: 'Consolas', monospace; min-width: 130px; text-align: right; }
+        
+        /* 全画面モード時のUI非表示設定 */
+        body.fullscreen-mode #top-bar,
+        body.fullscreen-mode #toolbar,
+        body.fullscreen-mode #command-line-area { display: none !important; }
+        #btn-exit-fullscreen { display: none; }
+        body.fullscreen-mode #btn-exit-fullscreen { display: inline-block; background-color: transparent; color: #ff6b6b; font-size: 11px; border: 1px solid #ff6b6b; border-radius: 3px; cursor: pointer; padding: 1px 6px; margin-right: 5px; white-space: nowrap; }
+        body.fullscreen-mode #btn-exit-fullscreen:hover { background-color: rgba(255, 107, 107, 0.2); }
+
+        /* === 全画面 座標読取モード UI === */
+        #fs-overlay { display: none; }
+        body.fullscreen-mode #fs-overlay { display: block; }
+
+        /* フローティング座標ツールチップ */
+        #fs-coord-tooltip {
+            position: fixed; display: none; pointer-events: none; z-index: 100000;
+            background: rgba(0,0,0,0.8); border: 1px solid rgba(0,255,0,0.6); border-radius: 6px;
+            padding: 6px 10px; font-family: 'Consolas', monospace; font-size: 13px;
+            color: #00ff88; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        #fs-coord-tooltip .snap-label { color: #ffff00; font-size: 11px; display: block; margin-top: 2px; }
+
+        /* 全画面コントロールパネル（右下固定） */
+        #fs-controls {
+            position: fixed; bottom: 10px; right: 10px; z-index: 100001;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+        }
+        #fs-controls button {
+            width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.3);
+            background: rgba(40,44,52,0.85); color: #e0e0e0; font-size: 15px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4); backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px); transition: all 0.15s;
+        }
+        #fs-controls button:active { transform: scale(0.92); }
+        #fs-controls button.fs-active { border-color: #00ff88; color: #00ff88; }
+
+        /* ズームスライダー（左下固定） */
+        #fs-zoom-panel {
+            position: fixed; bottom: 10px; left: 10px; z-index: 100001;
+            display: flex; flex-direction: column; align-items: center; gap: 3px;
+            background: rgba(40,44,52,0.85); border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px; padding: 6px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        }
+        #fs-zoom-panel button {
+            width: 32px; height: 32px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
+            background: transparent; color: #e0e0e0; font-size: 18px; font-weight: bold;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        #fs-zoom-panel button:active { background: rgba(255,255,255,0.15); }
+        #fs-zoom-slider {
+            -webkit-appearance: none; appearance: none;
+            width: 28px; height: 130px; background: rgba(255,255,255,0.1);
+            border-radius: 14px; outline: none; writing-mode: bt-lr;
+            -webkit-writing-mode: vertical-lr;
+        }
+        #fs-zoom-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 18px; height: 18px; border-radius: 50%;
+            background: #528bff; cursor: pointer; border: 2px solid #fff;
+        }
+
+        /* レスポンシブ調整 (iPhone15基準: 393px) */
+        @media screen and (max-width: 430px) {
+            #top-bar { padding: 2px 4px; gap: 3px; min-height: 34px; }
+            .top-btn { padding: 3px 6px; font-size: 11px; gap: 3px; }
+            .control-group { padding: 2px 4px; gap: 3px; font-size: 11px; }
+            /* 座標系グループはモバイルで非表示 */
+            #ucs-control-group { display: none; }
+            #drawing-name { display: none; }
+            #status-bar { padding: 0 4px; font-size: 10px; height: 28px; flex-wrap: nowrap; gap: 4px; }
+            .status-btn { padding: 2px 3px; font-size: 10px; }
+            #ucs-label { margin-right: 2px; font-size: 10px; }
+            #coords-display { min-width: 100px; font-size: 10px; }
+            #snap-indicator { width: 26px !important; font-size: 9px; }
+            #status-bar > div { flex-shrink: 0; }
+            #toolbar { width: 50px; padding-top: 5px; gap: 2px; }
+            .tool-btn { width: 42px; height: 40px; }
+            .tool-icon { font-size: 15px; }
+            .tool-cmd { font-size: 8px; }
+            #command-line-area { height: 80px; font-size: 12px; }
+            select { max-width: 55px; font-size: 10px; }
+        }
+        @media screen and (min-width: 431px) and (max-width: 600px) {
+            #status-bar { padding: 0 5px; font-size: 10px; height: 30px; flex-wrap: nowrap; gap: 5px; }
+            .status-btn { padding: 2px 4px; font-size: 10px; }
+            #coords-display { min-width: 110px; font-size: 10px; }
+            #snap-indicator { width: 30px !important; font-size: 10px; }
+            #status-bar > div { flex-shrink: 0; }
+        }
     </style>
     <!-- PWA Settings -->
     <link rel="manifest" href="manifest.json">
@@ -62,7 +155,7 @@
             <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="undo()" title="元に戻す (Ctrl+Z)">↩ 戻す</button>
             <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="redo()" title="やり直し (Ctrl+Y)">↪ やり直し</button>
         </div>
-        <div class="control-group">
+        <div class="control-group" id="ucs-control-group">
             <span style="color:#aaa;">座標系:</span>
             <span id="ucs-status-display" style="font-weight:bold;color:var(--highlight-color);width:30px;text-align:center;">WCS</span>
             <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="issueCommand('WCS')" title="ワールド座標系に戻す">リセット</button>
@@ -76,23 +169,20 @@
         </div>
         <button class="top-btn" onclick="zoomToOrigin()" title="原点へズーム">🔍 原点</button>
         <button class="top-btn" onclick="zoomExtents()" title="全体表示">🔍 全体</button>
+        <button class="top-btn" onclick="toggleFullscreen()" title="全画面表示のON/OFF">🔲 全画面</button>
         <span id="drawing-name" style="color:#aaa;font-size:11px;margin-left:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;" title="">新規図面</span>
     </div>
     <div id="status-bar">
-        <div><span id="ucs-label" style="color:var(--highlight-color);">WCS</span> モデル空間</div>
-        <div style="display:flex;align-items:center;gap:15px;">
+        <div style="display:flex;align-items:center;flex-shrink:0;">
+            <button id="btn-exit-fullscreen" onclick="toggleFullscreen()">✖ 解除</button>
+            <span id="ucs-label" style="color:var(--highlight-color);">WCS</span>
+            <span class="paper-space-label" style="opacity:0.6;font-size:0.9em;">モデル</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
             <button id="btn-ortho" class="status-btn" title="直交モード (F8)" onclick="toggleOrtho()">ORTHO</button>
             <div style="position:relative;">
                 <button id="btn-osnap" class="status-btn active" title="オブジェクトスナップ (F3)" onclick="toggleOsnapMain()">OSNAP</button>
-                <button class="status-btn" style="padding:0 2px" onclick="toggleOsnapPanel()">▼</button>
-                <div id="osnap-panel">
-                    <label><input type="checkbox" id="osnap-end" checked> 端点</label>
-                    <label><input type="checkbox" id="osnap-mid" checked> 中点</label>
-                    <label><input type="checkbox" id="osnap-cen" checked> 中心</label>
-                    <label><input type="checkbox" id="osnap-int" checked> 交点</label>
-                    <label><input type="checkbox" id="osnap-near" checked> 近接点</label>
-                    <label><input type="checkbox" id="osnap-perp" checked> 垂線</label>
-                </div>
+                <button class="status-btn" style="padding:0 2px" onclick="toggleOsnapPanel(event)">▼</button>
             </div>
             <span id="snap-indicator" style="color:#00ff00;width:40px;"></span>
             <span id="coords-display" style="width:120px;text-align:right;">0.0000, 0.0000</span>
@@ -155,6 +245,36 @@
         <div id="command-input-wrapper"><span id="command-prompt">コマンド:</span><input type="text" id="command-input" autocomplete="off" autofocus></div>
     </div>
 
+    <!-- オブジェクトスナップ設定パネル（固定配置用） -->
+    <div id="osnap-panel">
+        <label><input type="checkbox" id="osnap-end" checked> 端点</label>
+        <label><input type="checkbox" id="osnap-mid" checked> 中点</label>
+        <label><input type="checkbox" id="osnap-cen" checked> 中心</label>
+        <label><input type="checkbox" id="osnap-int" checked> 交点</label>
+        <label><input type="checkbox" id="osnap-near" checked> 近接点</label>
+        <label><input type="checkbox" id="osnap-perp" checked> 垂線</label>
+    </div>
+
+    <!-- 全画面座標読取モード用オーバーレイ -->
+    <div id="fs-overlay">
+        <div id="fs-coord-tooltip">
+            <span id="fs-coord-x">X: 0.000</span><br>
+            <span id="fs-coord-y">Y: 0.000</span>
+            <span id="fs-snap-label" class="snap-label"></span>
+        </div>
+        <div id="fs-controls">
+            <button id="fs-btn-osnap" class="fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
+            <button id="fs-btn-coord" class="fs-active" onclick="toggleFsCoordAlways()" title="座標常時表示 ON/OFF">XY</button>
+            <button id="fs-btn-extents" onclick="zoomExtents()" title="全体表示">⛶</button>
+            <button id="fs-btn-exit" onclick="toggleFullscreen()" title="全画面解除" style="border-color:#ff6b6b;color:#ff6b6b;">✕</button>
+        </div>
+        <div id="fs-zoom-panel">
+            <button onclick="fsZoomIn()" title="ズームイン">＋</button>
+            <input type="range" id="fs-zoom-slider" min="-30" max="30" value="0" orient="vertical" oninput="fsZoomSlider(this.value)">
+            <button onclick="fsZoomOut()" title="ズームアウト">−</button>
+        </div>
+    </div>
+
     <!-- 外部ライブラリ (CDN) -->
     <script src="https://cdn.jsdelivr.net/npm/dxf-parser/dist/dxf-parser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dxf-writer@1.4.0/dist/Drawing.min.js"></script>
@@ -172,6 +292,174 @@
                 .catch(err => console.log('ServiceWorker registration failed: ', err));
             });
         }
+
+        // 全画面表示の切り替え
+        function toggleFullscreen() {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) {
+                    document.documentElement.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        }
+
+        // フルスクリーン状態の監視
+        function onFullscreenChange() {
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                document.body.classList.add('fullscreen-mode');
+            } else {
+                document.body.classList.remove('fullscreen-mode');
+                // ツールチップを非表示にする
+                const tt = document.getElementById('fs-coord-tooltip');
+                if(tt) tt.style.display = 'none';
+            }
+            // キャンバスのリサイズをトリガーする
+            setTimeout(() => { if(window.resizeCanvas) window.resizeCanvas(); }, 100);
+        }
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+        // === 全画面座標読取モードの機能 ===
+        let fsOsnapEnabled = true;
+        let fsCoordAlways = true; // 座標常時表示（デフォルトON）
+
+        function toggleFsOsnap() {
+            fsOsnapEnabled = !fsOsnapEnabled;
+            const btn = document.getElementById('fs-btn-osnap');
+            if(btn) {
+                btn.classList.toggle('fs-active', fsOsnapEnabled);
+                btn.style.opacity = fsOsnapEnabled ? '1' : '0.4';
+            }
+            // cad-core.js 側のOSNAP状態も連動
+            if(typeof osnapState !== 'undefined') {
+                osnapState.main = fsOsnapEnabled;
+                const osnapBtn = document.getElementById('btn-osnap');
+                if(osnapBtn) osnapBtn.className = fsOsnapEnabled ? 'status-btn active' : 'status-btn';
+            }
+        }
+
+        function toggleFsCoordAlways() {
+            fsCoordAlways = !fsCoordAlways;
+            const btn = document.getElementById('fs-btn-coord');
+            if(btn) {
+                btn.classList.toggle('fs-active', fsCoordAlways);
+                btn.style.opacity = fsCoordAlways ? '1' : '0.4';
+            }
+            if(!fsCoordAlways) {
+                const tt = document.getElementById('fs-coord-tooltip');
+                if(tt) tt.style.display = 'none';
+            }
+        }
+
+        // ズームイン（OSNAPポイント中心）
+        function fsZoomIn() {
+            if(typeof view === 'undefined') return;
+            // OSNAPポイントがあればそこを中心に、なければ画面中央
+            let cx, cy;
+            if(typeof snapResult !== 'undefined' && snapResult) {
+                const sp = wcsToScreen(snapResult.wcsX, snapResult.wcsY);
+                cx = sp.x; cy = sp.y;
+            } else {
+                cx = canvas.width / 2; cy = canvas.height / 2;
+            }
+            const wb = screenToWcs(cx, cy);
+            view.scale = Math.min(view.scale * 1.3, 10000);
+            view.x = cx - wb.x * view.scale;
+            view.y = cy + wb.y * view.scale;
+            updateZoomSlider();
+            render();
+        }
+
+        // ズームアウト（OSNAPポイント中心）
+        function fsZoomOut() {
+            if(typeof view === 'undefined') return;
+            let cx, cy;
+            if(typeof snapResult !== 'undefined' && snapResult) {
+                const sp = wcsToScreen(snapResult.wcsX, snapResult.wcsY);
+                cx = sp.x; cy = sp.y;
+            } else {
+                cx = canvas.width / 2; cy = canvas.height / 2;
+            }
+            const wb = screenToWcs(cx, cy);
+            view.scale = Math.max(view.scale / 1.3, 0.0001);
+            view.x = cx - wb.x * view.scale;
+            view.y = cy + wb.y * view.scale;
+            updateZoomSlider();
+            render();
+        }
+
+        // スライダー操作でズーム（OSNAPポイント中心）
+        function fsZoomSlider(val) {
+            if(typeof view === 'undefined') return;
+            let cx, cy;
+            if(typeof snapResult !== 'undefined' && snapResult) {
+                const sp = wcsToScreen(snapResult.wcsX, snapResult.wcsY);
+                cx = sp.x; cy = sp.y;
+            } else {
+                cx = canvas.width / 2; cy = canvas.height / 2;
+            }
+            const wb = screenToWcs(cx, cy);
+            view.scale = Math.pow(1.15, parseFloat(val));
+            view.x = cx - wb.x * view.scale;
+            view.y = cy + wb.y * view.scale;
+            render();
+        }
+
+        // ズームスライダーを現在のスケールに同期
+        function updateZoomSlider() {
+            const slider = document.getElementById('fs-zoom-slider');
+            if(slider && typeof view !== 'undefined') {
+                const val = Math.log(view.scale) / Math.log(1.15);
+                slider.value = Math.max(-30, Math.min(30, val));
+            }
+        }
+
+        // フローティング座標ツールチップの更新（cad-core.jsから呼ばれる）
+        window.updateFsCoordTooltip = function(screenX, screenY, ucsX, ucsY, snapType) {
+            if(!document.body.classList.contains('fullscreen-mode')) return;
+            const tt = document.getElementById('fs-coord-tooltip');
+            if(!tt) return;
+
+            // 最新の座標を保存（常時表示用）
+            window._lastFsCoord = { ucsX, ucsY, snapType };
+
+            tt.style.display = 'block';
+            document.getElementById('fs-coord-x').textContent = 'X: ' + ucsY.toFixed(0);
+            document.getElementById('fs-coord-y').textContent = 'Y: ' + ucsX.toFixed(0);
+            const snapLabel = document.getElementById('fs-snap-label');
+            snapLabel.textContent = snapType ? '[' + snapType + ']' : '';
+
+            // カーソルの右上に表示（画面端からはみ出す場合は反転）
+            const margin = 20;
+            let tipX = screenX + margin;
+            let tipY = screenY - 60;
+            if(tipX + 150 > window.innerWidth) tipX = screenX - 170;
+            if(tipY < 10) tipY = screenY + margin;
+            tt.style.left = tipX + 'px';
+            tt.style.top = tipY + 'px';
+        };
+
+        window.hideFsCoordTooltip = function() {
+            if(fsCoordAlways) {
+                // 常時表示モード: 画面左上に固定表示を維持
+                const tt = document.getElementById('fs-coord-tooltip');
+                if(tt && window._lastFsCoord) {
+                    tt.style.left = '10px';
+                    tt.style.top = '10px';
+                }
+                return; // 非表示にしない
+            }
+            const tt = document.getElementById('fs-coord-tooltip');
+            if(tt) tt.style.display = 'none';
+        };
     </script>
 </body>
 </html>
+

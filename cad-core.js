@@ -784,8 +784,8 @@ function setupEventListeners() {
         if(!isSelectMode) {
             snapResult = findSnap(mouse.screenX, mouse.screenY, mouse.wcsX, mouse.wcsY);
         } else { snapResult = null; }
-        if(snapResult){ const su=wcsToUcs(snapResult.wcsX,snapResult.wcsY); coordsDisplay.textContent=`X:${su.y.toFixed(0)}  Y:${su.x.toFixed(0)}`; }
-        else coordsDisplay.textContent=`X:${mouse.ucsY.toFixed(0)}  Y:${mouse.ucsX.toFixed(0)}`;
+        if(snapResult){ const su=wcsToUcs(snapResult.wcsX,snapResult.wcsY); coordsDisplay.textContent=`X:${su.y.toFixed(0)}  Y:${su.x.toFixed(0)}`; if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, su.x, su.y, snapResult.type); }
+        else { coordsDisplay.textContent=`X:${mouse.ucsY.toFixed(0)}  Y:${mouse.ucsX.toFixed(0)}`; if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, mouse.ucsX, mouse.ucsY, null); }
         if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') cmdState.highlightIdx=hitTestEntity(mouse.screenX,mouse.screenY);
         render();
     });
@@ -886,14 +886,26 @@ function setupEventListeners() {
         const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
         entities.forEach((e, i) => { if(!isVisible(e)) return; if(e.type !== 'DIMENSION') drawOneEntity(e, i === cmdState.highlightIdx ? '#ff6b6b' : null); });
 
-        // スナップマーカー
+        // スナップマーカー（ルーペ内で大きく表示）
         if(snapResult && osnapState.main) {
             const s = wcsToScreen(snapResult.wcsX, snapResult.wcsY);
-            ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 1;
-            if(snapResult.type === '端点') { ctx.beginPath(); ctx.moveTo(s.x, s.y-4); ctx.lineTo(s.x+4, s.y+3); ctx.lineTo(s.x-4, s.y+3); ctx.closePath(); ctx.stroke(); }
-            else if(snapResult.type === '中点') { ctx.strokeRect(s.x-3, s.y-3, 6, 6); }
-            else if(snapResult.type === '中心') { ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, Math.PI*2); ctx.stroke(); }
-            else if(snapResult.type === '交点') { ctx.beginPath(); ctx.moveTo(s.x-4,s.y-4); ctx.lineTo(s.x+4,s.y+4); ctx.moveTo(s.x+4,s.y-4); ctx.lineTo(s.x-4,s.y+4); ctx.stroke(); }
+            const mk = 6; // マーカーサイズ（zoom倍されるので実質18px相当）
+            ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 1.5;
+            if(snapResult.type === '端点') {
+                ctx.beginPath(); ctx.moveTo(s.x, s.y-mk); ctx.lineTo(s.x+mk, s.y+mk*0.7); ctx.lineTo(s.x-mk, s.y+mk*0.7); ctx.closePath(); ctx.stroke();
+            } else if(snapResult.type === '中点') {
+                ctx.strokeRect(s.x-mk, s.y-mk, mk*2, mk*2);
+                ctx.beginPath(); ctx.moveTo(s.x-mk, s.y+mk); ctx.lineTo(s.x, s.y-mk); ctx.lineTo(s.x+mk, s.y+mk); ctx.stroke();
+            } else if(snapResult.type === '中心') {
+                ctx.beginPath(); ctx.arc(s.x, s.y, mk, 0, Math.PI*2); ctx.stroke();
+            } else if(snapResult.type === '交点') {
+                ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.moveTo(s.x+mk,s.y-mk); ctx.lineTo(s.x-mk,s.y+mk); ctx.stroke();
+            } else if(snapResult.type === '近接点') {
+                ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.moveTo(s.x-mk,s.y+mk); ctx.lineTo(s.x+mk,s.y-mk); ctx.strokeRect(s.x-mk,s.y-mk,mk*2,mk*2);
+            } else if(snapResult.type === '垂線') {
+                ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x-mk,s.y+mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(s.x-mk,s.y); ctx.lineTo(s.x-mk+mk*0.5,s.y); ctx.moveTo(s.x,s.y+mk); ctx.lineTo(s.x,s.y+mk-mk*0.5); ctx.stroke();
+            }
         }
 
         ctx.setTransform(1, 0, 0, 1, 0, 0); // リセット
@@ -910,13 +922,20 @@ function setupEventListeners() {
         ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.strokeRect(loupeX - loupeR, finalY - loupeR, loupeR * 2, loupeR * 2);
 
-        // 座標テキスト
-        const ucs = wcsToUcs(mouse.wcsX, mouse.wcsY);
-        const snapLabel = snapResult && osnapState.main ? ` [${snapResult.type}]` : '';
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(loupeX - loupeR, finalY + loupeR + 2, loupeR * 2, 18);
-        ctx.fillStyle = '#ffff00'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
-        ctx.fillText(`${ucs.x.toFixed(2)}, ${ucs.y.toFixed(2)}${snapLabel}`, loupeX, finalY + loupeR + 15);
+        // 座標テキスト + スナップ種別
+        const ucsCoord = wcsToUcs(mouse.wcsX, mouse.wcsY);
+        const snapLabelText = snapResult && osnapState.main ? ` [${snapResult.type}]` : '';
+        // 背景
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(loupeX - loupeR, finalY + loupeR + 2, loupeR * 2, snapResult && osnapState.main ? 32 : 18);
+        // 座標値
+        ctx.fillStyle = '#00ff88'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+        ctx.fillText(`X:${ucsCoord.y.toFixed(2)}  Y:${ucsCoord.x.toFixed(2)}`, loupeX, finalY + loupeR + 14);
+        // スナップ種別（2行目）
+        if(snapResult && osnapState.main) {
+            ctx.fillStyle = '#ffff00'; ctx.font = 'bold 11px monospace';
+            ctx.fillText(`SNAP: ${snapResult.type}`, loupeX, finalY + loupeR + 28);
+        }
         ctx.restore();
     }
 
@@ -1052,6 +1071,14 @@ function setupEventListeners() {
             if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') {
                 cmdState.highlightIdx = hitTestEntity(tx, ty);
             }
+
+            // 全画面座標ツールチップ更新
+            if(snapResult && osnapState.main) {
+                const su = wcsToUcs(snapResult.wcsX, snapResult.wcsY);
+                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, su.x, su.y, snapResult.type);
+            } else {
+                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, mouse.ucsX, mouse.ucsY, null);
+            }
             render();
         } else if(e.touches.length === 2) {
             touchState.isPinch = true; touchState.showLoupe = false; touchState.isSelecting = false;
@@ -1074,12 +1101,16 @@ function setupEventListeners() {
             if(!touchState.hasMoved && moved > DRAG_THRESHOLD) {
                 touchState.hasMoved = true;
                 touchState.isDragging = true;
-                // IDLEモードまたは編集コマンドのオブジェクト選択待ちの場合は範囲選択開始
-                const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
-                if(selectModes.includes(cmdState.mode)) {
-                    touchState.isSelecting = true;
-                    touchState.selStartX = touchState.startX;
-                    touchState.selStartY = touchState.startY;
+                // 全画面モード中は範囲選択しない（座標読取専用）
+                const isFullscreen = document.body.classList.contains('fullscreen-mode');
+                if(!isFullscreen) {
+                    // IDLEモードまたは編集コマンドのオブジェクト選択待ちの場合は範囲選択開始
+                    const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
+                    if(selectModes.includes(cmdState.mode)) {
+                        touchState.isSelecting = true;
+                        touchState.selStartX = touchState.startX;
+                        touchState.selStartY = touchState.startY;
+                    }
                 }
             }
 
@@ -1095,8 +1126,12 @@ function setupEventListeners() {
                 touchState.showLoupe = true;
                 touchState.loupeX = tx; touchState.loupeY = ty;
 
-                // コマンドモード中はスナップ＆ラバーバンド更新
-                if(cmdState.mode !== 'IDLE' && !touchState.isSelecting) {
+                // 全画面モード中は常にスナップ検索（座標読取でオブジェクトを探す用）
+                const isFullscreen = document.body.classList.contains('fullscreen-mode');
+                if(isFullscreen) {
+                    snapResult = findSnap(tx, ty, mouse.wcsX, mouse.wcsY);
+                } else if(cmdState.mode !== 'IDLE' && !touchState.isSelecting) {
+                    // 通常モード: コマンドモード中のみスナップ
                     if(cmdState.mode!=='WAITING_ERASE_SELECT'&&cmdState.mode!=='WAITING_MOVE_SELECT'&&cmdState.mode!=='WAITING_COPY_SELECT'&&cmdState.mode!=='WAITING_OFFSET_SELECT'&&cmdState.mode!=='WAITING_OFFSET_SIDE') {
                         snapResult = findSnap(tx, ty, mouse.wcsX, mouse.wcsY);
                     }
@@ -1107,8 +1142,10 @@ function setupEventListeners() {
             if(snapResult && osnapState.main) {
                 const su = wcsToUcs(snapResult.wcsX, snapResult.wcsY);
                 coordsDisplay.textContent = `X:${su.y.toFixed(0)}  Y:${su.x.toFixed(0)}`;
+                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, su.x, su.y, snapResult.type);
             } else {
                 coordsDisplay.textContent = `X:${mouse.ucsY.toFixed(0)}  Y:${mouse.ucsX.toFixed(0)}`;
+                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, mouse.ucsX, mouse.ucsY, null);
             }
 
             render();
@@ -1145,6 +1182,8 @@ function setupEventListeners() {
 
         if(e.touches.length === 0 && !touchState.isPinch) {
             touchState.showLoupe = false;
+            // 全画面座標ツールチップを非表示
+            if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
 
             if(touchState.isSelecting) {
                 // 範囲選択完了
@@ -1322,9 +1361,24 @@ window.toggleOsnapMain = function() {
     addCommandLog(`-> OSNAP: ${osnapState.main?'ON':'OFF'}`);
     render();
 };
-window.toggleOsnapPanel = function() {
+window.toggleOsnapPanel = function(e) {
     const p = document.getElementById('osnap-panel');
-    if(p) p.style.display = (p.style.display==='block') ? 'none' : 'block';
+    if(!p) return;
+    if(p.style.display === 'block') {
+        p.style.display = 'none';
+    } else {
+        p.style.display = 'block';
+        if(e && e.target) {
+            const rect = e.target.getBoundingClientRect();
+            p.style.top = (rect.bottom + 5) + 'px';
+            let leftPos = rect.left - 60; // ボタンより少し左側を基準
+            if(leftPos < 5) leftPos = 5;  // 画面左端にはみ出さないよう調整
+            p.style.left = leftPos + 'px';
+        } else {
+            p.style.top = '60px';
+            p.style.left = '10px';
+        }
+    }
 };
 // パネルのチェックボックスイベント
 ['end','mid','cen','int','near','perp'].forEach(type => {
