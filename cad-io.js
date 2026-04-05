@@ -323,13 +323,21 @@ function aciToHex(aci) {
     return map[aci] || '#FFFFFF';
 }
 
+function hexToAci(hex) {
+    const target = (hex || '#FFFFFF').toUpperCase();
+    for(let i = 1; i < 256; i++) {
+        if(aciToHex(i).toUpperCase() === target) return i;
+    }
+    return 7; // default white
+}
+
 // ===== DXFエクスポート =====
 function exportDxf() {
     try {
         const d = new window.Drawing();
         d.setUnits('Millimeters');
-        // 画層登録
-        layers.forEach(l => { try { d.addLayer(l.name, window.Drawing.ACI.WHITE, 'CONTINUOUS'); } catch(e){} });
+        // 画層登録（カラー対応）
+        layers.forEach(l => { try { d.addLayer(l.name, hexToAci(l.color), 'CONTINUOUS'); } catch(e){} });
         // エンティティ出力
         entities.forEach(e => {
             if(e.type === 'LINE') { d.setActiveLayer(layers[e.layer]?.name||'0'); d.drawLine(e.x1, e.y1, e.x2, e.y2); }
@@ -346,6 +354,7 @@ function exportDxf() {
                 if(e.closed) d.drawLine(e.points[e.points.length-1].x, e.points[e.points.length-1].y, e.points[0].x, e.points[0].y);
             }
             else if(e.type === 'POINT') { d.setActiveLayer(layers[e.layer]?.name||'0'); d.drawPoint(e.x, e.y); }
+            else if(e.type === 'TEXT') { d.setActiveLayer(layers[e.layer]?.name||'0'); d.drawText(e.x, e.y, e.height || 2.5, 0, e.text || ''); }
             // 寸法は補助線+テキストとして出力
             else if(e.type === 'DIMENSION') { exportDimAsDxf(d, e); }
         });
@@ -482,80 +491,152 @@ function convertDwgDatabaseToApp(db) {
     const defaultLayer = currentLayerIndex;
     const defaultColor = '#FFFFFF';
 
+    // ブロックレコードの準備 (INSERT用)
+    const blocks = {};
+    if (db.tables && db.tables.BLOCK_RECORD && db.tables.BLOCK_RECORD.entries) {
+        db.tables.BLOCK_RECORD.entries.forEach(b => {
+            blocks[b.name] = b;
+        });
+    }
+
     let importCount = 0;
     let skipCount = 0;
 
-    if (db.entities && Array.isArray(db.entities)) {
-        db.entities.forEach(ent => {
-            try {
-                const layerName = ent.layer || '0';
-                const appLayerIdx = layers.findIndex(l => l.name === layerName);
-                const newLayerIdx = result.layers.findIndex(l => l.name === layerName);
-                const layer = appLayerIdx >= 0 ? appLayerIdx : (newLayerIdx >= 0 ? layers.length + newLayerIdx : defaultLayer);
-                
-                let color = defaultColor;
-                if (ent.colorIndex !== undefined && ent.colorIndex !== 256 && ent.colorIndex !== 0) {
-                    color = aciToHex(ent.colorIndex);
-                } else {
-                    const lObj = result.layers.find(l => l.name === layerName) || layers.find(l => l.name === layerName);
-                    if (lObj) color = lObj.color;
-                }
+    // 再帰的にエンティティを展開する内部関数
+    function processDwgEntity(ent, depth, pX, pY, sX, sY, rot) {
+        if (depth > 10) return; // 無限再帰防止
 
-                if (ent.type === 'LINE') {
-                    if(ent.startPoint && ent.endPoint) {
-                        result.entities.push({type:'LINE', layer, color, x1:ent.startPoint.x, y1:ent.startPoint.y, x2:ent.endPoint.x, y2:ent.endPoint.y});
-                        importCount++;
-                    } else skipCount++;
-                } else if (ent.type === 'CIRCLE') {
-                    if(ent.center && ent.radius) {
-                        result.entities.push({type:'CIRCLE', layer, color, cx:ent.center.x, cy:ent.center.y, radius:ent.radius});
-                        importCount++;
-                    } else skipCount++;
-                } else if (ent.type === 'ARC') {
-                    if(ent.center && ent.radius) {
-                        result.entities.push({type:'ARC', layer, color, cx:ent.center.x, cy:ent.center.y, radius:ent.radius, startAngle:ent.startAngle||0, endAngle:ent.endAngle||0, counterclockwise:true});
-                        importCount++;
-                    } else skipCount++;
-                } else if (ent.type === 'POINT') {
-                    const pt = ent.position || ent.point;
-                    if(pt) {
-                        result.entities.push({type:'POINT', layer, color, x:pt.x, y:pt.y});
-                        importCount++;
-                    } else skipCount++;
-                } else if (ent.type === 'TEXT') {
-                    const pt = ent.insertionPoint || ent.alignmentPoint || ent.insertion_pt || ent.position;
-                    if(pt) {
-                        result.entities.push({type:'TEXT', layer, color, x:pt.x, y:pt.y, text:ent.textValue || ent.text || '', height:ent.height || 2.5});
-                        importCount++;
-                    } else skipCount++;
-                } else if (ent.type === 'MTEXT') {
-                    const pt = ent.insertionPoint || ent.position;
-                    let text = ent.text || '';
-                    text = text.replace(/\\[Ppf].*;/g, '').replace(/\\[A-Za-z][^;]*;/g, '').replace(/\{|\}/g, '').replace(/\\[\\]/g, '');
-                    if(pt) {
-                        result.entities.push({type:'TEXT', layer, color, x:pt.x, y:pt.y, text:text, height:ent.textHeight || ent.height || 2.5});
-                        importCount++;
-                    } else skipCount++;
-                } else if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE2D' || ent.type === 'POLYLINE_2D') {
-                    if (ent.vertices && ent.vertices.length > 0) {
-                        const pts = ent.vertices.map(v => ({x: v.x !== undefined ? v.x : v.point.x, y: v.y !== undefined ? v.y : v.point.y}));
-                        result.entities.push({type:'PLINE', layer, color, points:pts, closed: !!ent.flag || !!ent.closed});
-                        importCount++;
-                    } else skipCount++;
-                } else if (ent.type === 'ELLIPSE') {
-                    const center = ent.center;
-                    const endPt = ent.majorAxisEndPoint;
-                    if (center && endPt) {
-                        const rx = Math.sqrt(endPt.x**2 + endPt.y**2);
-                        result.entities.push({type:'CIRCLE', layer, color, cx:center.x, cy:center.y, radius:rx}); 
-                        importCount++;
-                    } else skipCount++;
-                } else {
-                    skipCount++;
+        try {
+            // ブロック参照 (INSERT) の再帰展開
+            if (ent.type === 'INSERT') {
+                const b = blocks[ent.name];
+                if (b && b.entities && Array.isArray(b.entities)) {
+                    const insX = ent.insertionPoint ? ent.insertionPoint.x : 0;
+                    const insY = ent.insertionPoint ? ent.insertionPoint.y : 0;
+                    
+                    // 親の変換を適用した新しい原点
+                    const newPx = pX + (insX * sX * Math.cos(rot) - insY * sY * Math.sin(rot));
+                    const newPy = pY + (insX * sX * Math.sin(rot) + insY * sY * Math.cos(rot));
+                    
+                    const newSx = sX * (ent.xScale !== undefined ? ent.xScale : 1);
+                    const newSy = sY * (ent.yScale !== undefined ? ent.yScale : 1);
+                    const newRot = rot + (ent.rotation || 0); // ラジアン想定
+                    
+                    b.entities.forEach(child => {
+                        processDwgEntity(child, depth + 1, newPx, newPy, newSx, newSy, newRot);
+                    });
                 }
-            } catch(e) {
+                return; // INSERT自体は描画オブジェクトではないためスキップ
+            }
+
+            // 座標変換ヘルパー関数
+            const tx = (x, y) => pX + (x * sX * Math.cos(rot) - y * sY * Math.sin(rot));
+            const ty = (x, y) => pY + (x * sX * Math.sin(rot) + y * sY * Math.cos(rot));
+
+            const layerName = ent.layer || '0';
+            const appLayerIdx = layers.findIndex(l => l.name === layerName);
+            const newLayerIdx = result.layers.findIndex(l => l.name === layerName);
+            const layer = appLayerIdx >= 0 ? appLayerIdx : (newLayerIdx >= 0 ? layers.length + newLayerIdx : defaultLayer);
+            
+            let color = defaultColor;
+            if (ent.colorIndex !== undefined && ent.colorIndex !== 256 && ent.colorIndex !== 0) {
+                color = aciToHex(ent.colorIndex);
+            } else {
+                const lObj = result.layers.find(l => l.name === layerName) || layers.find(l => l.name === layerName);
+                if (lObj) color = lObj.color;
+            }
+
+            if (ent.type === 'LINE') {
+                if(ent.startPoint && ent.endPoint) {
+                    result.entities.push({type:'LINE', layer, color, 
+                        x1:tx(ent.startPoint.x, ent.startPoint.y), y1:ty(ent.startPoint.x, ent.startPoint.y), 
+                        x2:tx(ent.endPoint.x, ent.endPoint.y), y2:ty(ent.endPoint.x, ent.endPoint.y)});
+                    importCount++;
+                } else skipCount++;
+            } else if (ent.type === 'CIRCLE') {
+                if(ent.center && ent.radius) {
+                    result.entities.push({type:'CIRCLE', layer, color, 
+                        cx:tx(ent.center.x, ent.center.y), cy:ty(ent.center.x, ent.center.y), 
+                        radius:ent.radius * Math.abs(sX)});
+                    importCount++;
+                } else skipCount++;
+            } else if (ent.type === 'ARC') {
+                if(ent.center && ent.radius) {
+                    let sa = ent.startAngle || 0;
+                    let ea = ent.endAngle || (Math.PI * 2);
+                    if (rot !== 0) { sa += rot; ea += rot; }
+                    result.entities.push({type:'ARC', layer, color, 
+                        cx:tx(ent.center.x, ent.center.y), cy:ty(ent.center.x, ent.center.y), 
+                        radius:ent.radius * Math.abs(sX), 
+                        startAngle:sa, endAngle:ea, counterclockwise:true});
+                    importCount++;
+                } else skipCount++;
+            } else if (ent.type === 'POINT') {
+                const pt = ent.position || ent.point;
+                if(pt) {
+                    result.entities.push({type:'POINT', layer, color, x:tx(pt.x, pt.y), y:ty(pt.x, pt.y)});
+                    importCount++;
+                } else skipCount++;
+            } else if (ent.type === 'TEXT') {
+                const pt = ent.insertionPoint || ent.alignmentPoint || ent.insertion_pt || ent.position;
+                const textStr = ent.textValue !== undefined ? ent.textValue : (ent.text || '');
+                if (pt && textStr) {
+                    result.entities.push({type:'TEXT', layer, color, 
+                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:textStr, height:(ent.height || 2.5) * Math.abs(sX)});
+                    importCount++;
+                } else skipCount++;
+            } else if (ent.type === 'MTEXT') {
+                const pt = ent.insertionPoint || ent.position;
+                let text = ent.text || ent.textValue || '';
+                text = text.replace(/\\[A-Za-z0-9][^;]*;/g, '').replace(/\\[Ppf].*;/g, '').replace(/\{|\}/g, '').replace(/\\[\\]/g, '\\');
+                if (pt && text) {
+                    result.entities.push({type:'TEXT', layer, color, 
+                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:text, height:(ent.textHeight || ent.height || 2.5) * Math.abs(sX)});
+                    importCount++;
+                } else skipCount++;
+            } else if (ent.type && ent.type.includes('DIMENSION')) {
+                const pt = ent.textPoint || ent.definitionPoint || ent.insertionPoint;
+                let dimText = ent.text;
+                if (!dimText && ent.measurement !== undefined) {
+                    dimText = parseFloat(ent.measurement).toFixed(0);
+                } else if (dimText && dimText.includes('<>')) {
+                    dimText = dimText.replace('<>', parseFloat(ent.measurement || 0).toFixed(0));
+                }
+                if (pt && dimText) {
+                    result.entities.push({type:'TEXT', layer, color, 
+                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:dimText, height: 250 * Math.abs(sX)});
+                    importCount++;
+                } else skipCount++;
+            } else if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE2D' || ent.type === 'POLYLINE_2D') {
+                if (ent.vertices && ent.vertices.length > 0) {
+                    const pts = ent.vertices.map(v => {
+                        const vx = v.x !== undefined ? v.x : v.point.x;
+                        const vy = v.y !== undefined ? v.y : v.point.y;
+                        return { x: tx(vx, vy), y: ty(vx, vy) };
+                    });
+                    result.entities.push({type:'PLINE', layer, color, points:pts, closed: !!ent.flag || !!ent.closed});
+                    importCount++;
+                } else skipCount++;
+            } else if (ent.type === 'ELLIPSE') {
+                const center = ent.center;
+                const endPt = ent.majorAxisEndPoint;
+                if (center && endPt) {
+                    const rx = Math.sqrt(endPt.x**2 + endPt.y**2) * Math.abs(sX);
+                    result.entities.push({type:'CIRCLE', layer, color, 
+                        cx:tx(center.x, center.y), cy:ty(center.x, center.y), radius:rx}); 
+                    importCount++;
+                } else skipCount++;
+            } else {
                 skipCount++;
             }
+        } catch(e) {
+            skipCount++;
+        }
+    }
+
+    if (db.entities && Array.isArray(db.entities)) {
+        db.entities.forEach(ent => {
+            processDwgEntity(ent, 0, 0, 0, 1, 1, 0);
         });
         
         addCommandLog(`  変換完了: ${importCount}個 (未対応図形スキップ: ${skipCount}個)`);
