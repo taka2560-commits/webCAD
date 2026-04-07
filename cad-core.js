@@ -189,7 +189,6 @@ function deleteUCS() {
         }
     }
 }
-
 function loadUCS(indexStr) {
     if(indexStr === '') return;
     const idx = parseInt(indexStr);
@@ -1439,17 +1438,14 @@ function setupEventListeners() {
                     const idx = hitTestEntity(touchState.startX, touchState.startY);
                     if(idx >= 0) {
                         const hitEnt = entities[idx];
-                        // すべての寸法オブジェクトを長押しで削除可能に
-                        if(hitEnt.type === 'DIMENSION') {
-                            saveUndo();
-                            entities.splice(idx, 1);
-                            addCommandLog(`-> 長押しにより寸法 (${hitEnt.subType}) を削除しました`);
-                            cmdState.highlightIdx = -1;
-                            if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
-                            render();
-                            if(navigator.vibrate) navigator.vibrate([50, 50, 50]); // 長押し成功時は少し違うパターンの振動
-                            touchState.hasMoved = true;
-                        }
+                        saveUndo();
+                        entities.splice(idx, 1);
+                        addCommandLog(`-> 長押しによりエンティティ (${hitEnt.type}) を削除しました`);
+                        cmdState.highlightIdx = -1;
+                        if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
+                        render();
+                        if(navigator.vibrate) navigator.vibrate([50, 50, 50]); // 長押し成功時は少し違うパターンの振動
+                        touchState.hasMoved = true;
                     }
                 }
             }, 600);
