@@ -277,19 +277,20 @@
             <span id="fs-coord-y">Y: 0.000</span>
             <span id="fs-snap-label" class="snap-label"></span>
         </div>
-        <div id="fs-tools" style="position:fixed; top:60px; right:12px; display:flex; flex-direction:column; align-items:flex-end; gap:8px; z-index:100001; pointer-events:none;">
-            <button class="fs-active" onclick="issueCommand('DIMORDINATE')" title="引出線でXY両方の座標を配置します" style="pointer-events:auto; padding:5px 8px; font-size:11px; border-radius:14px; border:1px solid #00ff88; background:rgba(40,44,52,0.85); color:#00ff88; box-shadow:0 1px 4px rgba(0,0,0,0.5); white-space:nowrap;">📍座標</button>
-            <button onclick="issueCommand('DIMCONT')" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ffcc00; border:1px solid #ffcc00; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📏連続寸法</button>
-            <button onclick="issueCommand('UCS')" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🎯UCS</button>
-            <button onclick="issueCommand('UCS2P')" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📈2点</button>
-            <button onclick="togglePlanView()" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#61afef; border:1px solid #555; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🧭PLAN</button>
-            <button onclick="issueCommand('WCS')" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">↩WCS</button>
-            <select id="fs-ucs-select" style="pointer-events:auto; padding:4px 6px; font-size:11px; background:rgba(40,44,52,0.8); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" onchange="loadUCS(this.value)"><option value="">--読込--</option></select>
-            <button onclick="saveUCS()" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">💾保存</button>
-            <button onclick="deleteUCS()" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ff6b6b; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🗑️消去</button>
-            <div style="border-top:1px solid #444; margin:2px 0; width:100%;"></div>
-            <button onclick="saveProject()" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#00ff88; border:1px solid #00ff88; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">💾図面保存</button>
-            <button onclick="showProjectList()" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#61afef; border:1px solid #61afef; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📂復元</button>
+        <div id="fs-tools" style="position:fixed; top:6px; left:50%; transform:translateX(-50%); display:flex; flex-direction:row; flex-wrap:wrap; justify-content:center; gap:4px; z-index:100001; max-width:98%; pointer-events:none;">
+            <button class="fs-active" onclick="issueCommand('DIMORDINATE')" title="引出線でXY両方の座標を配置します" style="pointer-events:auto; padding:4px 8px; font-size:11px; border-radius:14px; border:1px solid #00ff88; background:rgba(40,44,52,0.85); color:#00ff88; box-shadow:0 1px 4px rgba(0,0,0,0.5); white-space:nowrap;">📍座標</button>
+            <button onclick="issueCommand('DIMCONT')" style="pointer-events:auto; padding:4px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ffcc00; border:1px solid #ffcc00; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📏連続寸法</button>
+            <button onclick="issueCommand('UCS')" style="pointer-events:auto; padding:4px 7px; font-size:11px; background:rgba(40,44,52,0.8); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🎯UCS</button>
+            <button onclick="issueCommand('UCS2P')" style="pointer-events:auto; padding:4px 7px; font-size:11px; background:rgba(40,44,52,0.8); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📈2点</button>
+            <button onclick="saveUCS()" style="pointer-events:auto; padding:4px 7px; font-size:11px; background:rgba(40,44,52,0.8); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">💾保存</button>
+            <button onclick="deleteUCS()" style="pointer-events:auto; padding:4px 7px; font-size:11px; background:rgba(40,44,52,0.8); color:#ff6b6b; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🗑️消去</button>
+            <button onclick="issueCommand('WCS')" style="pointer-events:auto; padding:4px 7px; font-size:11px; background:rgba(40,44,52,0.8); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">↩WCS</button>
+            <button onclick="togglePlanView()" style="pointer-events:auto; padding:4px 7px; font-size:11px; background:rgba(40,44,52,0.8); color:#61afef; border:1px solid #555; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🧭PLAN</button>
+            <select id="fs-ucs-select" style="pointer-events:auto; padding:3px 5px; font-size:10px; background:rgba(40,44,52,0.8); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" onchange="loadUCS(this.value)"><option value="">--読込--</option></select>
+            <div style="width:100%;height:0;"></div>
+            <button onclick="saveProject()" style="pointer-events:auto; padding:4px 7px; font-size:11px; background:rgba(40,44,52,0.8); color:#00ff88; border:1px solid #00ff88; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">💾図面保存</button>
+            <button onclick="showProjectList()" style="pointer-events:auto; padding:4px 7px; font-size:11px; background:rgba(40,44,52,0.8); color:#61afef; border:1px solid #61afef; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📂復元</button>
+        </div>
         </div>
         <div id="fs-controls">
             <button id="fs-btn-osnap" class="fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
@@ -529,7 +530,7 @@
             let tipX = screenX + margin;
             let tipY = screenY - 60;
             if(tipX + 150 > window.innerWidth) tipX = screenX - 170;
-            if(tipY < 30) tipY = screenY + margin;
+            if(tipY < 45) tipY = screenY + margin;
             tt.style.left = tipX + 'px';
             tt.style.top = tipY + 'px';
         };
@@ -540,7 +541,7 @@
                 const tt = document.getElementById('fs-coord-tooltip');
                 if(tt && window._lastFsCoord) {
                     tt.style.left = '10px';
-                    tt.style.top = '30px';
+                    tt.style.top = '45px';
                 }
                 return; // 非表示にしない
             }

@@ -496,7 +496,7 @@ function handleDimPointInput(mode, wcs) {
     }
     // -- DIMORDINATE（単一引出線タイプ） --
     if(mode === 'WAITING_DIMORD_P1') {
-        cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMORD_LEADER'; setPrompt('引出先を指定: (☑️確定)');
+        cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMORD_LEADER'; setPrompt('引出先を指定 (クリックした位置に表示されます): (☑️確定)');
         const u = wcsToUcs(wcs.x, wcs.y);
         addCommandLog(`-> 測定点: (${dimFormat(u.x)},${dimFormat(u.y)}) - 引出先を指定`); if(typeof render==='function') render(); return;
     }
