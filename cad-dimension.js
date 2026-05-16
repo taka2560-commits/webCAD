@@ -20,8 +20,8 @@ function drawArrowHead(cx, cy, angle, size) {
 }
 
 // ===== 寸法テキスト描画 =====
-function drawDimText(text, x, y, angle) {
-    ctx.save(); ctx.fillStyle = DIM_COLOR; ctx.font = DIM_TEXT_SIZE+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+function drawDimText(text, x, y, angle, color) {
+    ctx.save(); ctx.fillStyle = color || ctx.strokeStyle || DIM_COLOR; ctx.font = DIM_TEXT_SIZE+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
     ctx.translate(x, y);
     let a = angle || 0;
     if(a > Math.PI/2 || a < -Math.PI/2) a += Math.PI;
@@ -39,7 +39,8 @@ function _addHitText(e, sc) { if(e){ if(!e._hits) e._hits=[]; e._hits.push({type
 function _drawDimLinearCore(p1, p2, offset, dimDir, color, textOverride, e) {
     if(e) e._hits = [];
     const s1 = wcsToScreen(p1.x, p1.y), s2 = wcsToScreen(p2.x, p2.y);
-    ctx.strokeStyle = color || DIM_COLOR; ctx.lineWidth = 1;
+    const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
+    ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
     const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
     const isHoriz = (dimDir === 'H') || (!dimDir && dx >= dy);
     const offsetPx = offset * view.scale;
@@ -64,7 +65,7 @@ function _drawDimLinearCore(p1, p2, offset, dimDir, color, textOverride, e) {
     const val = isHoriz ? Math.abs(p2.x - p1.x) : Math.abs(p2.y - p1.y);
     const text = textOverride || dimFormat(val);
     const tx = (dl1.x+dl2.x)/2, ty = (dl1.y+dl2.y)/2;
-    drawDimText(text, tx, ty, isHoriz ? 0 : -Math.PI/2);
+    drawDimText(text, tx, ty, isHoriz ? 0 : -Math.PI/2, resolvedColor);
     _addHitText(e, {x:tx, y:ty});
 }
 
@@ -72,7 +73,8 @@ function _drawDimLinearCore(p1, p2, offset, dimDir, color, textOverride, e) {
 function _drawDimAlignedCore(p1, p2, offset, color, textOverride, e) {
     if(e) e._hits = [];
     const s1 = wcsToScreen(p1.x, p1.y), s2 = wcsToScreen(p2.x, p2.y);
-    ctx.strokeStyle = color || DIM_COLOR; ctx.lineWidth = 1;
+    const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
+    ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
     const ddx = s2.x - s1.x, ddy = s2.y - s1.y;
     const len = Math.sqrt(ddx*ddx + ddy*ddy) || 1;
     const nx = -ddy/len, ny = ddx/len;
@@ -88,14 +90,15 @@ function _drawDimAlignedCore(p1, p2, offset, color, textOverride, e) {
     drawArrowHead(dl2.x, dl2.y, ang + Math.PI, DIM_ARROW_SIZE);
     const val = dist(p1.x, p1.y, p2.x, p2.y);
     const tx = (dl1.x+dl2.x)/2, ty = (dl1.y+dl2.y)/2;
-    drawDimText(textOverride || dimFormat(val), tx, ty, ang);
+    drawDimText(textOverride || dimFormat(val), tx, ty, ang, resolvedColor);
     _addHitText(e, {x:tx, y:ty});
 }
 
 // ===== 共通：DIMRADIUS描画ロジック =====
 function _drawDimRadiusCore(center, radius, angle, color, textOverride, e) {
     if(e) e._hits = [];
-    ctx.strokeStyle = color || DIM_COLOR; ctx.lineWidth = 1;
+    const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
+    ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
     const sc = wcsToScreen(center.x, center.y);
     const a = angle || 0;
     const ep = {x: sc.x + radius*view.scale*Math.cos(a), y: sc.y - radius*view.scale*Math.sin(a)};
@@ -104,14 +107,15 @@ function _drawDimRadiusCore(center, radius, angle, color, textOverride, e) {
     const ang = Math.atan2(ep.y - sc.y, ep.x - sc.x);
     drawArrowHead(ep.x, ep.y, ang + Math.PI, DIM_ARROW_SIZE);
     const tx = (sc.x+ep.x)/2, ty = (sc.y+ep.y)/2;
-    drawDimText(textOverride || ('R' + dimFormat(radius)), tx, ty, ang);
+    drawDimText(textOverride || ('R' + dimFormat(radius)), tx, ty, ang, resolvedColor);
     _addHitText(e, {x:tx, y:ty});
 }
 
 // ===== 共通：DIMDIAMETER描画ロジック =====
 function _drawDimDiameterCore(center, radius, angle, color, textOverride, e) {
     if(e) e._hits = [];
-    ctx.strokeStyle = color || DIM_COLOR; ctx.lineWidth = 1;
+    const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
+    ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
     const sc = wcsToScreen(center.x, center.y);
     const a = angle || 0;
     const r = radius * view.scale;
@@ -122,37 +126,53 @@ function _drawDimDiameterCore(center, radius, angle, color, textOverride, e) {
     const ang = Math.atan2(ep1.y - ep2.y, ep1.x - ep2.x);
     drawArrowHead(ep1.x, ep1.y, ang + Math.PI, DIM_ARROW_SIZE);
     drawArrowHead(ep2.x, ep2.y, ang, DIM_ARROW_SIZE);
-    drawDimText(textOverride || ('⌀' + dimFormat(radius*2)), sc.x, sc.y, ang);
+    drawDimText(textOverride || ('⌀' + dimFormat(radius*2)), sc.x, sc.y, ang, resolvedColor);
     _addHitText(e, {x:sc.x, y:sc.y});
 }
 
-// ===== 共通：DIMORDINATE描画ロジック（XY一括） =====
-function _drawDimOrdinateCore(point, leaderX, leaderY, color, textOverride, e) {
+// ===== 共通：DIMORDINATE描画ロジック（単一引出線タイプ） =====
+function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
     if(e) e._hits = [];
-    ctx.strokeStyle = color || DIM_COLOR; ctx.lineWidth = 1;
+    ctx.strokeStyle = color || getEntityColor(e) || DIM_COLOR; ctx.lineWidth = 1;
+    
+    // WCS -> Screen 変換 (ここではview.rotationの影響を含む)
     const sp = wcsToScreen(point.x, point.y);
+    const sl = wcsToScreen(leaderCoord.x, leaderCoord.y);
     const ucsCoord = wcsToUcs(point.x, point.y);
 
-    // X座標引出線（上方向へ）
-    if(leaderX) {
-        const slx = wcsToScreen(leaderX.x, leaderX.y);
-        const midX = {x: sp.x, y: slx.y};
-        ctx.beginPath(); ctx.moveTo(sp.x, sp.y); ctx.lineTo(midX.x, midX.y); ctx.lineTo(slx.x, slx.y); ctx.stroke();
-        _addHitSeg(e, sp, midX); _addHitSeg(e, midX, slx);
-        const xText = textOverride || ('Y=' + dimFormat(ucsCoord.x));
-        drawDimText(xText, slx.x, slx.y, 0);
-        _addHitText(e, slx);
-    }
-    // Y座標引出線（右方向へ）
-    if(leaderY) {
-        const sly = wcsToScreen(leaderY.x, leaderY.y);
-        const midY = {x: sly.x, y: sp.y};
-        ctx.beginPath(); ctx.moveTo(sp.x, sp.y); ctx.lineTo(midY.x, midY.y); ctx.lineTo(sly.x, sly.y); ctx.stroke();
-        _addHitSeg(e, sp, midY); _addHitSeg(e, midY, sly);
-        const yText = textOverride || ('X=' + dimFormat(ucsCoord.y));
-        drawDimText(yText, sly.x, sly.y, 0);
-        _addHitText(e, sly);
-    }
+    // 引出線の描画（sp から sl まで行き、そこから水平な下線を引く）
+    // 文字が右に配置されるか左に配置されるかを決定
+    const textSide = (sl.x >= sp.x) ? 1 : -1; 
+    const lineEnd = {x: sl.x + textSide * 80, y: sl.y}; // 下線の長さ: 80px
+
+    ctx.beginPath(); 
+    ctx.moveTo(sp.x, sp.y); 
+    ctx.lineTo(sl.x, sl.y); 
+    ctx.lineTo(lineEnd.x, lineEnd.y); 
+    ctx.stroke();
+
+    _addHitSeg(e, sp, sl);
+    _addHitSeg(e, sl, lineEnd);
+
+    // テキスト内容
+    const txtX = `X: ${dimFormat(ucsCoord.y)}`; // 測量X座標 (数学Y)
+    const txtY = `Y: ${dimFormat(ucsCoord.x)}`; // 測量Y座標 (数学X)
+
+    ctx.save();
+    // テキストは下線の中央、少し上に配置
+    ctx.translate(sl.x + textSide * 40, sl.y - 4);
+
+    // もし view.rotation がかかっていれば、文字自体は画面に対して水平になるよう逆回転させるか？
+    // wcsToScreenで既に回転したスクリーン座標が出ているので、このままで文字は画面水平に描画される
+    ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    
+    // 現場で読みやすいように色分け
+    ctx.fillStyle = '#00ff88'; ctx.fillText(txtX, 0, -14); // 上段 (X)
+    ctx.fillStyle = '#00ffff'; ctx.fillText(txtY, 0, 0);   // 下段 (Y)
+    
+    ctx.restore();
+
+    _addHitText(e, {x: sl.x + textSide * 40, y: sl.y - 10});
 }
 
 // ===== 寸法タイプ別描画（エンティティから呼ばれる） =====
@@ -163,7 +183,8 @@ function drawDimDiameter(e, color) { _drawDimDiameterCore(e.center, e.radius, e.
 
 function drawDimAngular(e, color) {
     if(e) e._hits = [];
-    ctx.strokeStyle = color || e.color || DIM_COLOR; ctx.lineWidth = 1;
+    const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
+    ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
     const sv = wcsToScreen(e.vertex.x, e.vertex.y);
     const sa1 = wcsToScreen(e.arm1.x, e.arm1.y), sa2 = wcsToScreen(e.arm2.x, e.arm2.y);
     ctx.beginPath(); ctx.moveTo(sv.x, sv.y); ctx.lineTo(sa1.x, sa1.y); ctx.stroke();
@@ -181,7 +202,7 @@ function drawDimAngular(e, color) {
     const text = e.textOverride || dimFormatAngle(angleDeg);
     const midA = (angle1 + angle2) / 2;
     const tx = sv.x + arcR*Math.cos(midA), ty = sv.y + arcR*Math.sin(midA);
-    drawDimText(text, tx, ty, 0);
+    drawDimText(text, tx, ty, 0, resolvedColor);
     
     _addHitSeg(e, sv, sa1); _addHitSeg(e, sv, sa2);
     _addHitCircle(e, sv, arcR);
@@ -189,23 +210,24 @@ function drawDimAngular(e, color) {
 }
 
 function drawDimOrdinate(e, color) {
-    _drawDimOrdinateCore(e.point, e.leaderX||null, e.leaderY||null, color||e.color, e.textOverride, e);
+    _drawDimOrdinateCore(e.point, e.leaderCoord || e.leaderX, color||e.color, e.textOverride, e);
     // 旧形式互換（leaderX/leaderYがない場合）
     if(!e.leaderX && !e.leaderY && e.leader) {
         if(e) e._hits = [];
-        ctx.strokeStyle = color || e.color || DIM_COLOR; ctx.lineWidth = 1;
+        const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
+        ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
         const sp = wcsToScreen(e.point.x, e.point.y);
         const sl = wcsToScreen(e.leader.x, e.leader.y);
         const ucsC = wcsToUcs(e.point.x, e.point.y);
         if(e.isX) {
             const mid = {x: sp.x, y: sl.y};
             ctx.beginPath(); ctx.moveTo(sp.x, sp.y); ctx.lineTo(mid.x, mid.y); ctx.lineTo(sl.x, sl.y); ctx.stroke();
-            drawDimText('Y=' + dimFormat(ucsC.x), sl.x, sl.y, 0);
+            drawDimText('Y=' + dimFormat(ucsC.x), sl.x, sl.y, 0, resolvedColor);
             _addHitSeg(e, sp, mid); _addHitSeg(e, mid, sl); _addHitText(e, sl);
         } else {
             const mid = {x: sl.x, y: sp.y};
             ctx.beginPath(); ctx.moveTo(sp.x, sp.y); ctx.lineTo(mid.x, mid.y); ctx.lineTo(sl.x, sl.y); ctx.stroke();
-            drawDimText('X=' + dimFormat(ucsC.y), sl.x, sl.y, 0);
+            drawDimText('X=' + dimFormat(ucsC.y), sl.x, sl.y, 0, resolvedColor);
             _addHitSeg(e, sp, mid); _addHitSeg(e, mid, sl); _addHitText(e, sl);
         }
     }
@@ -258,15 +280,89 @@ function drawDimRubberBand(mode, sw, mp) {
     }
     else if(mode === 'WAITING_DIMORD_LEADER') {
         const p = cmdState.points[0];
-        // XY一括プレビュー：上方向にX座標、右方向にY座標
-        const leaderLen = 40 / view.scale;
-        const lx = {x: p.x, y: p.y + leaderLen};       // X座標：上へ引出
-        const ly = {x: p.x + leaderLen, y: p.y};        // Y座標：右へ引出
-        // マウスの位置で全体のオフセットを調整
-        const dx = mp.x - p.x, dy = mp.y - p.y;
-        const lxAdj = {x: p.x + dx*0.3, y: p.y + Math.abs(dy)};
-        const lyAdj = {x: p.x + Math.abs(dx), y: p.y + dy*0.3};
-        _drawDimOrdinateCore(p, lxAdj, lyAdj, DIM_COLOR, null);
+        _drawDimOrdinateCore(p, mp, DIM_COLOR, null);
+    }
+    // -- 寸法入力時の確定済みポイントマーカー（全寸法共通） --
+    const markerPoints = (mode.startsWith('WAITING_DIMCONT_') && cmdState.dimContPoints) 
+                         ? cmdState.dimContPoints 
+                         : (mode.startsWith('WAITING_DIM') && cmdState.points ? cmdState.points : null);
+    
+    if(markerPoints && markerPoints.length > 0) {
+        markerPoints.forEach((p, idx) => {
+            const sm = wcsToScreen(p.x, p.y);
+            // 外側のリング
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(sm.x, sm.y, 8, 0, Math.PI*2); ctx.stroke();
+            ctx.strokeStyle = '#00ff88'; ctx.lineWidth = 2; ctx.stroke();
+            // 数字の黒背景
+            ctx.fillStyle = '#111';
+            ctx.beginPath(); ctx.arc(sm.x, sm.y, 7, 0, Math.PI*2); ctx.fill();
+            // 数字
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(idx+1, sm.x, sm.y);
+        });
+    }
+
+    // -- 寸法コマンドの1点目→2点目等の配置時の点線ラバーバンドプレビュー --
+    if((mode === 'WAITING_DIMLIN_P2' || mode === 'WAITING_DIMALN_P2' || mode === 'WAITING_DIMANG_P2' || mode === 'WAITING_DIMANG_P3') && cmdState.points && cmdState.points.length > 0) {
+        const p1m = wcsToScreen(cmdState.points[cmdState.points.length-1].x, cmdState.points[cmdState.points.length-1].y);
+        const mps = wcsToScreen(mp.x, mp.y);
+        ctx.setLineDash([4,4]); ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(p1m.x, p1m.y); ctx.lineTo(mps.x, mps.y); ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // -- DIMCONT (連続寸法) --
+    if(mode === 'WAITING_DIMCONT_P2' && cmdState.dimContPoints && cmdState.dimContPoints.length > 0) {
+        // 1点目からカーソルへの線分プレビュー
+        const p1m = wcsToScreen(cmdState.dimContPoints[0].x, cmdState.dimContPoints[0].y);
+        const mps = wcsToScreen(mp.x, mp.y);
+        ctx.setLineDash([4,4]); ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(p1m.x, p1m.y); ctx.lineTo(mps.x, mps.y); ctx.stroke();
+        ctx.setLineDash([]);
+    }
+    else if(mode === 'WAITING_DIMCONT_POS' && cmdState.dimContPoints && cmdState.dimContPoints.length > 1) {
+        // 1点目・2点目から配置位置へのプレビュー
+        const p1 = cmdState.dimContPoints[0], p2 = cmdState.dimContPoints[1];
+        const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
+        const dimDir = dx >= dy ? 'H' : 'V';
+        const offset = dimDir === 'H' ? (mp.y - (p1.y + p2.y)/2) : (mp.x - (p1.x + p2.x)/2);
+        _drawDimLinearCore(p1, p2, offset, dimDir, '#ffff00', null);
+    }
+    else if(mode === 'WAITING_DIMCONT_NEXT' && cmdState.dimContPoints && cmdState.dimContPoints.length > 1) {
+        // 直列・並列プレビュー
+        const pNew = {x:mp.x, y:mp.y};
+        const p1 = cmdState.dimContPoints[0];
+        const pts = cmdState.dimContPoints;
+        const pPrev = pts[pts.length - 1];
+        if(cmdState.dimContType === 'SERIAL') {
+            const D_y = (p1.y + pts[1].y)/2 + cmdState.dimContBaseOffset;
+            let newOff = D_y - (pPrev.y + pNew.y)/2;
+            if(cmdState.dimContDir === 'V') {
+                const D_x = (p1.x + pts[1].x)/2 + cmdState.dimContBaseOffset;
+                newOff = D_x - (pPrev.x + pNew.x)/2;
+            }
+            _drawDimLinearCore(pPrev, pNew, newOff, cmdState.dimContDir, '#ffff00', null);
+        } else {
+            const PARALLEL_STEP = 10;
+            const sign = cmdState.dimContBaseOffset >= 0 ? 1 : -1;
+            const totalOff = cmdState.dimContBaseOffset + (PARALLEL_STEP * (cmdState.dimContLevel + 1) * sign);
+            const D_y = (p1.y + pts[1].y)/2 + totalOff;
+            let newOff = D_y - (p1.y + pNew.y)/2;
+            if(cmdState.dimContDir === 'V') {
+                const D_x = (p1.x + pts[1].x)/2 + totalOff;
+                newOff = D_x - (p1.x + pNew.x)/2;
+            }
+            _drawDimLinearCore(p1, pNew, newOff, cmdState.dimContDir, '#ffff00', null);
+        }
+        
+        // 次の点への点線プレビューも追加して「繋がっていること」を視覚化する
+        const pr_sc = wcsToScreen(pPrev.x, pPrev.y);
+        const mps = wcsToScreen(mp.x, mp.y);
+        ctx.setLineDash([4,4]); ctx.strokeStyle = '#00ff88'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(pr_sc.x, pr_sc.y); ctx.lineTo(mps.x, mps.y); ctx.stroke();
+        ctx.setLineDash([]);
     }
     else if(mode === 'WAITING_MOVE_DEST' && cmdState.moveTarget !== undefined) {
         // 移動プレビュー
@@ -320,98 +416,155 @@ function drawDimMovePreview(e, dx, dy) {
 function handleDimPointInput(mode, wcs) {
     // -- DIMLINEAR --
     if(mode === 'WAITING_DIMLIN_P1') {
-        cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMLIN_P2'; setPrompt('2点目:');
+        cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMLIN_P2'; setPrompt('2点目: (☑️確定)');
         const u = wcsToUcs(wcs.x,wcs.y);
-        addCommandLog(`-> 1点目: (${dimFormat(u.x)},${dimFormat(u.y)})`); render(); return;
+        addCommandLog(`-> 1点目: (${dimFormat(u.x)},${dimFormat(u.y)})`); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMLIN_P2') {
-        cmdState.points.push({x:wcs.x, y:wcs.y}); cmdState.mode = 'WAITING_DIMLIN_POS'; setPrompt('寸法線位置 (マウスで配置を確認):');
-        addCommandLog('-> 寸法線の位置を指定（リアルタイムプレビュー表示中）'); render(); return;
+        cmdState.points.push({x:wcs.x, y:wcs.y}); cmdState.mode = 'WAITING_DIMLIN_POS'; setPrompt('寸法線位置 (☑️確定):');
+        addCommandLog('-> 寸法線の位置を指定（リアルタイムプレビュー表示中）'); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMLIN_POS') {
         const p1 = cmdState.points[0], p2 = cmdState.points[1];
         const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
         const dimDir = dx >= dy ? 'H' : 'V';
         const offset = dimDir === 'H' ? (wcs.y - (p1.y + p2.y)/2) : (wcs.x - (p1.x + p2.x)/2);
-        saveUndo(); entities.push({type:'DIMENSION', subType:'LINEAR', layer:currentLayerIndex, color:DIM_COLOR, p1:{x:p1.x,y:p1.y}, p2:{x:p2.x,y:p2.y}, offset:offset, dimDir:dimDir, textOverride:null});
-        addCommandLog('-> 平行寸法作成'); resetCommand(); return;
+        saveUndo(); entities.push({type:'DIMENSION', subType:'LINEAR', layer:currentLayerIndex, color:null, p1:{x:p1.x,y:p1.y}, p2:{x:p2.x,y:p2.y}, offset:offset, dimDir:dimDir, textOverride:null});
+        addCommandLog('-> 平行寸法作成'); cmdState.mode = 'WAITING_DIMLIN_P1'; cmdState.points = []; setPrompt('1点目: (☑️確定)'); if(typeof render==='function') render(); return;
     }
     // -- DIMALIGNED --
     if(mode === 'WAITING_DIMALN_P1') {
-        cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMALN_P2'; setPrompt('2点目:');
-        addCommandLog('-> 1点目指定'); render(); return;
+        cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMALN_P2'; setPrompt('2点目: (☑️確定)');
+        addCommandLog('-> 1点目指定'); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMALN_P2') {
-        cmdState.points.push({x:wcs.x, y:wcs.y}); cmdState.mode = 'WAITING_DIMALN_POS'; setPrompt('寸法線位置 (マウスで配置を確認):');
-        addCommandLog('-> 寸法線の位置を指定（リアルタイムプレビュー表示中）'); render(); return;
+        cmdState.points.push({x:wcs.x, y:wcs.y}); cmdState.mode = 'WAITING_DIMALN_POS'; setPrompt('寸法線位置 (☑️確定):');
+        addCommandLog('-> 寸法線の位置を指定（リアルタイムプレビュー表示中）'); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMALN_POS') {
         const p1 = cmdState.points[0], p2 = cmdState.points[1];
         const ddx = p2.x - p1.x, ddy = p2.y - p1.y, len = Math.sqrt(ddx*ddx+ddy*ddy) || 1;
         const nx = -ddy/len, ny = ddx/len;
         const offset = (wcs.x - (p1.x+p2.x)/2)*nx + (wcs.y - (p1.y+p2.y)/2)*ny;
-        saveUndo(); entities.push({type:'DIMENSION', subType:'ALIGNED', layer:currentLayerIndex, color:DIM_COLOR, p1:{x:p1.x,y:p1.y}, p2:{x:p2.x,y:p2.y}, offset:offset, textOverride:null});
-        addCommandLog('-> 整列寸法作成'); resetCommand(); return;
+        saveUndo(); entities.push({type:'DIMENSION', subType:'ALIGNED', layer:currentLayerIndex, color:null, p1:{x:p1.x,y:p1.y}, p2:{x:p2.x,y:p2.y}, offset:offset, textOverride:null});
+        addCommandLog('-> 整列寸法作成'); cmdState.mode = 'WAITING_DIMALN_P1'; cmdState.points = []; setPrompt('1点目: (☑️確定)'); if(typeof render==='function') render(); return;
     }
     // -- DIMRADIUS --
     if(mode === 'WAITING_DIMRAD_SELECT') {
         const idx = hitTestCircleArc(mouse.screenX, mouse.screenY);
         if(idx >= 0 && (entities[idx].type === 'CIRCLE' || entities[idx].type === 'ARC')) {
-            cmdState.dimTarget = entities[idx]; cmdState.mode = 'WAITING_DIMRAD_POS'; setPrompt('テキスト位置 (マウスで配置を確認):');
-            addCommandLog('-> 円/弧を選択（リアルタイムプレビュー表示中）'); render();
-        } else { addCommandLog('円または弧をクリックしてください'); }
+            cmdState.dimTarget = entities[idx]; cmdState.mode = 'WAITING_DIMRAD_POS'; setPrompt('テキスト位置 (☑️確定):');
+            addCommandLog('-> 円/弧を選択（リアルタイムプレビュー表示中）'); if(typeof render==='function') render();
+        } else { addCommandLog('円または弧を選択して「☑️確定」を押してください'); }
         return;
     }
     if(mode === 'WAITING_DIMRAD_POS') {
         const e = cmdState.dimTarget;
         const angle = Math.atan2(wcs.y - e.cy, wcs.x - e.cx);
-        saveUndo(); entities.push({type:'DIMENSION', subType:'RADIUS', layer:currentLayerIndex, color:DIM_COLOR, center:{x:e.cx,y:e.cy}, radius:e.radius, angle:angle, textOverride:null});
-        addCommandLog('-> 半径寸法作成'); resetCommand(); return;
+        saveUndo(); entities.push({type:'DIMENSION', subType:'RADIUS', layer:currentLayerIndex, color:null, center:{x:e.cx,y:e.cy}, radius:e.radius, angle:angle, textOverride:null});
+        addCommandLog('-> 半径寸法作成'); cmdState.mode = 'WAITING_DIMRAD_SELECT'; cmdState.dimTarget = null; setPrompt('円/弧を選択: (☑️確定)'); if(typeof render==='function') render(); return;
     }
     // -- DIMDIAMETER --
     if(mode === 'WAITING_DIMDIA_SELECT') {
         const idx = hitTestCircleArc(mouse.screenX, mouse.screenY);
         if(idx >= 0 && (entities[idx].type === 'CIRCLE' || entities[idx].type === 'ARC')) {
-            cmdState.dimTarget = entities[idx]; cmdState.mode = 'WAITING_DIMDIA_POS'; setPrompt('テキスト位置 (マウスで配置を確認):');
-            addCommandLog('-> 円/弧を選択（リアルタイムプレビュー表示中）'); render();
-        } else { addCommandLog('円または弧をクリックしてください'); }
+            cmdState.dimTarget = entities[idx]; cmdState.mode = 'WAITING_DIMDIA_POS'; setPrompt('テキスト位置 (☑️確定):');
+            addCommandLog('-> 円/弧を選択（リアルタイムプレビュー表示中）'); if(typeof render==='function') render();
+        } else { addCommandLog('円または弧を選択して「☑️確定」を押してください'); }
         return;
     }
     if(mode === 'WAITING_DIMDIA_POS') {
         const e = cmdState.dimTarget;
         const angle = Math.atan2(wcs.y - e.cy, wcs.x - e.cx);
-        saveUndo(); entities.push({type:'DIMENSION', subType:'DIAMETER', layer:currentLayerIndex, color:DIM_COLOR, center:{x:e.cx,y:e.cy}, radius:e.radius, angle:angle, textOverride:null});
-        addCommandLog('-> 直径寸法作成'); resetCommand(); return;
+        saveUndo(); entities.push({type:'DIMENSION', subType:'DIAMETER', layer:currentLayerIndex, color:null, center:{x:e.cx,y:e.cy}, radius:e.radius, angle:angle, textOverride:null});
+        addCommandLog('-> 直径寸法作成'); cmdState.mode = 'WAITING_DIMDIA_SELECT'; cmdState.dimTarget = null; setPrompt('円/弧を選択: (☑️確定)'); if(typeof render==='function') render(); return;
     }
     // -- DIMANGULAR --
     if(mode === 'WAITING_DIMANG_P1') {
-        cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMANG_P2'; setPrompt('1辺上の点:');
-        addCommandLog('-> 頂点指定'); render(); return;
+        cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMANG_P2'; setPrompt('1辺上の点: (☑️確定)');
+        addCommandLog('-> 頂点指定'); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMANG_P2') {
-        cmdState.points.push({x:wcs.x, y:wcs.y}); cmdState.mode = 'WAITING_DIMANG_P3'; setPrompt('2辺上の点:');
-        addCommandLog('-> 1辺指定'); render(); return;
+        cmdState.points.push({x:wcs.x, y:wcs.y}); cmdState.mode = 'WAITING_DIMANG_P3'; setPrompt('2辺上の点: (☑️確定)');
+        addCommandLog('-> 1辺指定'); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMANG_P3') {
         const v = cmdState.points[0], a1 = cmdState.points[1], a2 = {x:wcs.x, y:wcs.y};
         const arcR = Math.max(dist(v.x,v.y,a1.x,a1.y), dist(v.x,v.y,a2.x,a2.y)) * 0.6;
-        saveUndo(); entities.push({type:'DIMENSION', subType:'ANGULAR', layer:currentLayerIndex, color:DIM_COLOR, vertex:{x:v.x,y:v.y}, arm1:{x:a1.x,y:a1.y}, arm2:{x:a2.x,y:a2.y}, arcRadius:arcR, textOverride:null});
-        addCommandLog('-> 角度寸法作成'); resetCommand(); return;
+        saveUndo(); entities.push({type:'DIMENSION', subType:'ANGULAR', layer:currentLayerIndex, color:null, vertex:{x:v.x,y:v.y}, arm1:{x:a1.x,y:a1.y}, arm2:{x:a2.x,y:a2.y}, arcRadius:arcR, textOverride:null});
+        addCommandLog('-> 角度寸法作成'); cmdState.mode = 'WAITING_DIMANG_P1'; cmdState.points = []; setPrompt('頂点: (☑️確定)'); if(typeof render==='function') render(); return;
     }
-    // -- DIMORDINATE（XY一括） --
+    // -- DIMORDINATE（単一引出線タイプ） --
     if(mode === 'WAITING_DIMORD_P1') {
-        cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMORD_LEADER'; setPrompt('引出先を指定 (XY一括表示):');
+        cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMORD_LEADER'; setPrompt('引出先を指定: (☑️確定)');
         const u = wcsToUcs(wcs.x, wcs.y);
-        addCommandLog(`-> 測定点: (${dimFormat(u.x)},${dimFormat(u.y)}) - 引出位置を指定`); render(); return;
+        addCommandLog(`-> 測定点: (${dimFormat(u.x)},${dimFormat(u.y)}) - 引出先を指定`); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMORD_LEADER') {
         const p = cmdState.points[0];
-        const dx = wcs.x - p.x, dy = wcs.y - p.y;
-        // XY一括：Xは上方向、Yは右方向に引出
-        const leaderX = {x: p.x + dx*0.3, y: p.y + Math.abs(dy)};
-        const leaderY = {x: p.x + Math.abs(dx), y: p.y + dy*0.3};
-        saveUndo(); entities.push({type:'DIMENSION', subType:'ORDINATE', layer:currentLayerIndex, color:DIM_COLOR, point:{x:p.x,y:p.y}, leaderX:leaderX, leaderY:leaderY, textOverride:null});
-        addCommandLog('-> XY座標寸法作成'); resetCommand(); return;
+        saveUndo(); entities.push({type:'DIMENSION', subType:'ORDINATE', layer:currentLayerIndex, color:null, point:{x:p.x,y:p.y}, leaderCoord:{x:wcs.x,y:wcs.y}, textOverride:null});
+        addCommandLog('-> 座標寸法作成'); cmdState.mode = 'WAITING_DIMORD_P1'; cmdState.points = []; setPrompt('測定点: (☑️確定)'); if(typeof render==='function') render(); return;
+    }
+    // -- DIMCONT (連続寸法) --
+    if(mode === 'WAITING_DIMCONT_P1') {
+        cmdState.dimContPoints = [{x:wcs.x, y:wcs.y}];
+        cmdState.mode = 'WAITING_DIMCONT_P2';
+        setPrompt('連続寸法: 2点目を選択 (確定ボタン)');
+        addCommandLog('-> 1点目確定。2点目を指定してください');
+        if(typeof render === 'function') render(); return;
+    }
+    if(mode === 'WAITING_DIMCONT_P2') {
+        cmdState.dimContPoints.push({x:wcs.x, y:wcs.y});
+        cmdState.mode = 'WAITING_DIMCONT_POS';
+        setPrompt('連続寸法: 寸法の高さを選択 (確定ボタン)');
+        addCommandLog('-> 2点目確定。寸法の高さを指定してください');
+        if(typeof render === 'function') render(); return;
+    }
+    if(mode === 'WAITING_DIMCONT_POS') {
+        const p1 = cmdState.dimContPoints[0], p2 = cmdState.dimContPoints[1];
+        const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
+        cmdState.dimContDir = dx >= dy ? 'H' : 'V';
+        cmdState.dimContOffset = cmdState.dimContDir === 'H' ? (wcs.y - (p1.y + p2.y)/2) : (wcs.x - (p1.x + p2.x)/2);
+        cmdState.dimContBaseOffset = cmdState.dimContOffset;
+        saveUndo();
+        entities.push({type:'DIMENSION', subType:'LINEAR', layer:currentLayerIndex, color:null, p1:{x:p1.x,y:p1.y}, p2:{x:p2.x,y:p2.y}, offset:cmdState.dimContOffset, dimDir:cmdState.dimContDir, textOverride:null});
+        
+        cmdState.mode = 'WAITING_DIMCONT_NEXT';
+        const isS = cmdState.dimContType === 'SERIAL';
+        setPrompt(`連続寸法: 次の点 (☑️確定) / ❌終了`);
+        addCommandLog(`-> 基準寸法作成。次の点を選択 (${isS?'直列':'並列'})`);
+        if(typeof render === 'function') render(); return;
+    }
+    if(mode === 'WAITING_DIMCONT_NEXT') {
+        const pts = cmdState.dimContPoints;
+        const pNew = {x:wcs.x, y:wcs.y};
+        const p1 = pts[0];
+        const pPrev = pts[pts.length - 1];
+        saveUndo();
+        if(cmdState.dimContType === 'SERIAL') {
+            const D_y = (p1.y + pts[1].y)/2 + cmdState.dimContBaseOffset;
+            let newOffset = D_y - (pPrev.y + pNew.y)/2;
+            if(cmdState.dimContDir === 'V') {
+                const D_x = (p1.x + pts[1].x)/2 + cmdState.dimContBaseOffset;
+                newOffset = D_x - (pPrev.x + pNew.x)/2;
+            }
+            entities.push({type:'DIMENSION', subType:'LINEAR', layer:currentLayerIndex, color:null, p1:{x:pPrev.x,y:pPrev.y}, p2:{x:pNew.x,y:pNew.y}, offset:newOffset, dimDir:cmdState.dimContDir, textOverride:null});
+        } else {
+            cmdState.dimContLevel++;
+            const PARALLEL_STEP = 10;
+            const sign = cmdState.dimContBaseOffset >= 0 ? 1 : -1;
+            const totalOffset = cmdState.dimContBaseOffset + (PARALLEL_STEP * cmdState.dimContLevel * sign);
+            const D_y = (p1.y + pts[1].y)/2 + totalOffset;
+            let newOffset = D_y - (p1.y + pNew.y)/2;
+            if(cmdState.dimContDir === 'V') {
+                const D_x = (p1.x + pts[1].x)/2 + totalOffset;
+                newOffset = D_x - (p1.x + pNew.x)/2;
+            }
+            entities.push({type:'DIMENSION', subType:'LINEAR', layer:currentLayerIndex, color:null, p1:{x:p1.x,y:p1.y}, p2:{x:pNew.x,y:pNew.y}, offset:newOffset, dimDir:cmdState.dimContDir, textOverride:null});
+        }
+        pts.push(pNew);
+        addCommandLog('-> 寸法を追加');
+        if(typeof render === 'function') render(); return;
     }
     // -- MOVE --
     if(mode === 'WAITING_MOVE_SELECT') {
@@ -488,15 +641,56 @@ function moveEntity(e, dx, dy) {
     }
 }
 
+// アクションバー表示用のヘルパー
+function _showDimActionBar(isContinuous) {
+    const actionbar = document.getElementById('fs-dim-actionbar');
+    if(actionbar) actionbar.style.display = 'flex';
+    const toggleBtn = document.getElementById('dim-mode-toggle');
+    if(toggleBtn) toggleBtn.style.display = isContinuous ? 'inline-block' : 'none';
+}
+
 // ===== 寸法コマンドのディスパッチ =====
 function processDimCommand(cmd) {
-    if(cmd==='DLI'||cmd==='DIMLINEAR') { cmdState.mode='WAITING_DIMLIN_P1'; cmdState.points=[]; setPrompt('1点目:'); setActiveTool('DIMLIN'); addCommandLog('-> [平行寸法] 1点目を指定'); return true; }
-    if(cmd==='DAL'||cmd==='DIMALIGNED') { cmdState.mode='WAITING_DIMALN_P1'; cmdState.points=[]; setPrompt('1点目:'); setActiveTool('DIMALN'); addCommandLog('-> [整列寸法] 1点目を指定'); return true; }
-    if(cmd==='DRA'||cmd==='DIMRADIUS') { cmdState.mode='WAITING_DIMRAD_SELECT'; cmdState.dimTarget=null; setPrompt('円/弧を選択:'); setActiveTool('DIMRAD'); addCommandLog('-> [半径寸法] 円または弧をクリック'); return true; }
-    if(cmd==='DDI'||cmd==='DIMDIAMETER') { cmdState.mode='WAITING_DIMDIA_SELECT'; cmdState.dimTarget=null; setPrompt('円/弧を選択:'); setActiveTool('DIMDIA'); addCommandLog('-> [直径寸法] 円または弧をクリック'); return true; }
-    if(cmd==='DAN'||cmd==='DIMANGULAR') { cmdState.mode='WAITING_DIMANG_P1'; cmdState.points=[]; setPrompt('頂点:'); setActiveTool('DIMANG'); addCommandLog('-> [角度寸法] 頂点を指定'); return true; }
-    if(cmd==='DOR'||cmd==='DIMORDINATE') { cmdState.mode='WAITING_DIMORD_P1'; cmdState.points=[]; setPrompt('測定点:'); setActiveTool('DIMORD'); addCommandLog('-> [座標寸法] 測定点を指定 (XY一括表示)'); return true; }
+    if(cmd==='DLI'||cmd==='DIMLINEAR') { cmdState.mode='WAITING_DIMLIN_P1'; cmdState.points=[]; setPrompt('1点目: (☑️確定)'); setActiveTool('DIMLIN'); addCommandLog('-> [平行寸法] 1点目を指定'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
+    if(cmd==='DAL'||cmd==='DIMALIGNED') { cmdState.mode='WAITING_DIMALN_P1'; cmdState.points=[]; setPrompt('1点目: (☑️確定)'); setActiveTool('DIMALN'); addCommandLog('-> [整列寸法] 1点目を指定'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
+    if(cmd==='DRA'||cmd==='DIMRADIUS') { cmdState.mode='WAITING_DIMRAD_SELECT'; cmdState.dimTarget=null; setPrompt('円/弧を選択: (☑️確定)'); setActiveTool('DIMRAD'); addCommandLog('-> [半径寸法] 円または弧を選択'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
+    if(cmd==='DDI'||cmd==='DIMDIAMETER') { cmdState.mode='WAITING_DIMDIA_SELECT'; cmdState.dimTarget=null; setPrompt('円/弧を選択: (☑️確定)'); setActiveTool('DIMDIA'); addCommandLog('-> [直径寸法] 円または弧を選択'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
+    if(cmd==='DAN'||cmd==='DIMANGULAR') { cmdState.mode='WAITING_DIMANG_P1'; cmdState.points=[]; setPrompt('頂点: (☑️確定)'); setActiveTool('DIMANG'); addCommandLog('-> [角度寸法] 頂点を指定'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
+    if(cmd==='DOR'||cmd==='DIMORDINATE') { cmdState.mode='WAITING_DIMORD_P1'; cmdState.points=[]; setPrompt('測定点: (☑️確定)'); setActiveTool('DIMORD'); addCommandLog('-> [座標寸法] 測定点を指定 (XY一括表示)'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
     if(cmd==='M'||cmd==='MOVE') { cmdState.mode='WAITING_MOVE_SELECT'; cmdState.moveTarget=undefined; setPrompt('移動対象:'); setActiveTool('MOVE'); addCommandLog('-> [移動] エンティティをクリック'); return true; }
     if(cmd==='CO'||cmd==='COPY') { cmdState.mode='WAITING_COPY_SELECT'; cmdState.moveTarget=undefined; setPrompt('コピー対象:'); setActiveTool('COPY'); addCommandLog('-> [コピー] エンティティをクリック'); return true; }
+    // 連続寸法コマンドの処理
+    if(cmd === 'DIMCONT' || cmd === 'DIMCONTINUOUS') {
+        cmdState.mode = 'WAITING_DIMCONT_P1';
+        cmdState.dimContPoints = [];
+        cmdState.dimContType = 'SERIAL';
+        cmdState.dimContLevel = 0;
+        setPrompt('連続寸法: 1点目を選択 (☑️確定ボタンで決定)');
+        addCommandLog('-> [連続寸法] アクションバーの確定ボタンで点を入力します');
+        
+        _showDimActionBar(true);
+        const toggleBtn = document.getElementById('dim-mode-toggle');
+        if(toggleBtn) toggleBtn.textContent = '📏 直列 (変更)';
+        
+        if(typeof render === 'function') render();
+        return true;
+    }
     return false;
 }
+
+// 連続寸法のモード切り替え関数（グローバル）
+window.toggleDimContMode = function() {
+    if(!cmdState.mode || !cmdState.mode.startsWith('WAITING_DIMCONT')) return;
+    if(cmdState.dimContType === 'SERIAL') {
+        cmdState.dimContType = 'PARALLEL';
+        const toggleBtn = document.getElementById('dim-mode-toggle');
+        if(toggleBtn) toggleBtn.textContent = '📏 並列 (変更)';
+        if(cmdState.mode === 'WAITING_DIMCONT_NEXT') addCommandLog('-> モード切替: 並列 (最初の基準点から測ります)');
+    } else {
+        cmdState.dimContType = 'SERIAL';
+        const toggleBtn = document.getElementById('dim-mode-toggle');
+        if(toggleBtn) toggleBtn.textContent = '📏 直列 (変更)';
+        if(cmdState.mode === 'WAITING_DIMCONT_NEXT') addCommandLog('-> モード切替: 直列 (前回の点から測ります)');
+    }
+    if(typeof render === 'function') render();
+};

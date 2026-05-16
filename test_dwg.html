@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script type="module">
+import { LibreDwg } from 'https://cdn.jsdelivr.net/npm/@mlightcad/libredwg-web@0.6.6/dist/libredwg-web.js';
+async function test() {
+    try {
+        const response = await fetch('20260317_神鋼灘浜棒鋼加工工場6ヤードクレーンレール３Dスキャナー計測.dwg');
+        const buffer = await response.arrayBuffer();
+        const fileBytes = new Uint8Array(buffer);
+        const libredwg = await LibreDwg.create('https://cdn.jsdelivr.net/npm/@mlightcad/libredwg-web@0.6.6/wasm');
+        const dwg = libredwg.dwg_read_data(fileBytes, 0);
+        const db = libredwg.convert(dwg);
+        libredwg.dwg_free(dwg);
+
+        const inserts = db.entities.filter(e => e.type === 'INSERT');
+        const circles = db.entities.filter(e => e.type === 'CIRCLE');
+        const ellipses = db.entities.filter(e => e.type === 'ELLIPSE');
+        
+        let out = "INSERTS:\n";
+        for(let i=0; i<Math.min(2, inserts.length); i++) out += JSON.stringify(inserts[i]) + "\n";
+        out += "CIRCLES:\n";
+        for(let i=0; i<Math.min(2, circles.length); i++) out += JSON.stringify(circles[i]) + "\n";
+        out += "ELLIPSES:\n";
+        for(let i=0; i<Math.min(2, ellipses.length); i++) out += JSON.stringify(ellipses[i]) + "\n";
+
+        document.getElementById('out').textContent = out;
+        
+        // Also check circles inside blocks
+        const blocks = Object.values(db.tables.BLOCK_RECORD.entries);
+        let bOut = "BLOCK CIRCLES:\n";
+        for(const b of blocks) {
+            if(b.entities) {
+                const bc = b.entities.filter(e=>e.type==='CIRCLE');
+                if(bc.length > 0) {
+                    bOut += `Block ${b.name}: ` + JSON.stringify(bc[0]) + "\n";
+                    break;
+                }
+            }
+        }
+        document.getElementById('out2').textContent = bOut;
+    } catch(e) {
+        document.getElementById('out').textContent = "ERROR: " + e.message;
+    }
+}
+test();
+</script>
+</head>
+<body>
+<pre id="out">Loading...</pre>
+<pre id="out2"></pre>
+</body>
+</html>

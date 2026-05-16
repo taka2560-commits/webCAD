@@ -9,12 +9,14 @@ const ucsStatusDisplay = document.getElementById('ucs-status-display'), ucsLabel
 const snapIndicator = document.getElementById('snap-indicator');
 
 // ===== 状態変数// グローバル状態
-let layers = [{ name:"0", color:"#FFFFFF", visible:true }, { name:"点(測量)", color:"#FF00FF", visible:true }, { name:"寸法", color:"#00FFFF", visible:true }];
+let layers = [{name:'0', color:'#00ffff', visible:true}];
 let currentLayerIndex = 0;
-let entities = [], undoStack = [], redoStack = [];
-let view = { x:0, y:0, scale:1 };
-let mouse = { screenX:0, screenY:0, wcsX:0, wcsY:0, ucsX:0, ucsY:0, isPanning:false };
-let ucs = { originX:0, originY:0 };
+let entities = [];
+let view = { x:0, y:0, scale:1, rotation:0 };
+let mouse = { screenX:0, screenY:0, wcsX:0, wcsY:0, ucsX:0, ucsY:0, isPanning:false, isSelecting:false, selStartX:0, selStartY:0 };
+let ucs = { originX:0, originY:0, angle:0 }; // angle: ラジアン（WCSからの回転角）
+let undoStack = [], redoStack = [];
+let savedUCSList = [];
 let cmdState = { mode:'IDLE', startWcs:null, points:[], highlightIdx:-1, selectedIndices:[] };
 let snapResult = null;
 const SNAP_R = 10, ERASE_R = 5;
@@ -26,7 +28,14 @@ let orthoMode = false;
 function isMobile() { return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window); }
 function addCommandLog(t) { const d=document.createElement('div'); d.textContent=t; commandLog.appendChild(d); commandLog.scrollTop=commandLog.scrollHeight; }
 function setPrompt(t) { document.getElementById('command-prompt').textContent=t; }
-function resetCommand() { cmdState={mode:'IDLE',startWcs:null,points:[],highlightIdx:-1,selectedIndices:[]}; setPrompt('コマンド:'); activeCommandName=''; setActiveTool(null); updatePropertiesPanel(); render(); }
+function resetCommand() { 
+    cmdState={mode:'IDLE',startWcs:null,points:[],highlightIdx:-1,selectedIndices:[]}; 
+    setPrompt('コマンド:'); activeCommandName=''; setActiveTool(null); updatePropertiesPanel(); 
+    // 寸法アクションバーを確実に隠す
+    const actionbar = document.getElementById('fs-dim-actionbar');
+    if(actionbar) actionbar.style.display = 'none';
+    render(); 
+}
 function issueCommand(cmd) { cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd); updatePropertiesPanel(); }
 function setActiveTool(name) { document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); if(name){document.querySelectorAll('.tool-cmd').forEach(el=>{if(el.textContent===name)el.parentElement.classList.add('active');});} }
 
@@ -86,16 +95,146 @@ function updateLayerColorDisplay() { document.getElementById('current-layer-colo
 function resizeCanvas() { canvas.width=container.clientWidth; canvas.height=container.clientHeight; render(); }
 
 // ===== 座標変換 =====
-function screenToWcs(sx,sy) { return {x:(sx-view.x)/view.scale, y:-(sy-view.y)/view.scale}; }
-function wcsToScreen(wx,wy) { return {x:wx*view.scale+view.x, y:-wy*view.scale+view.y}; }
-function ucsToWcs(ux,uy) { return {x:ux+ucs.originX, y:uy+ucs.originY}; }
-function wcsToUcs(wx,wy) { return {x:wx-ucs.originX, y:wy-ucs.originY}; }
+function screenToWcs(sx, sy) {
+    let rwx = (sx - view.x) / view.scale;
+    let rwy = -(sy - view.y) / view.scale;
+    if (view.rotation !== 0) {
+        const c = Math.cos(-view.rotation), s = Math.sin(-view.rotation);
+        return { x: rwx*c - rwy*s, y: rwx*s + rwy*c };
+    }
+    return { x: rwx, y: rwy };
+}
+function wcsToScreen(wx, wy) {
+    let dx = wx, dy = wy;
+    if (view.rotation !== 0) {
+        const c = Math.cos(view.rotation), s = Math.sin(view.rotation);
+        dx = wx*c - wy*s;
+        dy = wx*s + wy*c;
+    }
+    return { x: dx*view.scale + view.x, y: -dy*view.scale + view.y };
+}
+// ズーム時のビュー再配置: WCS座標(wb)が画面座標(sx,sy)に来るようにview.x/yを計算
+function _reanchorView(sx, sy, wb) {
+    let dx = wb.x, dy = wb.y;
+    if (view.rotation !== 0) {
+        const c = Math.cos(view.rotation), s = Math.sin(view.rotation);
+        dx = wb.x*c - wb.y*s;
+        dy = wb.x*s + wb.y*c;
+    }
+    view.x = sx - dx * view.scale;
+    view.y = sy + dy * view.scale;
+}
+function ucsToWcs(ux,uy) {
+    // 回転→平行移動
+    const c=Math.cos(ucs.angle), s=Math.sin(ucs.angle);
+    return { x: ux*c - uy*s + ucs.originX, y: ux*s + uy*c + ucs.originY };
+}
+function wcsToUcs(wx,wy) {
+    // 平行移動→逆回転
+    const dx=wx-ucs.originX, dy=wy-ucs.originY;
+    const c=Math.cos(-ucs.angle), s=Math.sin(-ucs.angle);
+    return { x: dx*c - dy*s, y: dx*s + dy*c };
+}
 function screenToUcs(sx,sy) { const w=screenToWcs(sx,sy); return wcsToUcs(w.x,w.y); }
 
 // ===== UCS管理 =====
-function setUCS(wx,wy) { ucs.originX=wx; ucs.originY=wy; ucsStatusDisplay.textContent='UCS'; ucsStatusDisplay.style.color='var(--ucs-color)'; ucsLabel.textContent='UCS'; ucsLabel.style.color='var(--ucs-color)'; resetCommand(); addCommandLog(`-> 原点設定: WCS(${wx.toFixed(2)},${wy.toFixed(2)})`); render(); }
-function resetUCS() { ucs.originX=0; ucs.originY=0; ucsStatusDisplay.textContent='WCS'; ucsStatusDisplay.style.color='var(--highlight-color)'; ucsLabel.textContent='WCS'; ucsLabel.style.color='var(--highlight-color)'; resetCommand(); addCommandLog('-> WCSにリセット'); render(); }
-function zoomToOrigin() { view.scale=1; view.x=canvas.width/2-ucs.originX*view.scale; view.y=canvas.height/2+ucs.originY*view.scale; render(); addCommandLog('原点へズーム'); }
+function setUCS(wx, wy, angle) {
+    ucs.originX = wx; ucs.originY = wy; ucs.angle = angle || 0;
+    ucsStatusDisplay.textContent = 'UCS';
+    ucsStatusDisplay.style.color = 'var(--ucs-color)';
+    ucsLabel.textContent = 'UCS';
+    ucsLabel.style.color = 'var(--ucs-color)';
+    const degStr = ucs.angle !== 0 ? ` ∠${(ucs.angle * 180 / Math.PI).toFixed(1)}°` : '';
+    addCommandLog(`-> 原点設定: WCS(${wx.toFixed(2)},${wy.toFixed(2)})${degStr}`);
+    resetCommand();
+    render();
+}
+function resetUCS() {
+    ucs.originX = 0; ucs.originY = 0; ucs.angle = 0;
+    ucsStatusDisplay.textContent = 'WCS';
+    ucsStatusDisplay.style.color = 'var(--highlight-color)';
+    ucsLabel.textContent = 'WCS';
+    ucsLabel.style.color = 'var(--highlight-color)';
+    resetCommand();
+    addCommandLog('-> WCSにリセット');
+    render();
+}
+
+// ===== UCS保存・読込処理 =====
+function saveUCS() {
+    const name = prompt("現在のUCSに名前を付けて保存します:", `UCS_${savedUCSList.length + 1}`);
+    if(!name) return;
+    savedUCSList.push({ name: name, x: ucs.originX, y: ucs.originY, angle: ucs.angle });
+    updateUCSDropdowns();
+    addCommandLog(`-> UCS保存: ${name}`);
+}
+
+function deleteUCS() {
+    const fsSel = document.getElementById('fs-ucs-select');
+    const ucsSel = document.getElementById('ucs-select');
+    // 全画面のセレクトボックス、または通常のセレクトボックスから値を取得
+    const idxStr = (fsSel && fsSel.value !== '') ? fsSel.value : (ucsSel && ucsSel.value !== '' ? ucsSel.value : '');
+    
+    if(idxStr === '') {
+        alert("ドロップダウンから消去するUCSを選択してください。");
+        return;
+    }
+    const idx = parseInt(idxStr);
+    if(savedUCSList[idx]) {
+        if(confirm(`保存されたUCS「${savedUCSList[idx].name}」を消去しますか？`)) {
+            savedUCSList.splice(idx, 1);
+            updateUCSDropdowns();
+            resetUCS(); // 消去した場合は元のWCSにリセット
+            addCommandLog('-> UCS消去完了');
+        }
+    }
+}
+
+function loadUCS(indexStr) {
+    if(indexStr === '') return;
+    const idx = parseInt(indexStr);
+    if(savedUCSList[idx]) {
+        const u = savedUCSList[idx];
+        setUCS(u.x, u.y, u.angle);
+        addCommandLog(`-> UCS読込: ${u.name}`);
+        // もしPLAN機能がON（view.rotationが0以外）なら、自動的に新しいUCSに合わせる
+        if(view.rotation !== 0) {
+            view.rotation = -ucs.angle;
+        }
+        render();
+    }
+}
+
+function updateUCSDropdowns() {
+    ['ucs-select', 'fs-ucs-select'].forEach(id => {
+        const sel = document.getElementById(id);
+        if(!sel) return;
+        sel.innerHTML = '<option value="">--読込--</option>';
+        savedUCSList.forEach((u, i) => {
+            const opt = document.createElement('option');
+            opt.value = i; opt.textContent = u.name;
+            sel.appendChild(opt);
+        });
+    });
+}
+
+// ===== 画面方向合わせ (PLAN) =====
+function togglePlanView() {
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    const targetWcs = screenToWcs(cx, cy); // 画面中央のWCSを維持する
+
+    // rotation のトグル：既にUCSに合致しているなら WCS(0)に戻す、違えばUCSの回転幅に合わせる
+    const targetRot = (view.rotation === -ucs.angle && ucs.angle !== 0) ? 0 : -ucs.angle;
+    view.rotation = targetRot;
+
+    // targetWcs が再度 cx, cy にマッピングされるよう view.x, view.y を逆算
+    _reanchorView(cx, cy, targetWcs);
+
+    addCommandLog(`-> 画面方向: ${targetRot === 0 ? 'リセット(WCS)' : 'UCS方向(PLAN)'}`);
+    render();
+}
+
+function zoomToOrigin() { view.scale=1; _reanchorView(canvas.width/2, canvas.height/2, {x:ucs.originX, y:ucs.originY}); render(); addCommandLog('原点へズーム'); }
 function zoomExtents() {
     if(entities.length===0){zoomToOrigin();return;}
     let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
@@ -115,12 +254,18 @@ function zoomExtents() {
     const sx=(canvas.width-pad*2)/w, sy=(canvas.height-pad*2)/h;
     view.scale=Math.min(sx,sy);
     const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
-    view.x=canvas.width/2-cx*view.scale; view.y=canvas.height/2+cy*view.scale;
+    _reanchorView(canvas.width/2, canvas.height/2, {x:cx, y:cy});
     render(); addCommandLog('全体表示');
 }
 
 // ===== Undo/Redo =====
-function saveUndo() { undoStack.push(JSON.parse(JSON.stringify(entities))); if(undoStack.length>50) undoStack.shift(); redoStack=[]; }
+function saveUndo() {
+    undoStack.push(JSON.parse(JSON.stringify(entities)));
+    if(undoStack.length>50) undoStack.shift();
+    redoStack=[];
+    // 自動保存トリガー
+    if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
+}
 function undo() { if(!undoStack.length){addCommandLog('元に戻す操作がありません');return;} redoStack.push(JSON.parse(JSON.stringify(entities))); entities=undoStack.pop(); render(); addCommandLog('-> 元に戻す'); }
 function redo() { if(!redoStack.length){addCommandLog('やり直す操作がありません');return;} undoStack.push(JSON.parse(JSON.stringify(entities))); entities=redoStack.pop(); render(); addCommandLog('-> やり直し'); }
 
@@ -155,8 +300,22 @@ function collectSnapPoints(wx, wy, baseWcs) {
     const addPerp = (px, py) => { if(osnapState.perp) pts.push({x:px, y:py, t:'垂線'}); };
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
 
+    // マウスカーソル周辺でのみ検索するカリング
+    let wxMin, wxMax, wyMin, wyMax;
+    if (wx !== undefined && wy !== undefined) {
+        const searchRad = 100 / view.scale; // 画面上100px程度の範囲
+        wxMin = wx - searchRad; wxMax = wx + searchRad;
+        wyMin = wy - searchRad; wyMax = wy + searchRad;
+    }
+
     entities.forEach(e => {
         if(!isVisible(e)) return;
+        
+        // スナップ検索のカリング
+        if(e.bbox && wxMin !== undefined) {
+            if(e.bbox.maxX < wxMin || e.bbox.minX > wxMax || e.bbox.maxY < wyMin || e.bbox.minY > wyMax) return;
+        }
+
         if(e.type==='LINE') { 
             if(osnapState.end) pts.push({x:e.x1,y:e.y1,t:'端点'},{x:e.x2,y:e.y2,t:'端点'}); 
             if(osnapState.mid) pts.push({x:(e.x1+e.x2)/2,y:(e.y1+e.y2)/2,t:'中点'}); 
@@ -253,11 +412,20 @@ function collectSnapPoints(wx, wy, baseWcs) {
         }
         else if(e.type==='POINT') { if(osnapState.end) pts.push({x:e.x,y:e.y,t:'端点'}); }
     });
-    // 交点
+    // 交点 (カリング済みLINEのみ)
     if(osnapState.int) {
-        const lines = entities.filter(e=>e.type==='LINE' && isVisible(e));
-        for(let i=0; i<lines.length; i++) {
-            for(let j=i+1; j<lines.length; j++) {
+        const searchRad = (wxMin !== undefined) ? 100 / view.scale : Infinity;
+        const lines = entities.filter(e => {
+            if(e.type!=='LINE' || !isVisible(e)) return false;
+            if(e.bbox && wxMin !== undefined) {
+                if(e.bbox.maxX < wxMin || e.bbox.minX > wxMax || e.bbox.maxY < wyMin || e.bbox.minY > wyMax) return false;
+            }
+            return true;
+        });
+        // 大量のLINEがある場合は制限
+        const maxLines = Math.min(lines.length, 200);
+        for(let i=0; i<maxLines; i++) {
+            for(let j=i+1; j<maxLines; j++) {
                 const l1=lines[i], l2=lines[j];
                 const pt = intersectLineLine(l1.x1,l1.y1,l1.x2,l1.y2, l2.x1,l2.y1,l2.x2,l2.y2);
                 if(pt) pts.push({x:pt.x, y:pt.y, t:'交点'});
@@ -277,7 +445,13 @@ function getBaseWcs() {
 function findSnap(sx, sy, wx, wy) {
     if(!osnapState.main) return null;
     const baseWcs = getBaseWcs();
-    const pts=collectSnapPoints(wx, wy, baseWcs); 
+    let pts = collectSnapPoints(wx, wy, baseWcs); 
+    
+    // UCS設定時は「近接点」スナップを無効化
+    if (cmdState.mode.startsWith('WAITING_UCS_')) {
+        pts = pts.filter(p => p.t !== '近接点');
+    }
+
     let best=null, bestD=SNAP_R;
     
     // スナップ優先順位: 1.端点/中点/中心/交点/垂線  2.近接点
@@ -303,8 +477,18 @@ function distPointToSeg(px,py,x1,y1,x2,y2) {
 function hitTestEntity(sx,sy) {
     let bestIdx=-1, bestD=ERASE_R;
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
+    const wcs = screenToWcs(sx, sy);
+    const tolWcs = ERASE_R / view.scale;
+
     entities.forEach((e,i) => {
         if(!isVisible(e)) return;
+
+        // BBoxカリング
+        if(e.bbox && e.type !== 'HATCH') {
+            if(e.bbox.maxX < wcs.x - tolWcs || e.bbox.minX > wcs.x + tolWcs ||
+               e.bbox.maxY < wcs.y - tolWcs || e.bbox.minY > wcs.y + tolWcs) return;
+        }
+
         let d = Infinity;
         if(e.type==='LINE') { const p1=wcsToScreen(e.x1,e.y1),p2=wcsToScreen(e.x2,e.y2); d=distPointToSeg(sx,sy,p1.x,p1.y,p2.x,p2.y); }
         else if(e.type==='CIRCLE') { const c=wcsToScreen(e.cx,e.cy); d=Math.abs(dist(sx,sy,c.x,c.y)-e.radius*view.scale); }
@@ -340,8 +524,16 @@ function hitTestEntity(sx,sy) {
 function hitTestCircleArc(sx,sy) {
     let bestIdx=-1, bestD=ERASE_R*2;
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
+    const wcs = screenToWcs(sx, sy);
+    const tolWcs = (ERASE_R*2) / view.scale;
+
     entities.forEach((e,i) => {
         if(!isVisible(e)) return;
+        // BBoxカリング
+        if(e.bbox) {
+            if(e.bbox.maxX < wcs.x - tolWcs || e.bbox.minX > wcs.x + tolWcs ||
+               e.bbox.maxY < wcs.y - tolWcs || e.bbox.minY > wcs.y + tolWcs) return;
+        }
         let d = Infinity;
         if(e.type==='CIRCLE') { const c=wcsToScreen(e.cx,e.cy); d=Math.abs(dist(sx,sy,c.x,c.y)-e.radius*view.scale); }
         else if(e.type==='ARC') { const c=wcsToScreen(e.cx,e.cy); d=Math.abs(dist(sx,sy,c.x,c.y)-e.radius*view.scale); }
@@ -351,7 +543,19 @@ function hitTestCircleArc(sx,sy) {
 }
 
 // ===== 描画 =====
+let _renderPending = false;
 function render() {
+    if(_renderPending) return;
+    _renderPending = true;
+    requestAnimationFrame(() => {
+        _renderPending = false;
+        ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        drawAxes(); drawEntities(); drawDimensions(); drawRubberBand(); drawSnapMarker(); drawCrosshair();
+    });
+}
+// 即時描画版（ルーペ等、rAF待たずに描画したい場合）
+function renderImmediate() {
+    _renderPending = false;
     ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
     drawAxes(); drawEntities(); drawDimensions(); drawRubberBand(); drawSnapMarker(); drawCrosshair();
 }
@@ -362,24 +566,51 @@ function drawAxes() {
     ctx.beginPath();ctx.moveTo(0,ws.y);ctx.lineTo(canvas.width,ws.y);ctx.stroke();
     ctx.beginPath();ctx.moveTo(ws.x,0);ctx.lineTo(ws.x,canvas.height);ctx.stroke();
     const us=wcsToScreen(ucs.originX,ucs.originY);
-    ctx.strokeStyle='rgba(255,50,50,0.4)'; ctx.beginPath();ctx.moveTo(0,us.y);ctx.lineTo(canvas.width,us.y);ctx.stroke();
-    ctx.strokeStyle='rgba(50,255,50,0.4)'; ctx.beginPath();ctx.moveTo(us.x,0);ctx.lineTo(us.x,canvas.height);ctx.stroke();
-    const isWcs=ucs.originX===0&&ucs.originY===0; ctx.strokeStyle=isWcs?'#528bff':'#ffcc00'; ctx.fillStyle=ctx.strokeStyle; ctx.lineWidth=2;
+    // UCS軸の回転対応描画
+    const axLen = 20;
+    const totalAngle = ucs.angle + view.rotation;
+    const cosA = Math.cos(totalAngle), sinA = Math.sin(totalAngle);
+    // X軸方向 (画面座標ではY反転)
+    const xAxisDx = axLen * cosA, xAxisDy = -axLen * sinA;
+    // Y軸方向 (X軸から90度反時計回り)
+    const yAxisDx = -axLen * sinA, yAxisDy = -axLen * cosA;
+
+    // UCS軸線（半透明の全画面ライン）
+    ctx.strokeStyle='rgba(255,50,50,0.4)';
+    ctx.beginPath(); ctx.moveTo(us.x - xAxisDx*500, us.y - xAxisDy*500); ctx.lineTo(us.x + xAxisDx*500, us.y + xAxisDy*500); ctx.stroke();
+    ctx.strokeStyle='rgba(50,255,50,0.4)';
+    ctx.beginPath(); ctx.moveTo(us.x - yAxisDx*500, us.y - yAxisDy*500); ctx.lineTo(us.x + yAxisDx*500, us.y + yAxisDy*500); ctx.stroke();
+
+    const isWcs=ucs.originX===0&&ucs.originY===0&&ucs.angle===0; ctx.strokeStyle=isWcs?'#528bff':'#ffcc00'; ctx.fillStyle=ctx.strokeStyle; ctx.lineWidth=2;
     ctx.strokeRect(us.x-5,us.y-5,10,10);
-    ctx.beginPath();ctx.moveTo(us.x,us.y);ctx.lineTo(us.x+20,us.y);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(us.x,us.y);ctx.lineTo(us.x,us.y-20);ctx.stroke();
-    ctx.font='10px sans-serif'; ctx.fillText('X',us.x+22,us.y+4); ctx.fillText('Y',us.x-4,us.y-22);
+    // 回転した軸矢印
+    ctx.beginPath();ctx.moveTo(us.x,us.y);ctx.lineTo(us.x+xAxisDx,us.y+xAxisDy);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(us.x,us.y);ctx.lineTo(us.x+yAxisDx,us.y+yAxisDy);ctx.stroke();
+    ctx.font='10px sans-serif';
+    ctx.fillText('X',us.x+xAxisDx+2,us.y+xAxisDy+4);
+    ctx.fillText('Y',us.x+yAxisDx-4,us.y+yAxisDy-2);
     ctx.fillText(isWcs?'WCS':'UCS',us.x+5,us.y+15); ctx.restore();
 }
 
+// ByLayer色解決: e.color が null/undefined ならレイヤー色を返す
+function getEntityColor(e) {
+    if(e.color) return e.color;
+    if(e.layer !== undefined && layers[e.layer]) return layers[e.layer].color;
+    return '#FFFFFF';
+}
+
 function drawOneEntity(e, color) {
-    ctx.strokeStyle = color || e.color; ctx.lineWidth = 1;
+    ctx.strokeStyle = color || getEntityColor(e); ctx.lineWidth = 1;
     if(e.type==='LINE') { const a=wcsToScreen(e.x1,e.y1),b=wcsToScreen(e.x2,e.y2); ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke(); }
     else if(e.type==='CIRCLE') { const c=wcsToScreen(e.cx,e.cy); ctx.beginPath();ctx.arc(c.x,c.y,e.radius*view.scale,0,Math.PI*2);ctx.stroke(); }
-    else if(e.type==='ARC') { const c=wcsToScreen(e.cx,e.cy); ctx.beginPath();ctx.arc(c.x,c.y,e.radius*view.scale,-e.startAngle,-e.endAngle,!e.counterclockwise);ctx.stroke(); }
-    else if(e.type==='RECTANG') { const a=wcsToScreen(e.x1,e.y1),b=wcsToScreen(e.x2,e.y2); ctx.beginPath();ctx.rect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));ctx.stroke(); }
+    else if(e.type==='ARC') { const c=wcsToScreen(e.cx,e.cy); ctx.beginPath();ctx.arc(c.x,c.y,e.radius*view.scale,-e.startAngle + view.rotation,-e.endAngle + view.rotation,!e.counterclockwise);ctx.stroke(); }
+    else if(e.type==='RECTANG') { 
+        const p1=wcsToScreen(e.x1,e.y1), p2=wcsToScreen(e.x2,e.y1);
+        const p3=wcsToScreen(e.x2,e.y2), p4=wcsToScreen(e.x1,e.y2);
+        ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.lineTo(p4.x,p4.y); ctx.closePath(); ctx.stroke();
+    }
     else if(e.type==='PLINE'&&e.points.length>1) { ctx.beginPath(); const f=wcsToScreen(e.points[0].x,e.points[0].y); ctx.moveTo(f.x,f.y); for(let i=1;i<e.points.length;i++){const p=wcsToScreen(e.points[i].x,e.points[i].y);ctx.lineTo(p.x,p.y);} if(e.closed)ctx.closePath(); ctx.stroke(); }
-    else if(e.type==='POINT') { const s=e.size||10; const r=s*view.scale/2; const p=wcsToScreen(e.x,e.y); ctx.beginPath();ctx.arc(p.x,p.y,r*0.4,0,Math.PI*2);ctx.stroke(); ctx.beginPath();ctx.moveTo(p.x-r,p.y);ctx.lineTo(p.x+r,p.y);ctx.moveTo(p.x,p.y-r);ctx.lineTo(p.x,p.y+r);ctx.stroke(); }
+    else if(e.type==='POINT') { const r=4; const p=wcsToScreen(e.x,e.y); ctx.beginPath();ctx.arc(p.x,p.y,r*0.4,0,Math.PI*2);ctx.stroke(); ctx.beginPath();ctx.moveTo(p.x-r,p.y);ctx.lineTo(p.x+r,p.y);ctx.moveTo(p.x,p.y-r);ctx.lineTo(p.x,p.y+r);ctx.stroke(); }
     else if(e.type==='ELLIPSE') {
         const c=wcsToScreen(e.cx,e.cy);
         ctx.beginPath(); ctx.ellipse(c.x, c.y, e.rx*view.scale, e.ry*view.scale, -e.rotation, 0, Math.PI*2); ctx.stroke();
@@ -388,14 +619,19 @@ function drawOneEntity(e, color) {
         const p=wcsToScreen(e.x,e.y);
         ctx.font = `${(e.height||10)*view.scale}px sans-serif`;
         ctx.fillStyle = ctx.strokeStyle;
-        ctx.fillText(e.text, p.x, p.y);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        if(view.rotation !== 0) ctx.rotate(-view.rotation);
+        ctx.fillText(e.text, 0, 0);
+        ctx.restore();
     }
     else if(e.type==='HATCH') {
         ctx.fillStyle = ctx.strokeStyle; ctx.globalAlpha = 0.5;
         const tgt = e.target;
         if(tgt.type==='RECTANG') {
-            const a=wcsToScreen(tgt.x1,tgt.y1), b=wcsToScreen(tgt.x2,tgt.y2);
-            ctx.fillRect(Math.min(a.x,b.x), Math.min(a.y,b.y), Math.abs(b.x-a.x), Math.abs(b.y-a.y));
+            const p1=wcsToScreen(tgt.x1,tgt.y1), p2=wcsToScreen(tgt.x2,tgt.y1);
+            const p3=wcsToScreen(tgt.x2,tgt.y2), p4=wcsToScreen(tgt.x1,tgt.y2);
+            ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.lineTo(p4.x,p4.y); ctx.closePath(); ctx.fill();
         } else if(tgt.type==='CIRCLE') {
             const c=wcsToScreen(tgt.cx,tgt.cy); ctx.beginPath(); ctx.arc(c.x,c.y,tgt.radius*view.scale,0,Math.PI*2); ctx.fill();
         } else if(tgt.type==='PLINE' && tgt.closed) {
@@ -407,13 +643,66 @@ function drawOneEntity(e, color) {
     }
 }
 
+// 図形のバウンディングボックスを計算 (初回のみ実行される)
+function calcBBox(e) {
+    let minX=0, minY=0, maxX=0, maxY=0;
+    if(e.type==='LINE') {
+        minX = Math.min(e.x1, e.x2); maxX = Math.max(e.x1, e.x2);
+        minY = Math.min(e.y1, e.y2); maxY = Math.max(e.y1, e.y2);
+    } else if(e.type==='CIRCLE' || e.type==='ARC') {
+        minX = e.cx - e.radius; maxX = e.cx + e.radius;
+        minY = e.cy - e.radius; maxY = e.cy + e.radius;
+    } else if(e.type==='RECTANG') {
+        minX = Math.min(e.x1, e.x2); maxX = Math.max(e.x1, e.x2);
+        minY = Math.min(e.y1, e.y2); maxY = Math.max(e.y1, e.y2);
+    } else if(e.type==='PLINE' && e.points && e.points.length > 0) {
+        minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
+        for(let i=0; i<e.points.length; i++) {
+            const p = e.points[i];
+            if(p.x < minX) minX = p.x; if(p.y < minY) minY = p.y;
+            if(p.x > maxX) maxX = p.x; if(p.y > maxY) maxY = p.y;
+        }
+    } else if(e.type==='POINT' || e.type==='TEXT') {
+        minX = e.x; maxX = e.x; minY = e.y; maxY = e.y;
+    } else if(e.type==='ELLIPSE') {
+        const r = Math.max(e.rx||0, e.ry||0) || e.radius || 0;
+        minX = e.cx - r; maxX = e.cx + r; minY = e.cy - r; maxY = e.cy + r;
+    } else {
+        return null; // カリングなし
+    }
+    return { minX, minY, maxX, maxY };
+}
+
 function drawEntities() {
     ctx.save();
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
     const selSet = new Set(cmdState.selectedIndices || []);
+
+    // カリング用の画面の表示範囲 (WCS座標)。100ピクセルずつ余裕をもたせる
+    const tl = screenToWcs(-100, -100);
+    const tr = screenToWcs(canvas.width + 100, -100);
+    const bl = screenToWcs(-100, canvas.height + 100);
+    const br = screenToWcs(canvas.width + 100, canvas.height + 100);
+    const viewMinX = Math.min(tl.x, tr.x, bl.x, br.x);
+    const viewMaxX = Math.max(tl.x, tr.x, bl.x, br.x);
+    const viewMinY = Math.min(tl.y, tr.y, bl.y, br.y);
+    const viewMaxY = Math.max(tl.y, tr.y, bl.y, br.y);
+
     entities.forEach((e,i) => {
         if(!isVisible(e)) return;
         if(e.type === 'DIMENSION') return;
+
+        // BBoxカリング（事前計算＆画面外をスキップ）
+        if(e.bbox === undefined && e.type !== 'HATCH') {
+            e.bbox = calcBBox(e);
+        }
+        if(e.bbox) {
+            if(e.bbox.maxX < viewMinX || e.bbox.minX > viewMaxX || 
+               e.bbox.maxY < viewMinY || e.bbox.minY > viewMaxY) {
+                return; // 画面内にないためスキップ
+            }
+        }
+
         let color = null;
         if(i === cmdState.highlightIdx) color = '#ff6b6b';
         else if(selSet.has(i)) color = '#ffaa33'; // 複数選択時はオレンジ
@@ -495,10 +784,30 @@ function drawSnapMarker() {
 }
 
 function drawCrosshair() {
-    ctx.save(); ctx.strokeStyle='#fff'; ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(0,mouse.screenY);ctx.lineTo(canvas.width,mouse.screenY);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(mouse.screenX,0);ctx.lineTo(mouse.screenX,canvas.height);ctx.stroke();
-    if(cmdState.mode==='WAITING_UCS_ORIGIN'){ctx.strokeStyle='#ffcc00';ctx.strokeRect(mouse.screenX-4,mouse.screenY-4,8,8);}
+    ctx.save(); ctx.strokeStyle='#e2c288'; ctx.lineWidth=1;
+    const totalAngle = ucs.angle + view.rotation;
+    const c = Math.cos(totalAngle), s = Math.sin(totalAngle);
+    const mx = mouse.screenX, my = mouse.screenY;
+    const clen = Math.max(canvas.width, canvas.height) * 2;
+    // Screen coords, Y is inverted vertically:
+    // Dir1: angle. dx=c, dy=-s
+    ctx.beginPath();
+    ctx.moveTo(mx - clen*c, my - clen*-s);
+    ctx.lineTo(mx + clen*c, my + clen*-s);
+    ctx.stroke();
+    // Dir2: angle+90. dx=-s, dy=-c
+    ctx.beginPath();
+    ctx.moveTo(mx - clen*-s, my - clen*-c);
+    ctx.lineTo(mx + clen*-s, my + clen*-c);
+    ctx.stroke();
+    if(cmdState.mode==='WAITING_UCS_ORIGIN'||cmdState.mode==='WAITING_UCS_2P_ORIGIN'){ctx.strokeStyle='#ffcc00';ctx.strokeRect(mouse.screenX-4,mouse.screenY-4,8,8);}
+    else if(cmdState.mode==='WAITING_UCS_2P_XDIR'){
+        // 2点目指定中: 基点→カーソル方向の線を描画
+        ctx.strokeStyle='#ffcc00'; ctx.lineWidth=1;
+        const p1s = wcsToScreen(cmdState.startWcs.x, cmdState.startWcs.y);
+        ctx.setLineDash([5,5]); ctx.beginPath(); ctx.moveTo(p1s.x,p1s.y); ctx.lineTo(mouse.screenX,mouse.screenY); ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeRect(mouse.screenX-4,mouse.screenY-4,8,8);
+    }
     else{ctx.strokeRect(mouse.screenX-3,mouse.screenY-3,6,6);}
     ctx.restore();
 }
@@ -513,9 +822,15 @@ function applyOrtho(wcs) {
     else if(m==='WAITING_MOVE_DEST' || m==='WAITING_COPY_DEST') base = cmdState.moveBase;
     
     if(!base) return wcs;
-    const dx = Math.abs(wcs.x - base.x), dy = Math.abs(wcs.y - base.y);
-    if(dx > dy) return {x: wcs.x, y: base.y}; // 水平固定
-    else return {x: base.x, y: wcs.y}; // 垂直固定
+    
+    const ucsW = wcsToUcs(wcs.x, wcs.y);
+    const ucsBase = wcsToUcs(base.x, base.y);
+    const dx = Math.abs(ucsW.x - ucsBase.x), dy = Math.abs(ucsW.y - ucsBase.y);
+    let finalUcs;
+    if(dx > dy) finalUcs = {x: ucsW.x, y: ucsBase.y}; // UCS水平固定
+    else finalUcs = {x: ucsBase.x, y: ucsW.y}; // UCS垂直固定
+    
+    return ucsToWcs(finalUcs.x, finalUcs.y);
 }
 
 function getInputPoint() {
@@ -525,13 +840,20 @@ function getInputPoint() {
 
 function handlePointInput(wcs) {
     const m = cmdState.mode;
-    if(m==='WAITING_UCS_ORIGIN') { setUCS(wcs.x,wcs.y); return; }
+    if(m==='WAITING_UCS_ORIGIN') { setUCS(wcs.x, wcs.y, 0); return; }
+    if(m==='WAITING_UCS_2P_ORIGIN') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_UCS_2P_XDIR'; setPrompt('X軸方向の点:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 原点: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); render(); return; }
+    if(m==='WAITING_UCS_2P_XDIR') {
+        const ox=cmdState.startWcs.x, oy=cmdState.startWcs.y;
+        const angle = Math.atan2(wcs.y - oy, wcs.x - ox);
+        setUCS(ox, oy, angle);
+        return;
+    }
     if(m==='WAITING_LINE_P1') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_LINE_P2'; setPrompt('次の点:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 1点目: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); render(); return; }
-    if(m==='WAITING_LINE_P2') { saveUndo(); entities.push({type:'LINE',layer:currentLayerIndex,color:layers[currentLayerIndex].color,x1:cmdState.startWcs.x,y1:cmdState.startWcs.y,x2:wcs.x,y2:wcs.y}); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 線分作成 終点: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); cmdState.startWcs={x:wcs.x,y:wcs.y}; render(); return; }
+    if(m==='WAITING_LINE_P2') { saveUndo(); entities.push({type:'LINE',layer:currentLayerIndex,color:null,x1:cmdState.startWcs.x,y1:cmdState.startWcs.y,x2:wcs.x,y2:wcs.y}); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 線分作成 終点: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); cmdState.startWcs={x:wcs.x,y:wcs.y}; render(); return; }
     if(m==='WAITING_CIRCLE_CENTER') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_CIRCLE_RADIUS'; setPrompt('半径:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 中心: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); render(); return; }
-    if(m==='WAITING_CIRCLE_RADIUS') { const r=dist(cmdState.startWcs.x,cmdState.startWcs.y,wcs.x,wcs.y); saveUndo(); entities.push({type:'CIRCLE',layer:currentLayerIndex,color:layers[currentLayerIndex].color,cx:cmdState.startWcs.x,cy:cmdState.startWcs.y,radius:r}); addCommandLog(`-> 円作成 半径: ${r.toFixed(2)}`); resetCommand(); return; }
+    if(m==='WAITING_CIRCLE_RADIUS') { const r=dist(cmdState.startWcs.x,cmdState.startWcs.y,wcs.x,wcs.y); saveUndo(); entities.push({type:'CIRCLE',layer:currentLayerIndex,color:null,cx:cmdState.startWcs.x,cy:cmdState.startWcs.y,radius:r}); addCommandLog(`-> 円作成 半径: ${r.toFixed(2)}`); resetCommand(); return; }
     if(m==='WAITING_RECT_P1') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_RECT_P2'; setPrompt('対角:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 1点目: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); render(); return; }
-    if(m==='WAITING_RECT_P2') { saveUndo(); entities.push({type:'RECTANG',layer:currentLayerIndex,color:layers[currentLayerIndex].color,x1:cmdState.startWcs.x,y1:cmdState.startWcs.y,x2:wcs.x,y2:wcs.y}); addCommandLog('-> 長方形作成'); resetCommand(); return; }
+    if(m==='WAITING_RECT_P2') { saveUndo(); entities.push({type:'RECTANG',layer:currentLayerIndex,color:null,x1:cmdState.startWcs.x,y1:cmdState.startWcs.y,x2:wcs.x,y2:wcs.y}); addCommandLog('-> 長方形作成'); resetCommand(); return; }
     if(m==='WAITING_ARC_P1') { cmdState.points=[{x:wcs.x,y:wcs.y}]; cmdState.mode='WAITING_ARC_P2'; setPrompt('2点目:'); render(); return; }
     if(m==='WAITING_ARC_P2') { cmdState.points.push({x:wcs.x,y:wcs.y}); cmdState.mode='WAITING_ARC_P3'; setPrompt('終点:'); render(); return; }
     if(m==='WAITING_ARC_P3') {
@@ -540,7 +862,7 @@ function handlePointInput(wcs) {
         if(!cc){addCommandLog('エラー: 3点が直線上です'); resetCommand(); return;}
         const r=dist(cc.x,cc.y,p1.x,p1.y), sa=Math.atan2(p1.y-cc.y,p1.x-cc.x), ea=Math.atan2(p3.y-cc.y,p3.x-cc.x), ma=Math.atan2(p2.y-cc.y,p2.x-cc.x);
         const ccw=isAngleBetweenCCW(ma,sa,ea);
-        saveUndo(); entities.push({type:'ARC',layer:currentLayerIndex,color:layers[currentLayerIndex].color,cx:cc.x,cy:cc.y,radius:r,startAngle:sa,endAngle:ea,counterclockwise:ccw});
+        saveUndo(); entities.push({type:'ARC',layer:currentLayerIndex,color:null,cx:cc.x,cy:cc.y,radius:r,startAngle:sa,endAngle:ea,counterclockwise:ccw});
         addCommandLog('-> 円弧作成'); resetCommand(); return;
     }
     if(m==='WAITING_PLINE_NEXT') { cmdState.points.push({x:wcs.x,y:wcs.y}); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 点追加: (${u.x.toFixed(2)},${u.y.toFixed(2)}) [Enter:確定/C:閉合]`); render(); return; }
@@ -550,7 +872,7 @@ function handlePointInput(wcs) {
     if(m==='WAITING_ELLIPSE_Y') {
         const cx=cmdState.startWcs.x, cy=cmdState.startWcs.y, ex=cmdState.points[0].x, ey=cmdState.points[0].y;
         const rx=dist(cx,cy,ex,ey), rot=Math.atan2(ey-cy, ex-cx), ry=dist(cx,cy,wcs.x,wcs.y);
-        saveUndo(); entities.push({type:'ELLIPSE',layer:currentLayerIndex,color:layers[currentLayerIndex].color,cx:cx,cy:cy,rx:rx,ry:ry,rotation:rot});
+        saveUndo(); entities.push({type:'ELLIPSE',layer:currentLayerIndex,color:null,cx:cx,cy:cy,rx:rx,ry:ry,rotation:rot});
         addCommandLog(`-> 楕円作成 X半径: ${rx.toFixed(2)} Y半径: ${ry.toFixed(2)}`); resetCommand(); return;
     }
     if(m==='WAITING_TEXT_P1') { 
@@ -562,7 +884,7 @@ function handlePointInput(wcs) {
         if(idx>=0) {
             const tgt=entities[idx];
             if(tgt.type==='RECTANG'||tgt.type==='CIRCLE'||(tgt.type==='PLINE'&&tgt.closed)) {
-                saveUndo(); entities.push({type:'HATCH',layer:currentLayerIndex,color:layers[currentLayerIndex].color,target:JSON.parse(JSON.stringify(tgt))});
+                saveUndo(); entities.push({type:'HATCH',layer:currentLayerIndex,color:null,target:JSON.parse(JSON.stringify(tgt))});
                 addCommandLog('-> ハッチング(塗りつぶし)作成'); resetCommand(); return;
             } else { addCommandLog('閉じた図形(長方形, 円, 閉じたポリライン)ではありません'); }
         } else { addCommandLog('図形が見つかりません'); }
@@ -702,7 +1024,7 @@ function rotateEntity(e, cx, cy, angle) {
 }
 
 function finishPline(close) {
-    if(cmdState.points.length>=2) { saveUndo(); entities.push({type:'PLINE',layer:currentLayerIndex,color:layers[currentLayerIndex].color,points:cmdState.points.slice(),closed:!!close}); addCommandLog(close?'-> ポリライン閉合':'-> ポリライン確定'); }
+    if(cmdState.points.length>=2) { saveUndo(); entities.push({type:'PLINE',layer:currentLayerIndex,color:null,points:cmdState.points.slice(),closed:!!close}); addCommandLog(close?'-> ポリライン閉合':'-> ポリライン確定'); }
     else addCommandLog('-> キャンセル（点が不足）');
     resetCommand();
 }
@@ -715,7 +1037,7 @@ function processCommand(cmdText) {
     if(numMatch) {
         const val = parseFloat(numMatch[1]);
         if(cmdState.mode==='WAITING_CIRCLE_RADIUS') {
-            saveUndo(); entities.push({type:'CIRCLE',layer:currentLayerIndex,color:layers[currentLayerIndex].color,cx:cmdState.startWcs.x,cy:cmdState.startWcs.y,radius:val});
+            saveUndo(); entities.push({type:'CIRCLE',layer:currentLayerIndex,color:null,cx:cmdState.startWcs.x,cy:cmdState.startWcs.y,radius:val});
             addCommandLog(`-> 円作成 半径: ${val}`); resetCommand(); return;
         }
         if(cmdState.mode==='WAITING_OFFSET_DIST') {
@@ -725,7 +1047,7 @@ function processCommand(cmdText) {
         }
     }
     if(cmdState.mode==='WAITING_TEXT_STR' && cmdText.length>0) {
-        saveUndo(); entities.push({type:'TEXT',layer:currentLayerIndex,color:layers[currentLayerIndex].color,x:cmdState.startWcs.x,y:cmdState.startWcs.y,text:cmdText,height:20});
+        saveUndo(); entities.push({type:'TEXT',layer:currentLayerIndex,color:null,x:cmdState.startWcs.x,y:cmdState.startWcs.y,text:cmdText,height:20});
         addCommandLog(`-> テキスト作成: "${cmdText}"`); resetCommand(); return;
     }
     if(cmd==='C' && cmdState.mode==='WAITING_PLINE_NEXT' && cmdState.points.length>=2) { finishPline(true); return; }
@@ -764,45 +1086,72 @@ function processCommand(cmdText) {
         }
         cmdState.mode='WAITING_ROTATE_SELECT'; setPrompt('回転対象:'); setActiveTool('ROTATE'); addCommandLog('-> 回転させる図形を選択');
     }
-    else if(cmd==='UCS') { cmdState.mode='WAITING_UCS_ORIGIN'; setPrompt('新しい原点:'); addCommandLog('-> 新しい原点を指定 (クリック or 座標)'); render(); }
+    else if(cmd==='UCS') { cmdState.mode='WAITING_UCS_ORIGIN'; setPrompt('新しい原点 [2点(2P)]:'); addCommandLog('-> 新しい原点を指定 (クリック or 座標), 2P: 2点指定'); render(); }
+    else if(cmd==='UCS2P'||cmd==='2P') {
+        if(cmdState.mode==='WAITING_UCS_ORIGIN') {
+            // UCSコマンドの中で2P入力された場合
+            cmdState.mode='WAITING_UCS_2P_ORIGIN'; setPrompt('基点（新しい原点）:'); addCommandLog('-> 2点指定: 基点を指定'); render();
+        } else {
+            // 直接UCS2Pコマンド
+            cmdState.mode='WAITING_UCS_2P_ORIGIN'; setPrompt('基点（新しい原点）:'); addCommandLog('-> UCS 2点指定: 基点を指定してください'); render();
+        }
+    }
     else if(cmd==='WCS') { resetUCS(); }
     else if(cmd==='U'||cmd==='UNDO') { undo(); }
     else if(cmd==='REDO') { redo(); }
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
+    else if(cmd==='CANCEL') { resetCommand(); }
+    else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
     else { addCommandLog(`不明なコマンドです "${cmdText}"`); resetCommand(); }
 }
 
 // ===== イベントリスナー =====
+let lastTouchTime = 0;
 function setupEventListeners() {
     canvas.addEventListener('mousemove', (e) => {
         const rect=canvas.getBoundingClientRect(); mouse.screenX=e.clientX-rect.left; mouse.screenY=e.clientY-rect.top;
         const wcs=screenToWcs(mouse.screenX,mouse.screenY); mouse.wcsX=wcs.x; mouse.wcsY=wcs.y;
         const uc=wcsToUcs(wcs.x,wcs.y); mouse.ucsX=uc.x; mouse.ucsY=uc.y;
         if(mouse.isPanning){view.x+=e.movementX;view.y+=e.movementY;}
-        // IDLEも含む全モードでスナップ計算（IDLE時はカーソル位置の確認用）
+        // コマンドモード中のみスナップ計算（IDLE時は軽量化のためスキップ）
         const isSelectMode = ['WAITING_ERASE_SELECT','WAITING_MOVE_SELECT','WAITING_COPY_SELECT','WAITING_OFFSET_SELECT','WAITING_OFFSET_SIDE'].includes(cmdState.mode);
-        if(!isSelectMode) {
+        if(cmdState.mode !== 'IDLE' && !isSelectMode && !mouse.isSelecting) {
             snapResult = findSnap(mouse.screenX, mouse.screenY, mouse.wcsX, mouse.wcsY);
         } else { snapResult = null; }
         if(snapResult){ const su=wcsToUcs(snapResult.wcsX,snapResult.wcsY); coordsDisplay.textContent=`X:${su.y.toFixed(0)}  Y:${su.x.toFixed(0)}`; if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, su.x, su.y, snapResult.type); }
         else { coordsDisplay.textContent=`X:${mouse.ucsY.toFixed(0)}  Y:${mouse.ucsX.toFixed(0)}`; if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, mouse.ucsX, mouse.ucsY, null); }
-        if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') cmdState.highlightIdx=hitTestEntity(mouse.screenX,mouse.screenY);
+        if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') {
+            if(!mouse.isSelecting) cmdState.highlightIdx=hitTestEntity(mouse.screenX,mouse.screenY);
+        }
         render();
+        if(mouse.isSelecting) drawSelectionRect();
     });
     canvas.addEventListener('mousedown', (e) => {
+        if(Date.now() - lastTouchTime < 500) return; // タッチイベントに起因する疑似マウスイベントを無視
         if(e.button===1){mouse.isPanning=true;e.preventDefault();return;} // Middle click for panning
         if(e.button===0) {
-            if (cmdState.mode!=='IDLE') { // Left click for point input when not in IDLE
+            const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
+            const isSelectMode = selectModes.includes(cmdState.mode);
+
+            if (cmdState.mode!=='IDLE' && !isSelectMode) { // Left click for point input when not in IDLE and not select mode
                 const pt=getInputPoint(); handlePointInput(pt);
             } else {
                 const idx = hitTestEntity(mouse.screenX, mouse.screenY);
                 if(idx >= 0) {
-                    cmdState.highlightIdx = (cmdState.highlightIdx === idx) ? -1 : idx;
+                    if (cmdState.mode === 'IDLE') {
+                        cmdState.highlightIdx = (cmdState.highlightIdx === idx) ? -1 : idx;
+                    } else {
+                        const pt=getInputPoint(); handlePointInput(pt);
+                    }
                 } else {
-                    cmdState.highlightIdx = -1;
+                    if (cmdState.mode === 'IDLE') cmdState.highlightIdx = -1;
+                    mouse.isSelecting = true;
+                    mouse.selStartX = mouse.screenX;
+                    mouse.selStartY = mouse.screenY;
                 }
                 updatePropertiesPanel();
                 render();
+                if(mouse.isSelecting) drawSelectionRect();
             }
         }
         if(e.button===2) { // Right click
@@ -820,7 +1169,14 @@ function setupEventListeners() {
             else if(cmdState.mode!=='IDLE'){resetCommand();addCommandLog('-> コマンド終了');}
         }
     });
-    window.addEventListener('mouseup',(e)=>{if(e.button===1)mouse.isPanning=false;});
+    window.addEventListener('mouseup',(e)=>{
+        if(e.button===1)mouse.isPanning=false;
+        if(e.button===0 && mouse.isSelecting) {
+            performSelection(mouse.selStartX, mouse.selStartY, mouse.screenX, mouse.screenY);
+            mouse.isSelecting = false;
+            render();
+        }
+    });
     canvas.addEventListener('contextmenu',(e)=>{
         e.preventDefault();
         if(cmdState.mode==='WAITING_LINE_P2'){resetCommand();addCommandLog('-> LINE終了');}
@@ -834,7 +1190,8 @@ function setupEventListeners() {
     canvas.addEventListener('wheel',(e)=>{
         e.preventDefault(); const zf=e.deltaY>0?0.9:1.1; const wb=screenToWcs(mouse.screenX,mouse.screenY);
         view.scale=Math.max(0.0001,Math.min(view.scale*zf,10000));
-        view.x=mouse.screenX-wb.x*view.scale; view.y=mouse.screenY+wb.y*view.scale; render();
+        _reanchorView(mouse.screenX, mouse.screenY, wb);
+        render();
     },{passive:false});
 
     // ===== タッチイベント（スマホ対応 - AutoCADライクUX） =====
@@ -843,6 +1200,7 @@ function setupEventListeners() {
         lastDist: 0, lastMid: null, isPinch: false,
         // ルーペ・長押し描画用
         startX: 0, startY: 0, isDragging: false, hasMoved: false,
+        pressTimer: null,
         // 範囲選択用
         selStartX: 0, selStartY: 0, isSelecting: false,
         // ルーペ表示フラグ
@@ -941,8 +1299,10 @@ function setupEventListeners() {
 
     // 範囲選択矩形の描画
     function drawSelectionRect() {
-        if(!touchState.isSelecting) return;
-        const sx = touchState.selStartX, sy = touchState.selStartY;
+        if(!touchState.isSelecting && !mouse.isSelecting) return;
+        const isTouch = touchState.isSelecting;
+        const sx = isTouch ? touchState.selStartX : mouse.selStartX;
+        const sy = isTouch ? touchState.selStartY : mouse.selStartY;
         const ex = mouse.screenX, ey = mouse.screenY;
         const isWindow = ex >= sx; // 左→右 = 窓選択、右→左 = 交差選択
 
@@ -1044,6 +1404,7 @@ function setupEventListeners() {
 
     canvas.addEventListener('touchstart', (e) => {
         e.preventDefault();
+        lastTouchTime = Date.now();
         if(e.touches.length === 1) {
             const touch = e.touches[0];
             const rect = canvas.getBoundingClientRect();
@@ -1071,6 +1432,27 @@ function setupEventListeners() {
             if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') {
                 cmdState.highlightIdx = hitTestEntity(tx, ty);
             }
+
+            // 長押しタイマーの設定 (0.6秒)
+            touchState.pressTimer = setTimeout(() => {
+                if(!touchState.hasMoved && !touchState.isPinch && document.body.classList.contains('fullscreen-mode')) {
+                    const idx = hitTestEntity(touchState.startX, touchState.startY);
+                    if(idx >= 0) {
+                        const hitEnt = entities[idx];
+                        // すべての寸法オブジェクトを長押しで削除可能に
+                        if(hitEnt.type === 'DIMENSION') {
+                            saveUndo();
+                            entities.splice(idx, 1);
+                            addCommandLog(`-> 長押しにより寸法 (${hitEnt.subType}) を削除しました`);
+                            cmdState.highlightIdx = -1;
+                            if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
+                            render();
+                            if(navigator.vibrate) navigator.vibrate([50, 50, 50]); // 長押し成功時は少し違うパターンの振動
+                            touchState.hasMoved = true;
+                        }
+                    }
+                }
+            }, 600);
 
             // 全画面座標ツールチップ更新
             if(snapResult && osnapState.main) {
@@ -1148,7 +1530,7 @@ function setupEventListeners() {
                 if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, mouse.ucsX, mouse.ucsY, null);
             }
 
-            render();
+            renderImmediate();
             // ルーペと範囲選択は render() 後に上書き描画
             drawLoupe();
             drawSelectionRect();
@@ -1158,18 +1540,19 @@ function setupEventListeners() {
             const t1 = e.touches[0], t2 = e.touches[1];
             const newDist = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
             const newMid = { x: (t1.clientX+t2.clientX)/2, y: (t1.clientY+t2.clientY)/2 };
-            if(touchState.lastDist > 0) {
-                const zf = newDist / touchState.lastDist;
+            if(touchState.lastDist > 0 && touchState.lastMid) {
                 const rect = canvas.getBoundingClientRect();
-                const mx = newMid.x - rect.left, my = newMid.y - rect.top;
-                const wb = screenToWcs(mx, my);
+                // 変更前の中点のWCS座標を取得
+                const omx = touchState.lastMid.x - rect.left;
+                const omy = touchState.lastMid.y - rect.top;
+                const wb = screenToWcs(omx, omy);
+                // スケール更新
+                const zf = newDist / touchState.lastDist;
                 view.scale = Math.max(0.0001, Math.min(view.scale * zf, 10000));
-                view.x = mx - wb.x * view.scale;
-                view.y = my + wb.y * view.scale;
-            }
-            if(touchState.lastMid) {
-                view.x += newMid.x - touchState.lastMid.x;
-                view.y += newMid.y - touchState.lastMid.y;
+                // 新しい中点に同じWCS座標が来るようにviewを再配置
+                const nmx = newMid.x - rect.left;
+                const nmy = newMid.y - rect.top;
+                _reanchorView(nmx, nmy, wb);
             }
             touchState.lastDist = newDist;
             touchState.lastMid = newMid;
@@ -1179,11 +1562,17 @@ function setupEventListeners() {
 
     canvas.addEventListener('touchend', (e) => {
         e.preventDefault();
+        lastTouchTime = Date.now();
+        
+        if(touchState.pressTimer) { clearTimeout(touchState.pressTimer); touchState.pressTimer = null; }
 
         if(e.touches.length === 0 && !touchState.isPinch) {
             touchState.showLoupe = false;
-            // 全画面座標ツールチップを非表示
-            if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
+            // 全画面座標ツールチップ: 寸法モード中は消さない（スナップ位置を確認できるように）
+            const isDimModeActive = cmdState.mode.startsWith('WAITING_DIM');
+            if(!isDimModeActive) {
+                if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
+            }
 
             if(touchState.isSelecting) {
                 // 範囲選択完了
@@ -1191,8 +1580,18 @@ function setupEventListeners() {
                 touchState.isSelecting = false;
             } else if(cmdState.mode !== 'IDLE') {
                 // コマンドモード中: 指を離した位置でポイント確定
-                const pt = getInputPoint();
-                handlePointInput(pt);
+                const isDimMode = cmdState.mode.startsWith('WAITING_DIM');
+                
+                if(isDimMode) {
+                    // 寸法コマンド: 全画面・通常画面問わず自動確定しない。アクションバーの「確定」を待つ
+                    // ルーペは消すが、スナップ位置は保持・表示する
+                    render();
+                    drawSnapMarker();
+                } else {
+                    // 通常コマンド: 指を離した位置で即時に確定
+                    const pt = getInputPoint();
+                    handlePointInput(pt);
+                }
             } else if(!touchState.hasMoved) {
                 // 短いタップでIDLEモード: エンティティ選択/選択解除
                 const idx = hitTestEntity(mouse.screenX, mouse.screenY);
@@ -1261,6 +1660,21 @@ window.toggleLayerVisibility = function(idx) {
         render();
     }
 };
+window.hideLayerOfSelected = function() {
+    if(cmdState.highlightIdx < 0 || !entities[cmdState.highlightIdx]) return;
+    const layerIdx = entities[cmdState.highlightIdx].layer;
+    if(layerIdx === undefined || !layers[layerIdx]) return;
+    layers[layerIdx].visible = false;
+    cmdState.highlightIdx = -1;
+    // 選択解除されたインデックスも含め、同じ画層の選択をすべてクリア
+    if(cmdState.selectedIndices) {
+        cmdState.selectedIndices = cmdState.selectedIndices.filter(i => entities[i] && entities[i].layer !== layerIdx);
+    }
+    updateLayerPanel();
+    updatePropertiesPanel();
+    render();
+    addCommandLog(`-> 画層「${layers[layerIdx].name}」を非表示にしました`);
+};
 
 // プロパティパネルの更新
 window.togglePropertiesPanel = function() {
@@ -1273,13 +1687,28 @@ function updatePropertiesPanel() {
     if(!p) return;
     if(cmdState.mode === 'IDLE' && cmdState.highlightIdx >= 0 && entities[cmdState.highlightIdx]) {
         const e = entities[cmdState.highlightIdx];
+        const layerColor = layers[e.layer] ? layers[e.layer].color : '#ffffff';
         let html = `<div style="font-weight:bold;margin-bottom:10px;color:var(--highlight-color);">${e.type}</div>`;
-        html += `<div class="prop-row"><div class="prop-label">画層</div><input class="prop-val" type="text" value="${layers[e.layer]?layers[e.layer].name:e.layer}" readonly></div>`;
-        html += `<div class="prop-row"><div class="prop-label">色</div><input class="prop-val" type="color" value="${e.color||(layers[e.layer]?layers[e.layer].color:'#ffffff')}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'color', this.value)"></div>`;
+        html += `<div class="prop-row"><div class="prop-label">画層</div>
+            <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                <input class="prop-val" style="width:60px;" type="text" value="${layers[e.layer]?layers[e.layer].name:e.layer}" readonly title="画層名">
+                <input class="prop-val" type="color" value="${layerColor}" onchange="changeLayerColorGlobal('${e.layer}', this.value)" title="この画層の色を変更">
+                <button class="status-btn" style="font-size:10px;padding:2px 6px;border:1px solid #666;border-radius:3px;" onclick="hideLayerOfSelected()" title="この画層のオブジェクトをすべて非表示">🚫画層非表示</button>
+            </div>
+        </div>`;
+        html += `<div class="prop-row"><div class="prop-label">色</div><div style="display:flex;align-items:center;gap:5px;">
+            <input class="prop-val" type="color" value="${getEntityColor(e)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'color', this.value)">
+            ${e.color ? `<button class="prop-btn" style="font-size:10px;padding:2px 4px;" onclick="changeEntityProp(${cmdState.highlightIdx}, 'color', null)">ByLayer</button>` : `<span style="font-size:10px;color:#888;">ByLayer</span>`}
+        </div></div>`;
         html += `<div class="prop-row"><div class="prop-label">表示</div><input class="prop-val" type="checkbox" ${e.hidden?'':'checked'} onchange="changeEntityProp(${cmdState.highlightIdx}, 'hidden', !this.checked)"></div>`;
         if(e.type === 'POINT' || e.size !== undefined) {
             html += `<div class="prop-row"><div class="prop-label">サイズ</div><input class="prop-val" type="number" step="0.1" value="${e.size||10}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'size', this.value)"></div>`;
         }
+        
+        const escapeHtml = (unsafe) => {
+            if(typeof unsafe !== 'string') return unsafe;
+            return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        };
         
         if(e.type === 'LINE') {
             const p1 = wcsToUcs(e.x1, e.y1); const p2 = wcsToUcs(e.x2, e.y2);
@@ -1306,18 +1735,16 @@ function updatePropertiesPanel() {
             html += `<div class="prop-row"><div class="prop-label">Y半径</div><input class="prop-val" type="number" step="1" value="${e.ry.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'ry', this.value)"></div>`;
         } else if(e.type === 'TEXT') {
             const p = wcsToUcs(e.x, e.y);
-            const escapedText = e.text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             html += `<div class="prop-row"><div class="prop-label">始点 X</div><input class="prop-val" type="number" step="1" value="${p.y.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'y', this.value)"></div>`;
             html += `<div class="prop-row"><div class="prop-label">始点 Y</div><input class="prop-val" type="number" step="1" value="${p.x.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'x', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">テキスト</div><input class="prop-val" type="text" value="${escapedText}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'text', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">テキスト</div><input class="prop-val" type="text" value="${escapeHtml(e.text)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'text', this.value)"></div>`;
             html += `<div class="prop-row"><div class="prop-label">高さ</div><input class="prop-val" type="number" step="1" value="${e.height}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'height', this.value)"></div>`;
         } else if(e.type === 'HATCH') {
             html += `<div class="prop-row"><div class="prop-label">対象図形</div><input class="prop-val" type="text" value="${e.target.type}" readonly></div>`;
             html += `<div class="prop-row"><div class="prop-label">透過度</div><input class="prop-val" type="number" step="0.1" min="0" max="1" value="${e.alpha!==undefined?e.alpha:0.5}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'alpha', this.value)"></div>`;
         } else if(e.type === 'DIMENSION') {
-            const escapedOverride = (e.textOverride||'').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             html += `<div class="prop-row"><div class="prop-label">種類</div><input class="prop-val" type="text" value="${e.subType}" readonly></div>`;
-            html += `<div class="prop-row"><div class="prop-label">文字上書き</div><input class="prop-val" type="text" value="${escapedOverride}" placeholder="自動" onchange="changeEntityProp(${cmdState.highlightIdx}, 'textOverride', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">文字上書き</div><input class="prop-val" type="text" value="${escapeHtml(e.textOverride||'')}" placeholder="自動" onchange="changeEntityProp(${cmdState.highlightIdx}, 'textOverride', this.value)"></div>`;
         }
         p.innerHTML = html;
     } else {
@@ -1328,7 +1755,9 @@ function updatePropertiesPanel() {
 window.changeEntityProp = function(idx, prop, val) {
     if(!entities[idx]) return;
     saveUndo();
-    if(prop==='color') entities[idx].color = val;
+    if(prop==='color') {
+        entities[idx].color = (val === '' || val === 'null' || val === null) ? null : val;
+    }
     else if(prop==='text') entities[idx].text = val;
     else if(prop==='textOverride') entities[idx].textOverride = val===''?null:val;
     else if(prop==='hidden') entities[idx].hidden = (val === 'true' || val === true);
@@ -1392,3 +1821,31 @@ document.addEventListener('keydown', (e) => {
     if(e.key==='F3') { e.preventDefault(); toggleOsnapMain(); }
     if(e.key==='F8') { e.preventDefault(); toggleOrtho(); }
 });
+
+// ===== 全画面UI コールバック用関数（アクションバー） =====
+window.dimConfirmPoint = function() {
+    if(cmdState.mode.startsWith('WAITING_DIM')) {
+        const pt = getInputPoint(); // スナップがあればスナップ座標、なければWCS座標
+        // 寸法が確定した際にも振動フィードバック
+        if(navigator.vibrate) navigator.vibrate(20);
+        handlePointInput(pt);
+    }
+};
+
+window.dimToggleMode = function() {
+    if(typeof toggleDimContMode === 'function') {
+        if(navigator.vibrate) navigator.vibrate(10);
+        toggleDimContMode();
+    }
+};
+
+window.changeLayerColorGlobal = function(layerId, color) {
+    if(layers[layerId]) {
+        saveUndo();
+        layers[layerId].color = color;
+        addCommandLog(`-> 画層「${layers[layerId].name}」の色を ${color} に変更しました`);
+        render();
+        updatePropertiesPanel();
+        if(typeof populateLayerPanel === 'function') populateLayerPanel();
+    }
+};
