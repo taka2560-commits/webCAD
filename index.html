@@ -295,33 +295,53 @@
 
         // 全画面表示の切り替え
         function toggleFullscreen() {
-            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-                if (document.documentElement.requestFullscreen) {
-                    document.documentElement.requestFullscreen();
-                } else if (document.documentElement.webkitRequestFullscreen) {
-                    document.documentElement.webkitRequestFullscreen();
-                }
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                }
-            }
-        }
-
-        // フルスクリーン状態の監視
-        function onFullscreenChange() {
-            if (document.fullscreenElement || document.webkitFullscreenElement) {
+            const isFsMode = document.body.classList.contains('fullscreen-mode');
+            if (!isFsMode) {
+                // ネイティブフルスクリーンを試みる（iOS Safariなど非対応ブラウザでは無視される）
+                try {
+                    if (document.documentElement.requestFullscreen) {
+                        document.documentElement.requestFullscreen().catch(()=>{});
+                    } else if (document.documentElement.webkitRequestFullscreen) {
+                        document.documentElement.webkitRequestFullscreen();
+                    }
+                } catch(e) {}
+                
+                // APIの対応状況に関わらず、UI上は必ず座標読取モード（全画面モード）にする
                 document.body.classList.add('fullscreen-mode');
             } else {
+                // ネイティブフルスクリーン解除を試みる
+                try {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen().catch(()=>{});
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    }
+                } catch(e) {}
+                
+                // UI上のモード解除
                 document.body.classList.remove('fullscreen-mode');
-                // ツールチップを非表示にする
                 const tt = document.getElementById('fs-coord-tooltip');
                 if(tt) tt.style.display = 'none';
             }
-            // キャンバスのリサイズをトリガーする
+            // キャンバスのリサイズをトリガー
             setTimeout(() => { if(window.resizeCanvas) window.resizeCanvas(); }, 100);
+        }
+
+        // フルスクリーン状態の監視（Escキーなどでネイティブフルスクリーンが解除された場合用）
+        function onFullscreenChange() {
+            const isNativeFs = document.fullscreenElement || document.webkitFullscreenElement;
+            // もしネイティブ側が解除されていて、かつbodyのクラスが残っていれば解除する
+            // （ただしスマホ等の非対応ブラウザではこのイベント自体が機能しないため、toggleFullscreen()でのトグルが主役になります）
+            if (!isNativeFs && document.body.classList.contains('fullscreen-mode')) {
+                // UIだけ全画面になっている場合はそのまま維持する（iOS用）
+                // ただし、PCでEscを押した場合はネイティブ側から解除イベントが来るのでUIも解除する
+                // 厳密な判定が難しいため、ここは一旦何もしない、またはEscキーイベントで別途処理する方が安全です。
+                // ここでは「Escで抜けたらUIも元に戻す」動作とします。
+                document.body.classList.remove('fullscreen-mode');
+                const tt = document.getElementById('fs-coord-tooltip');
+                if(tt) tt.style.display = 'none';
+                setTimeout(() => { if(window.resizeCanvas) window.resizeCanvas(); }, 100);
+            }
         }
         document.addEventListener('fullscreenchange', onFullscreenChange);
         document.addEventListener('webkitfullscreenchange', onFullscreenChange);
