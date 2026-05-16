@@ -623,9 +623,19 @@ function convertDwgDatabaseToApp(db) {
                 const center = ent.center;
                 const endPt = ent.majorAxisEndPoint;
                 if (center && endPt) {
-                    const rx = Math.sqrt(endPt.x**2 + endPt.y**2) * Math.abs(sX);
+                    // libredwg-web may return majorAxisEndPoint as absolute or relative depending on context/version.
+                    // We calculate both and assume the smaller magnitude is the true major axis.
+                    const rx_rel = Math.sqrt(endPt.x**2 + endPt.y**2);
+                    const rx_abs = Math.sqrt((endPt.x - center.x)**2 + (endPt.y - center.y)**2);
+                    const isAbsolute = rx_abs < rx_rel;
+                    
+                    const dx = isAbsolute ? (endPt.x - center.x) : endPt.x;
+                    const dy = isAbsolute ? (endPt.y - center.y) : endPt.y;
+                    
+                    const rx = Math.sqrt(dx**2 + dy**2) * Math.abs(sX);
                     const ry = rx * (ent.axisRatio || 1);
-                    const ellipseRot = Math.atan2(endPt.y, endPt.x) + rot;
+                    const ellipseRot = Math.atan2(dy, dx) + rot;
+                    
                     result.entities.push({type:'ELLIPSE', layer, color, 
                         cx:tx(center.x, center.y), cy:ty(center.x, center.y), rx:rx, ry:ry, rotation:ellipseRot}); 
                     importCount++;
