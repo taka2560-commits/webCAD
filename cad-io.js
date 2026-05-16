@@ -201,7 +201,9 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
         if(!e.center || !e.majorAxisEndPoint) return null;
         const rx = Math.sqrt(e.majorAxisEndPoint.x**2 + e.majorAxisEndPoint.y**2) * Math.abs(scaleX);
         const ry = rx * (e.axisRatio || 1);
-        return {type:'CIRCLE', layer, color, cx:tx(e.center.x, e.center.y), cy:ty(e.center.x, e.center.y), radius:rx};
+        let rot = Math.atan2(e.majorAxisEndPoint.y, e.majorAxisEndPoint.x);
+        if(rotation !== 0) { rot += rotation; }
+        return {type:'ELLIPSE', layer, color, cx:tx(e.center.x, e.center.y), cy:ty(e.center.x, e.center.y), rx:rx, ry:ry, rotation:rot};
     }
     // TEXT
     if(e.type === 'TEXT') {
@@ -604,7 +606,7 @@ function convertDwgDatabaseToApp(db) {
                 }
                 if (pt && dimText) {
                     result.entities.push({type:'TEXT', layer, color, 
-                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:dimText, height: 250 * Math.abs(sX)});
+                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:dimText, height: 2.5 * Math.abs(sX)});
                     importCount++;
                 } else skipCount++;
             } else if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE2D' || ent.type === 'POLYLINE_2D') {
@@ -622,8 +624,10 @@ function convertDwgDatabaseToApp(db) {
                 const endPt = ent.majorAxisEndPoint;
                 if (center && endPt) {
                     const rx = Math.sqrt(endPt.x**2 + endPt.y**2) * Math.abs(sX);
-                    result.entities.push({type:'CIRCLE', layer, color, 
-                        cx:tx(center.x, center.y), cy:ty(center.x, center.y), radius:rx}); 
+                    const ry = rx * (ent.axisRatio || 1);
+                    const ellipseRot = Math.atan2(endPt.y, endPt.x) + rot;
+                    result.entities.push({type:'ELLIPSE', layer, color, 
+                        cx:tx(center.x, center.y), cy:ty(center.x, center.y), rx:rx, ry:ry, rotation:ellipseRot}); 
                     importCount++;
                 } else skipCount++;
             } else {

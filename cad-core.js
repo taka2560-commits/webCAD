@@ -1306,16 +1306,18 @@ function updatePropertiesPanel() {
             html += `<div class="prop-row"><div class="prop-label">Y半径</div><input class="prop-val" type="number" step="1" value="${e.ry.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'ry', this.value)"></div>`;
         } else if(e.type === 'TEXT') {
             const p = wcsToUcs(e.x, e.y);
+            const escapedText = e.text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             html += `<div class="prop-row"><div class="prop-label">始点 X</div><input class="prop-val" type="number" step="1" value="${p.y.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'y', this.value)"></div>`;
             html += `<div class="prop-row"><div class="prop-label">始点 Y</div><input class="prop-val" type="number" step="1" value="${p.x.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'x', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">テキスト</div><input class="prop-val" type="text" value="${e.text}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'text', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">テキスト</div><input class="prop-val" type="text" value="${escapedText}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'text', this.value)"></div>`;
             html += `<div class="prop-row"><div class="prop-label">高さ</div><input class="prop-val" type="number" step="1" value="${e.height}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'height', this.value)"></div>`;
         } else if(e.type === 'HATCH') {
             html += `<div class="prop-row"><div class="prop-label">対象図形</div><input class="prop-val" type="text" value="${e.target.type}" readonly></div>`;
             html += `<div class="prop-row"><div class="prop-label">透過度</div><input class="prop-val" type="number" step="0.1" min="0" max="1" value="${e.alpha!==undefined?e.alpha:0.5}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'alpha', this.value)"></div>`;
         } else if(e.type === 'DIMENSION') {
+            const escapedOverride = (e.textOverride||'').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             html += `<div class="prop-row"><div class="prop-label">種類</div><input class="prop-val" type="text" value="${e.subType}" readonly></div>`;
-            html += `<div class="prop-row"><div class="prop-label">文字上書き</div><input class="prop-val" type="text" value="${e.textOverride||''}" placeholder="自動" onchange="changeEntityProp(${cmdState.highlightIdx}, 'textOverride', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">文字上書き</div><input class="prop-val" type="text" value="${escapedOverride}" placeholder="自動" onchange="changeEntityProp(${cmdState.highlightIdx}, 'textOverride', this.value)"></div>`;
         }
         p.innerHTML = html;
     } else {
