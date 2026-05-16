@@ -91,6 +91,40 @@ function importDxfData(dxf) {
     }
 
     addCommandLog(`  読み込み: ${importCount}個 / スキップ: ${skipCount}個`);
+
+    // === 重い画層の自動非表示 ===
+    // 全エンティティ数が多い場合、エンティティ数が多い画層を自動的に非表示にする
+    const AUTO_HIDE_TOTAL_THRESHOLD = 500;   // 全体がこの数を超えたら自動非表示を検討
+    const AUTO_HIDE_LAYER_THRESHOLD = 200;   // この数以上のエンティティを持つ画層を非表示に
+
+    if(entities.length > AUTO_HIDE_TOTAL_THRESHOLD) {
+        // 画層ごとのエンティティ数を集計
+        const layerCounts = {};
+        entities.forEach(e => {
+            const li = e.layer !== undefined ? e.layer : 0;
+            layerCounts[li] = (layerCounts[li] || 0) + 1;
+        });
+
+        // エンティティ数が多い順にソート
+        const sorted = Object.entries(layerCounts).sort((a, b) => b[1] - a[1]);
+        const hiddenLayerNames = [];
+
+        sorted.forEach(([layerIdx, count]) => {
+            const idx = parseInt(layerIdx);
+            if(count >= AUTO_HIDE_LAYER_THRESHOLD && layers[idx]) {
+                layers[idx].visible = false;
+                hiddenLayerNames.push(`${layers[idx].name}(${count}個)`);
+            }
+        });
+
+        if(hiddenLayerNames.length > 0) {
+            addCommandLog(`⚡ 軽量化: 重い画層を自動非表示にしました:`);
+            hiddenLayerNames.forEach(name => addCommandLog(`   🚫 ${name}`));
+            addCommandLog(`  ※ 画層パネル(👁️)から再表示できます`);
+        }
+    }
+
+    if(typeof updateLayerPanel === 'function') updateLayerPanel();
     zoomExtents();
     render();
 }
@@ -161,7 +195,7 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
     };
     const layerIdx = layers.findIndex(l => l.name === (e.layer || '0'));
     const layer = Math.max(0, layerIdx);
-    let color = layers[layer] ? layers[layer].color : '#FFFFFF';
+    let color = null; // デフォルトはByLayer
     if(e.colorIndex !== undefined && e.colorIndex !== 256 && e.colorIndex !== 0) {
         color = aciToHex(e.colorIndex);
     }
@@ -207,15 +241,27 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
     }
     // TEXT
     if(e.type === 'TEXT') {
-        const pos = e.startPoint || e.position || {x:0, y:0};
-        return {type:'TEXT', layer, color, x:tx(pos.x, pos.y), y:ty(pos.x, pos.y), text:e.text || '', height:(e.textHeight || 2.5)*Math.abs(scaleX)};
+        const pos = e.alignmentPoint || e.startPoint || e.position || {x:0, y:0};
+        let halign = 'left', valign = 'bottom';
+        if(e.halign === 1 || e.halign === 4) halign = 'center';
+        else if(e.halign === 2) halign = 'right';
+        if(e.valign === 2) valign = 'middle';
+        else if(e.valign === 3) valign = 'top';
+        return {type:'TEXT', layer, color, x:tx(pos.x, pos.y), y:ty(pos.x, pos.y), text:e.text || '', height:(e.textHeight || 2.5)*Math.abs(scaleX), halign, valign};
     }
     // MTEXT
     if(e.type === 'MTEXT') {
         const pos = e.position || {x:0, y:0};
         // MTEXTの書式コード除去
         let text = (e.text || '').replace(/\\[Ppf].*;/g, '').replace(/\\[A-Za-z][^;]*;/g, '').replace(/\{|\}/g, '').replace(/\\[\\]/g, '');
-        return {type:'TEXT', layer, color, x:tx(pos.x, pos.y), y:ty(pos.x, pos.y), text:text, height:(e.height || e.nominalTextHeight || 2.5)*Math.abs(scaleX)};
+        let halign = 'left', valign = 'top';
+        const attach = e.attachmentPoint || 1;
+        if(attach === 2 || attach === 5 || attach === 8) halign = 'center';
+        else if(attach === 3 || attach === 6 || attach === 9) halign = 'right';
+        if(attach >= 1 && attach <= 3) valign = 'top';
+        else if(attach >= 4 && attach <= 6) valign = 'middle';
+        else if(attach >= 7 && attach <= 9) valign = 'bottom';
+        return {type:'TEXT', layer, color, x:tx(pos.x, pos.y), y:ty(pos.x, pos.y), text:text, height:(e.height || e.nominalTextHeight || 2.5)*Math.abs(scaleX), halign, valign};
     }
     // HATCH - 境界パスをPLINEとして読み込み
     if(e.type === 'HATCH') {
@@ -342,21 +388,23 @@ function exportDxf() {
         layers.forEach(l => { try { d.addLayer(l.name, hexToAci(l.color), 'CONTINUOUS'); } catch(e){} });
         // エンティティ出力
         entities.forEach(e => {
-            if(e.type === 'LINE') { d.setActiveLayer(layers[e.layer]?.name||'0'); d.drawLine(e.x1, e.y1, e.x2, e.y2); }
-            else if(e.type === 'CIRCLE') { d.setActiveLayer(layers[e.layer]?.name||'0'); d.drawCircle(e.cx, e.cy, e.radius); }
-            else if(e.type === 'ARC') { d.setActiveLayer(layers[e.layer]?.name||'0'); d.drawArc(e.cx, e.cy, e.radius, e.startAngle*180/Math.PI, e.endAngle*180/Math.PI); }
+            const layerName = layers[e.layer]?.name || '0';
+            d.setActiveLayer(layerName);
+            const opts = e.color ? { color: hexToAci(e.color) } : {};
+
+            if(e.type === 'LINE') { d.drawLine(e.x1, e.y1, e.x2, e.y2, opts); }
+            else if(e.type === 'CIRCLE') { d.drawCircle(e.cx, e.cy, e.radius, opts); }
+            else if(e.type === 'ARC') { d.drawArc(e.cx, e.cy, e.radius, e.startAngle*180/Math.PI, e.endAngle*180/Math.PI, opts); }
             else if(e.type === 'RECTANG') {
-                d.setActiveLayer(layers[e.layer]?.name||'0');
-                d.drawLine(e.x1,e.y1,e.x2,e.y1); d.drawLine(e.x2,e.y1,e.x2,e.y2);
-                d.drawLine(e.x2,e.y2,e.x1,e.y2); d.drawLine(e.x1,e.y2,e.x1,e.y1);
+                d.drawLine(e.x1,e.y1,e.x2,e.y1, opts); d.drawLine(e.x2,e.y1,e.x2,e.y2, opts);
+                d.drawLine(e.x2,e.y2,e.x1,e.y2, opts); d.drawLine(e.x1,e.y2,e.x1,e.y1, opts);
             }
             else if(e.type === 'PLINE' && e.points.length >= 2) {
-                d.setActiveLayer(layers[e.layer]?.name||'0');
-                for(let i = 1; i < e.points.length; i++) d.drawLine(e.points[i-1].x, e.points[i-1].y, e.points[i].x, e.points[i].y);
-                if(e.closed) d.drawLine(e.points[e.points.length-1].x, e.points[e.points.length-1].y, e.points[0].x, e.points[0].y);
+                for(let i = 1; i < e.points.length; i++) d.drawLine(e.points[i-1].x, e.points[i-1].y, e.points[i].x, e.points[i].y, opts);
+                if(e.closed) d.drawLine(e.points[e.points.length-1].x, e.points[e.points.length-1].y, e.points[0].x, e.points[0].y, opts);
             }
-            else if(e.type === 'POINT') { d.setActiveLayer(layers[e.layer]?.name||'0'); d.drawPoint(e.x, e.y); }
-            else if(e.type === 'TEXT') { d.setActiveLayer(layers[e.layer]?.name||'0'); d.drawText(e.x, e.y, e.height || 2.5, 0, e.text || ''); }
+            else if(e.type === 'POINT') { d.drawPoint(e.x, e.y, opts); }
+            else if(e.type === 'TEXT') { d.drawText(e.x, e.y, e.height || 2.5, 0, e.text || '', opts); }
             // 寸法は補助線+テキストとして出力
             else if(e.type === 'DIMENSION') { exportDimAsDxf(d, e); }
         });
@@ -480,13 +528,21 @@ function convertDwgDatabaseToApp(db) {
     const result = { entities: [], layers: [], warnings: [] };
     
     // 画層テーブルの処理
-    if (db.tables && db.tables.layer && db.tables.layer.entries) {
-        db.tables.layer.entries.forEach(l => {
+    const layerTable = (db.tables && db.tables.LAYER) || (db.tables && db.tables.layer);
+    if (layerTable && layerTable.entries) {
+        layerTable.entries.forEach(l => {
             let hexColor = '#FFFFFF';
-            if (l.colorIndex !== undefined && l.colorIndex > 0 && l.colorIndex < 256) {
-                hexColor = aciToHex(l.colorIndex);
+            let cIdx = l.colorIndex;
+            if (cIdx === undefined && l.color && l.color.colorIndex !== undefined) {
+                cIdx = l.color.colorIndex;
+            } else if (cIdx === undefined && typeof l.color === 'number') {
+                cIdx = l.color;
             }
-            result.layers.push({ name: l.name || '0', color: hexColor, visible: !l.off && !l.frozen });
+            if (cIdx !== undefined && cIdx > 0 && cIdx < 256) {
+                hexColor = aciToHex(cIdx);
+            }
+            const lName = l.name || '0';
+            result.layers.push({ name: lName, color: hexColor, visible: !l.off && !l.frozen });
         });
     }
 
@@ -535,7 +591,10 @@ function convertDwgDatabaseToApp(db) {
             const tx = (x, y) => pX + (x * sX * Math.cos(rot) - y * sY * Math.sin(rot));
             const ty = (x, y) => pY + (x * sX * Math.sin(rot) + y * sY * Math.cos(rot));
 
-            const layerName = ent.layer || '0';
+            let layerName = '0';
+            if (ent.layer) {
+                layerName = typeof ent.layer === 'object' ? (ent.layer.name || '0') : ent.layer;
+            }
             const appLayerIdx = layers.findIndex(l => l.name === layerName);
             const newLayerIdx = result.layers.findIndex(l => l.name === layerName);
             const layer = appLayerIdx >= 0 ? appLayerIdx : (newLayerIdx >= 0 ? layers.length + newLayerIdx : defaultLayer);
@@ -580,20 +639,32 @@ function convertDwgDatabaseToApp(db) {
                     importCount++;
                 } else skipCount++;
             } else if (ent.type === 'TEXT') {
-                const pt = ent.insertionPoint || ent.alignmentPoint || ent.insertion_pt || ent.position;
+                const pt = ent.alignmentPoint || ent.insertionPoint || ent.insertion_pt || ent.position;
                 const textStr = ent.textValue !== undefined ? ent.textValue : (ent.text || '');
+                let halign = 'left', valign = 'bottom';
+                if(ent.horizontalAlignment === 1 || ent.horizontalAlignment === 4) halign = 'center';
+                else if(ent.horizontalAlignment === 2) halign = 'right';
+                if(ent.verticalAlignment === 2) valign = 'middle';
+                else if(ent.verticalAlignment === 3) valign = 'top';
                 if (pt && textStr) {
                     result.entities.push({type:'TEXT', layer, color, 
-                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:textStr, height:(ent.height || 2.5) * Math.abs(sX)});
+                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:textStr, height:(ent.height || 2.5) * Math.abs(sX), halign, valign});
                     importCount++;
                 } else skipCount++;
             } else if (ent.type === 'MTEXT') {
                 const pt = ent.insertionPoint || ent.position;
                 let text = ent.text || ent.textValue || '';
                 text = text.replace(/\\[A-Za-z0-9][^;]*;/g, '').replace(/\\[Ppf].*;/g, '').replace(/\{|\}/g, '').replace(/\\[\\]/g, '\\');
+                let halign = 'left', valign = 'top';
+                const attach = ent.attachmentPoint || ent.attachment || 1;
+                if(attach === 2 || attach === 5 || attach === 8) halign = 'center';
+                else if(attach === 3 || attach === 6 || attach === 9) halign = 'right';
+                if(attach >= 1 && attach <= 3) valign = 'top';
+                else if(attach >= 4 && attach <= 6) valign = 'middle';
+                else if(attach >= 7 && attach <= 9) valign = 'bottom';
                 if (pt && text) {
                     result.entities.push({type:'TEXT', layer, color, 
-                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:text, height:(ent.textHeight || ent.height || 2.5) * Math.abs(sX)});
+                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:text, height:(ent.textHeight || ent.height || 2.5) * Math.abs(sX), halign, valign});
                     importCount++;
                 } else skipCount++;
             } else if (ent.type && ent.type.includes('DIMENSION')) {
@@ -606,7 +677,7 @@ function convertDwgDatabaseToApp(db) {
                 }
                 if (pt && dimText) {
                     result.entities.push({type:'TEXT', layer, color, 
-                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:dimText, height: 2.5 * Math.abs(sX)});
+                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:dimText, height: (ent.textHeight || ent.height || 2.5) * Math.abs(sX)});
                     importCount++;
                 } else skipCount++;
             } else if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE2D' || ent.type === 'POLYLINE_2D') {
