@@ -1434,7 +1434,7 @@ function setupEventListeners() {
 
             // 長押しタイマーの設定 (0.6秒)
             touchState.pressTimer = setTimeout(() => {
-                if(!touchState.hasMoved && !touchState.isPinch && document.body.classList.contains('fullscreen-mode')) {
+                if(!touchState.hasMoved && !touchState.isPinch) {
                     const idx = hitTestEntity(touchState.startX, touchState.startY);
                     if(idx >= 0) {
                         const hitEnt = entities[idx];
