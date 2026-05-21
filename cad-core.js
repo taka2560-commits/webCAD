@@ -86,11 +86,33 @@ function init() {
     initLayers(); setupEventListeners(); render();
 }
 function initLayers() {
-    const s=document.getElementById('layer-select'); s.innerHTML='';
-    layers.forEach((l,i)=>{const o=document.createElement('option');o.value=i;o.textContent=l.name;s.appendChild(o);});
+    const s = document.getElementById('layer-select'); 
+    const fsS = document.getElementById('fs-layer-select');
+    if(s) s.innerHTML='';
+    if(fsS) fsS.innerHTML='';
+    
+    layers.forEach((l,i) => {
+        if(s) { const o = document.createElement('option'); o.value=i; o.textContent=l.name; s.appendChild(o); }
+        if(fsS) { const o2 = document.createElement('option'); o2.value=i; o2.textContent=l.name; fsS.appendChild(o2); }
+    });
+    
     updateLayerColorDisplay();
-    s.addEventListener('change',e=>{currentLayerIndex=parseInt(e.target.value);updateLayerColorDisplay();commandInput.focus();});
+    
+    const handleChange = (e) => { window.changeCurrentLayer(e.target.value); };
+    if(s) s.addEventListener('change', handleChange);
+    if(fsS) fsS.addEventListener('change', handleChange);
 }
+window.changeCurrentLayer = function(val) {
+    const idx = parseInt(val);
+    if(isNaN(idx)) return;
+    currentLayerIndex = idx;
+    updateLayerColorDisplay();
+    const s = document.getElementById('layer-select');
+    if(s && s.value != val) s.value = val;
+    const fsS = document.getElementById('fs-layer-select');
+    if(fsS && fsS.value != val) fsS.value = val;
+    commandInput.focus();
+};
 function updateLayerColorDisplay() { document.getElementById('current-layer-color').style.backgroundColor=layers[currentLayerIndex].color; }
 function resizeCanvas() { canvas.width=container.clientWidth; canvas.height=container.clientHeight; render(); }
 
@@ -295,7 +317,12 @@ function collectSnapPoints(wx, wy, baseWcs) {
     const pts = [];
     
     // Nearest 計算用ヘルパー
-    const addNear = (px, py) => { if(osnapState.near) pts.push({x:px, y:py, t:'近接点'}); };
+    const addNear = (px, py) => { 
+        if(osnapState.near) {
+            if(cmdState.mode === 'WAITING_UCS_2P_ORIGIN' || cmdState.mode === 'WAITING_UCS_2P_ORIGIN_PREVIEW') return;
+            pts.push({x:px, y:py, t:'近接点'}); 
+        }
+    };
     const addPerp = (px, py) => { if(osnapState.perp) pts.push({x:px, y:py, t:'垂線'}); };
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
 
@@ -767,6 +794,22 @@ function drawRubberBand() {
     // 寸法ゴムバンドは cad-dimension.js で追加
     if(typeof drawDimRubberBand==='function') drawDimRubberBand(m, sw, mp);
     ctx.setLineDash([]); ctx.restore();
+    if(cmdState.mode==='WAITING_UCS_ORIGIN'||cmdState.mode==='WAITING_UCS_2P_ORIGIN'){
+        ctx.strokeStyle='#ffcc00';ctx.strokeRect(mouse.screenX-4,mouse.screenY-4,8,8);
+    }
+    else if(cmdState.mode==='WAITING_UCS_2P_ORIGIN_PREVIEW') {
+        const p = wcsToScreen(cmdState.startWcs.x, cmdState.startWcs.y);
+        ctx.strokeStyle='#ffcc00';ctx.strokeRect(p.x-4, p.y-4, 8, 8);
+    }
+    else if(cmdState.mode==='WAITING_UCS_2P_XDIR'){
+        const p = wcsToScreen(cmdState.startWcs.x, cmdState.startWcs.y);
+        ctx.strokeStyle='#ffcc00'; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mouse.screenX, mouse.screenY); ctx.stroke();
+    }
+    else if(cmdState.mode==='WAITING_UCS_2P_XDIR_PREVIEW'){
+        const p1 = wcsToScreen(cmdState.startWcs.x, cmdState.startWcs.y);
+        const p2 = wcsToScreen(cmdState.endWcs.x, cmdState.endWcs.y);
+        ctx.strokeStyle='#ffcc00'; ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+    }
 }
 
 function drawSnapMarker() {
@@ -840,11 +883,38 @@ function getInputPoint() {
 function handlePointInput(wcs) {
     const m = cmdState.mode;
     if(m==='WAITING_UCS_ORIGIN') { setUCS(wcs.x, wcs.y, 0); return; }
-    if(m==='WAITING_UCS_2P_ORIGIN') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_UCS_2P_XDIR'; setPrompt('X軸方向の点:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 原点: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); render(); return; }
+    if(m==='WAITING_UCS_2P_ORIGIN') { 
+        cmdState.startWcs={x:wcs.x,y:wcs.y}; 
+        cmdState.mode='WAITING_UCS_2P_ORIGIN_PREVIEW'; 
+        setPrompt('基点（新しい原点）: (☑️確定)'); 
+        const u=wcsToUcs(wcs.x,wcs.y); 
+        addCommandLog(`-> 仮原点: (${dimFormat(u.x)},${dimFormat(u.y)}) - 確定してください`); 
+        const ab = document.getElementById('fs-dim-actionbar');
+        if(ab) { ab.style.display = 'flex'; const tb = document.getElementById('dim-mode-toggle'); if(tb) tb.style.display='none'; }
+        render(); 
+        return; 
+    }
+    if(m==='WAITING_UCS_2P_ORIGIN_PREVIEW') {
+        cmdState.startWcs={x:wcs.x,y:wcs.y}; 
+        const u=wcsToUcs(wcs.x,wcs.y); 
+        addCommandLog(`-> 仮原点: (${dimFormat(u.x)},${dimFormat(u.y)}) - 確定してください`); 
+        render(); 
+        return;
+    }
     if(m==='WAITING_UCS_2P_XDIR') {
-        const ox=cmdState.startWcs.x, oy=cmdState.startWcs.y;
-        const angle = Math.atan2(wcs.y - oy, wcs.x - ox);
-        setUCS(ox, oy, angle);
+        cmdState.endWcs={x:wcs.x,y:wcs.y};
+        cmdState.mode='WAITING_UCS_2P_XDIR_PREVIEW';
+        setPrompt('X軸方向の点: (☑️確定)');
+        addCommandLog('-> 仮X軸方向 - 確定してください');
+        const ab = document.getElementById('fs-dim-actionbar');
+        if(ab) { ab.style.display = 'flex'; const tb = document.getElementById('dim-mode-toggle'); if(tb) tb.style.display='none'; }
+        render();
+        return;
+    }
+    if(m==='WAITING_UCS_2P_XDIR_PREVIEW') {
+        cmdState.endWcs={x:wcs.x,y:wcs.y};
+        addCommandLog('-> 仮X軸方向 - 確定してください');
+        render();
         return;
     }
     if(m==='WAITING_LINE_P1') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_LINE_P2'; setPrompt('次の点:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 1点目: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); render(); return; }
@@ -1827,6 +1897,25 @@ window.dimConfirmPoint = function() {
         // 寸法が確定した際にも振動フィードバック
         if(navigator.vibrate) navigator.vibrate(20);
         handlePointInput(pt);
+    } else if(cmdState.mode === 'WAITING_UCS_2P_ORIGIN_PREVIEW') {
+        const pt = getInputPoint();
+        if(navigator.vibrate) navigator.vibrate(20);
+        cmdState.startWcs = {x: pt.x, y: pt.y};
+        cmdState.mode = 'WAITING_UCS_2P_XDIR';
+        setPrompt('X軸方向の点:');
+        const u = wcsToUcs(pt.x, pt.y);
+        addCommandLog(`-> 原点: (${dimFormat(u.x)},${dimFormat(u.y)})`);
+        const ab = document.getElementById('fs-dim-actionbar');
+        if(ab) ab.style.display = 'none';
+        render();
+    } else if(cmdState.mode === 'WAITING_UCS_2P_XDIR_PREVIEW') {
+        const pt = getInputPoint();
+        if(navigator.vibrate) navigator.vibrate(20);
+        const ox = cmdState.startWcs.x, oy = cmdState.startWcs.y;
+        const angle = Math.atan2(pt.y - oy, pt.x - ox);
+        setUCS(ox, oy, angle);
+        const ab = document.getElementById('fs-dim-actionbar');
+        if(ab) ab.style.display = 'none';
     }
 };
 

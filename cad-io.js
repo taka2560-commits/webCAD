@@ -218,7 +218,7 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
         let sa = (e.startAngle || 0) * Math.PI / 180;
         let ea = (e.endAngle || 360) * Math.PI / 180;
         if(rotation !== 0) { sa += rotation; ea += rotation; }
-        return {type:'ARC', layer, color, cx:tx(e.center.x, e.center.y), cy:ty(e.center.x, e.center.y), radius:e.radius*Math.abs(scaleX), startAngle:sa, endAngle:ea, counterclockwise:true};
+        return {type:'ARC', layer, color, cx:tx(e.center.x, e.center.y), cy:ty(e.center.x, e.center.y), radius:e.radius*Math.abs(scaleX), startAngle:sa, endAngle:ea, counterclockwise:true, hidden:true};
     }
     // LWPOLYLINE / POLYLINE
     if(e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') {
@@ -280,7 +280,7 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
                             const sa = (edge.startAngle || 0) * Math.PI / 180;
                             const ea = (edge.endAngle || 360) * Math.PI / 180;
                             results.push({type:'ARC', layer, color, cx:tx(edge.center.x, edge.center.y), cy:ty(edge.center.x, edge.center.y),
-                                radius:(edge.radius || 1)*Math.abs(scaleX), startAngle:sa, endAngle:ea, counterclockwise:!edge.isCounterClockwise});
+                                radius:(edge.radius || 1)*Math.abs(scaleX), startAngle:sa, endAngle:ea, counterclockwise:!edge.isCounterClockwise, hidden:true});
                         }
                     });
                 }
@@ -629,7 +629,7 @@ function convertDwgDatabaseToApp(db) {
                     result.entities.push({type:'ARC', layer, color, 
                         cx:tx(ent.center.x, ent.center.y), cy:ty(ent.center.x, ent.center.y), 
                         radius:ent.radius * Math.abs(sX), 
-                        startAngle:sa, endAngle:ea, counterclockwise:true});
+                        startAngle:sa, endAngle:ea, counterclockwise:true, hidden:true});
                     importCount++;
                 } else skipCount++;
             } else if (ent.type === 'POINT') {
