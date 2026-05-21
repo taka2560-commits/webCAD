@@ -1438,14 +1438,16 @@ function setupEventListeners() {
                     const idx = hitTestEntity(touchState.startX, touchState.startY);
                     if(idx >= 0) {
                         const hitEnt = entities[idx];
-                        saveUndo();
-                        entities.splice(idx, 1);
-                        addCommandLog(`-> 長押しによりエンティティ (${hitEnt.type}) を削除しました`);
-                        cmdState.highlightIdx = -1;
-                        if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
-                        render();
-                        if(navigator.vibrate) navigator.vibrate([50, 50, 50]); // 長押し成功時は少し違うパターンの振動
-                        touchState.hasMoved = true;
+                        if(hitEnt.type === 'DIMENSION') {
+                            saveUndo();
+                            entities.splice(idx, 1);
+                            addCommandLog(`-> 長押しにより寸法 (${hitEnt.subType || '不明'}) を削除しました`);
+                            cmdState.highlightIdx = -1;
+                            if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
+                            render();
+                            if(navigator.vibrate) navigator.vibrate([50, 50, 50]); // 長押し成功時は少し違うパターンの振動
+                            touchState.hasMoved = true;
+                        }
                     }
                 }
             }, 600);
