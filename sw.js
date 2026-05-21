@@ -1,10 +1,11 @@
-const CACHE_NAME = 'webcad-pwa-cache-v8';
+const CACHE_NAME = 'webcad-pwa-cache-v9';
 const urlsToCache = [
   './',
   './index.html',
   './cad-core.js',
   './cad-dimension.js',
   './cad-io.js',
+  './cad-storage.js',
   './manifest.json',
   'https://cdn.jsdelivr.net/npm/dxf-parser/dist/dxf-parser.min.js',
   'https://cdn.jsdelivr.net/npm/dxf-writer@1.4.0/dist/Drawing.min.js'
