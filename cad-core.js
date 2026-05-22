@@ -803,7 +803,8 @@ function drawRubberBand() {
     }
     else if(cmdState.mode==='WAITING_UCS_2P_XDIR'){
         const p = wcsToScreen(cmdState.startWcs.x, cmdState.startWcs.y);
-        ctx.strokeStyle='#ffcc00'; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mouse.screenX, mouse.screenY); ctx.stroke();
+        const pt = getInputPoint(); const pts = wcsToScreen(pt.x, pt.y);
+        ctx.strokeStyle='#ffcc00'; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(pts.x, pts.y); ctx.stroke();
     }
     else if(cmdState.mode==='WAITING_UCS_2P_XDIR_PREVIEW'){
         const p1 = wcsToScreen(cmdState.startWcs.x, cmdState.startWcs.y);
@@ -847,8 +848,9 @@ function drawCrosshair() {
         // 2点目指定中: 基点→カーソル方向の線を描画
         ctx.strokeStyle='#ffcc00'; ctx.lineWidth=1;
         const p1s = wcsToScreen(cmdState.startWcs.x, cmdState.startWcs.y);
-        ctx.setLineDash([5,5]); ctx.beginPath(); ctx.moveTo(p1s.x,p1s.y); ctx.lineTo(mouse.screenX,mouse.screenY); ctx.stroke(); ctx.setLineDash([]);
-        ctx.strokeRect(mouse.screenX-4,mouse.screenY-4,8,8);
+        const pt = getInputPoint(); const pts = wcsToScreen(pt.x, pt.y);
+        ctx.setLineDash([5,5]); ctx.beginPath(); ctx.moveTo(p1s.x,p1s.y); ctx.lineTo(pts.x,pts.y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeRect(pts.x-4,pts.y-4,8,8);
     }
     else{ctx.strokeRect(mouse.screenX-3,mouse.screenY-3,6,6);}
     ctx.restore();
@@ -880,17 +882,26 @@ function getInputPoint() {
     return applyOrtho({x:mouse.wcsX, y:mouse.wcsY});
 }
 
-function handlePointInput(wcs) {
+function handlePointInput(wcs, fromMouse = false) {
     const m = cmdState.mode;
     if(m==='WAITING_UCS_ORIGIN') { setUCS(wcs.x, wcs.y, 0); return; }
     if(m==='WAITING_UCS_2P_ORIGIN') { 
         cmdState.startWcs={x:wcs.x,y:wcs.y}; 
-        cmdState.mode='WAITING_UCS_2P_ORIGIN_PREVIEW'; 
-        setPrompt('基点（新しい原点）: (☑️確定)'); 
-        const u=wcsToUcs(wcs.x,wcs.y); 
-        addCommandLog(`-> 仮原点: (${dimFormat(u.x)},${dimFormat(u.y)}) - 確定してください`); 
-        const ab = document.getElementById('fs-dim-actionbar');
-        if(ab) { ab.style.display = 'flex'; const tb = document.getElementById('dim-mode-toggle'); if(tb) tb.style.display='none'; }
+        if(fromMouse) {
+            cmdState.mode = 'WAITING_UCS_2P_XDIR';
+            setPrompt('X軸方向の点:');
+            const u = wcsToUcs(wcs.x, wcs.y);
+            addCommandLog(`-> 原点: (${dimFormat(u.x)},${dimFormat(u.y)})`);
+            const ab = document.getElementById('fs-dim-actionbar');
+            if(ab) ab.style.display = 'none';
+        } else {
+            cmdState.mode='WAITING_UCS_2P_ORIGIN_PREVIEW'; 
+            setPrompt('基点（新しい原点）: (☑️確定)'); 
+            const u=wcsToUcs(wcs.x,wcs.y); 
+            addCommandLog(`-> 仮原点: (${dimFormat(u.x)},${dimFormat(u.y)}) - 確定してください`); 
+            const ab = document.getElementById('fs-dim-actionbar');
+            if(ab) { ab.style.display = 'flex'; const tb = document.getElementById('dim-mode-toggle'); if(tb) tb.style.display='none'; }
+        }
         render(); 
         return; 
     }
@@ -902,12 +913,20 @@ function handlePointInput(wcs) {
         return;
     }
     if(m==='WAITING_UCS_2P_XDIR') {
-        cmdState.endWcs={x:wcs.x,y:wcs.y};
-        cmdState.mode='WAITING_UCS_2P_XDIR_PREVIEW';
-        setPrompt('X軸方向の点: (☑️確定)');
-        addCommandLog('-> 仮X軸方向 - 確定してください');
-        const ab = document.getElementById('fs-dim-actionbar');
-        if(ab) { ab.style.display = 'flex'; const tb = document.getElementById('dim-mode-toggle'); if(tb) tb.style.display='none'; }
+        if(fromMouse) {
+            const ox = cmdState.startWcs.x, oy = cmdState.startWcs.y;
+            const angle = Math.atan2(wcs.y - oy, wcs.x - ox);
+            setUCS(ox, oy, angle);
+            const ab = document.getElementById('fs-dim-actionbar');
+            if(ab) ab.style.display = 'none';
+        } else {
+            cmdState.endWcs={x:wcs.x,y:wcs.y};
+            cmdState.mode='WAITING_UCS_2P_XDIR_PREVIEW';
+            setPrompt('X軸方向の点: (☑️確定)');
+            addCommandLog('-> 仮X軸方向 - 確定してください');
+            const ab = document.getElementById('fs-dim-actionbar');
+            if(ab) { ab.style.display = 'flex'; const tb = document.getElementById('dim-mode-toggle'); if(tb) tb.style.display='none'; }
+        }
         render();
         return;
     }
@@ -1101,7 +1120,7 @@ function finishPline(close) {
 function processCommand(cmdText) {
     const cmd = cmdText.toUpperCase().trim();
     const coordMatch = cmd.match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
-    if(coordMatch) { const ux=parseFloat(coordMatch[1]),uy=parseFloat(coordMatch[3]); const w=ucsToWcs(ux,uy); handlePointInput(w); return; }
+    if(coordMatch) { const ux=parseFloat(coordMatch[1]),uy=parseFloat(coordMatch[3]); const w=ucsToWcs(ux,uy); handlePointInput(w, true); return; }
     const numMatch = cmd.match(/^(-?\d+(\.\d+)?)$/);
     if(numMatch) {
         const val = parseFloat(numMatch[1]);
@@ -1203,14 +1222,14 @@ function setupEventListeners() {
             const isSelectMode = selectModes.includes(cmdState.mode);
 
             if (cmdState.mode!=='IDLE' && !isSelectMode) { // Left click for point input when not in IDLE and not select mode
-                const pt=getInputPoint(); handlePointInput(pt);
+                const pt=getInputPoint(); handlePointInput(pt, true);
             } else {
                 const idx = hitTestEntity(mouse.screenX, mouse.screenY);
                 if(idx >= 0) {
                     if (cmdState.mode === 'IDLE') {
                         cmdState.highlightIdx = (cmdState.highlightIdx === idx) ? -1 : idx;
                     } else {
-                        const pt=getInputPoint(); handlePointInput(pt);
+                        const pt=getInputPoint(); handlePointInput(pt, true);
                     }
                 } else {
                     if (cmdState.mode === 'IDLE') cmdState.highlightIdx = -1;
@@ -1658,7 +1677,7 @@ function setupEventListeners() {
                 } else {
                     // 通常コマンド: 指を離した位置で即時に確定
                     const pt = getInputPoint();
-                    handlePointInput(pt);
+                    handlePointInput(pt, false);
                 }
             } else if(!touchState.hasMoved) {
                 // 短いタップでIDLEモード: エンティティ選択/選択解除
@@ -1896,7 +1915,7 @@ window.dimConfirmPoint = function() {
         const pt = getInputPoint(); // スナップがあればスナップ座標、なければWCS座標
         // 寸法が確定した際にも振動フィードバック
         if(navigator.vibrate) navigator.vibrate(20);
-        handlePointInput(pt);
+        handlePointInput(pt, false);
     } else if(cmdState.mode === 'WAITING_UCS_2P_ORIGIN_PREVIEW') {
         const pt = getInputPoint();
         if(navigator.vibrate) navigator.vibrate(20);
@@ -1923,6 +1942,13 @@ window.dimToggleMode = function() {
     if(typeof toggleDimContMode === 'function') {
         if(navigator.vibrate) navigator.vibrate(10);
         toggleDimContMode();
+    }
+};
+
+window.dimToggleDir = function() {
+    if(typeof toggleDimContDir === 'function') {
+        if(navigator.vibrate) navigator.vibrate(10);
+        toggleDimContDir();
     }
 };
 

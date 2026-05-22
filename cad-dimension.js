@@ -326,7 +326,7 @@ function drawDimRubberBand(mode, sw, mp) {
         // 1点目・2点目から配置位置へのプレビュー
         const p1 = cmdState.dimContPoints[0], p2 = cmdState.dimContPoints[1];
         const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
-        const dimDir = dx >= dy ? 'H' : 'V';
+        const dimDir = cmdState.dimContDirMode === 'AUTO' ? (dx >= dy ? 'H' : 'V') : cmdState.dimContDirMode;
         const offset = dimDir === 'H' ? (mp.y - (p1.y + p2.y)/2) : (mp.x - (p1.x + p2.x)/2);
         _drawDimLinearCore(p1, p2, offset, dimDir, '#ffff00', null);
     }
@@ -523,7 +523,7 @@ function handleDimPointInput(mode, wcs) {
     if(mode === 'WAITING_DIMCONT_POS') {
         const p1 = cmdState.dimContPoints[0], p2 = cmdState.dimContPoints[1];
         const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
-        cmdState.dimContDir = dx >= dy ? 'H' : 'V';
+        cmdState.dimContDir = cmdState.dimContDirMode === 'AUTO' ? (dx >= dy ? 'H' : 'V') : cmdState.dimContDirMode;
         cmdState.dimContOffset = cmdState.dimContDir === 'H' ? (wcs.y - (p1.y + p2.y)/2) : (wcs.x - (p1.x + p2.x)/2);
         cmdState.dimContBaseOffset = cmdState.dimContOffset;
         saveUndo();
@@ -647,6 +647,8 @@ function _showDimActionBar(isContinuous) {
     if(actionbar) actionbar.style.display = 'flex';
     const toggleBtn = document.getElementById('dim-mode-toggle');
     if(toggleBtn) toggleBtn.style.display = isContinuous ? 'inline-block' : 'none';
+    const dirBtn = document.getElementById('dim-dir-toggle');
+    if(dirBtn) dirBtn.style.display = isContinuous ? 'inline-block' : 'none';
 }
 
 // ===== 寸法コマンドのディスパッチ =====
@@ -664,6 +666,7 @@ function processDimCommand(cmd) {
         cmdState.mode = 'WAITING_DIMCONT_P1';
         cmdState.dimContPoints = [];
         cmdState.dimContType = 'SERIAL';
+        cmdState.dimContDirMode = 'AUTO';
         cmdState.dimContLevel = 0;
         setPrompt('連続寸法: 1点目を選択 (☑️確定ボタンで決定)');
         addCommandLog('-> [連続寸法] アクションバーの確定ボタンで点を入力します');
@@ -671,6 +674,8 @@ function processDimCommand(cmd) {
         _showDimActionBar(true);
         const toggleBtn = document.getElementById('dim-mode-toggle');
         if(toggleBtn) toggleBtn.textContent = '📏 直列 (変更)';
+        const dirBtn = document.getElementById('dim-dir-toggle');
+        if(dirBtn) dirBtn.textContent = '⚙ 自動 (X/Y)';
         
         if(typeof render === 'function') render();
         return true;
@@ -691,6 +696,33 @@ window.toggleDimContMode = function() {
         const toggleBtn = document.getElementById('dim-mode-toggle');
         if(toggleBtn) toggleBtn.textContent = '📏 直列 (変更)';
         if(cmdState.mode === 'WAITING_DIMCONT_NEXT') addCommandLog('-> モード切替: 直列 (前回の点から測ります)');
+    }
+    if(typeof render === 'function') render();
+};
+
+window.toggleDimContDir = function() {
+    if(!cmdState.mode || !cmdState.mode.startsWith('WAITING_DIMCONT')) return;
+    if(cmdState.dimContDirMode === 'AUTO') {
+        cmdState.dimContDirMode = 'H';
+        const dirBtn = document.getElementById('dim-dir-toggle');
+        if(dirBtn) dirBtn.textContent = '↔ 水平/X軸 (固定)';
+        addCommandLog('-> 寸法方向: X軸 (水平) に固定しました');
+    } else if(cmdState.dimContDirMode === 'H') {
+        cmdState.dimContDirMode = 'V';
+        const dirBtn = document.getElementById('dim-dir-toggle');
+        if(dirBtn) dirBtn.textContent = '↕ 垂直/Y軸 (固定)';
+        addCommandLog('-> 寸法方向: Y軸 (垂直) に固定しました');
+    } else {
+        cmdState.dimContDirMode = 'AUTO';
+        const dirBtn = document.getElementById('dim-dir-toggle');
+        if(dirBtn) dirBtn.textContent = '⚙ 自動 (X/Y)';
+        addCommandLog('-> 寸法方向: 自動判定 に戻しました');
+    }
+    
+    if(cmdState.mode === 'WAITING_DIMCONT_POS' && cmdState.dimContPoints && cmdState.dimContPoints.length > 1) {
+        const p1 = cmdState.dimContPoints[0], p2 = cmdState.dimContPoints[1];
+        const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
+        cmdState.dimContDir = cmdState.dimContDirMode === 'AUTO' ? (dx >= dy ? 'H' : 'V') : cmdState.dimContDirMode;
     }
     if(typeof render === 'function') render();
 };
