@@ -205,6 +205,7 @@ window.saveProject = async function(nameOverride) {
         _updateAutoSaveStatus('手動保存');
         // タイトル更新
         document.title = `${name} - WebCAD`;
+        if(navigator.vibrate) navigator.vibrate([30, 50, 30]);
     } catch (err) {
         console.error('プロジェクト保存エラー:', err);
         addCommandLog('エラー: プロジェクトの保存に失敗しました');

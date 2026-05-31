@@ -192,6 +192,7 @@ function saveUCS() {
 }
 
 function deleteUCS() {
+    if(navigator.vibrate) navigator.vibrate([20, 20, 20]);
     const fsSel = document.getElementById('fs-ucs-select');
     const ucsSel = document.getElementById('ucs-select');
     // 全画面のセレクトボックス、または通常のセレクトボックスから値を取得
@@ -1196,6 +1197,18 @@ function processCommand(cmdText) {
 // ===== イベントリスナー =====
 let lastTouchTime = 0;
 function setupEventListeners() {
+    // 全てのボタンに対するグローバルハプティクス（短い振動）
+    document.addEventListener('click', (e) => {
+        let target = e.target;
+        while(target && target !== document.body) {
+            if(target.tagName === 'BUTTON') {
+                if(navigator.vibrate) navigator.vibrate(10);
+                break;
+            }
+            target = target.parentNode;
+        }
+    });
+
     canvas.addEventListener('mousemove', (e) => {
         const rect=canvas.getBoundingClientRect(); mouse.screenX=e.clientX-rect.left; mouse.screenY=e.clientY-rect.top;
         const wcs=screenToWcs(mouse.screenX,mouse.screenY); mouse.wcsX=wcs.x; mouse.wcsY=wcs.y;
