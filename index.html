@@ -142,6 +142,79 @@
         .project-meta { color:#888; font-size:11px; white-space:nowrap; }
         .project-delete-btn { background:none; border:none; color:#ff6b6b; font-size:14px; cursor:pointer; padding:2px 6px; }
         .project-delete-btn:hover { color:#ff4444; }
+
+        /* フローティング・プロパティパネル */
+        #property-panel {
+            position: fixed;
+            top: 100px;
+            left: 20px;
+            width: 280px;
+            background: rgba(33, 40, 48, 0.95);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            z-index: 100002;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            backdrop-filter: blur(8px);
+            font-size: 12px;
+        }
+        #property-panel-header {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 8px 12px;
+            cursor: move;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        #property-panel-title {
+            font-weight: bold;
+            color: #00ff88;
+        }
+        #property-panel-close {
+            background: none; border: none; color: #aaa; cursor: pointer; font-size: 14px;
+        }
+        #property-panel-close:hover { color: #fff; }
+        #property-panel-content {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .prop-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .prop-row label {
+            width: 60px;
+            color: #ddd;
+        }
+        .prop-row input[type="text"], .prop-row input[type="number"] {
+            flex: 1;
+            background: #111;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            min-width: 0;
+        }
+        .prop-btn {
+            background: #00ff88;
+            color: #000;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 4px;
+        }
+        .prop-btn:hover {
+            background: #00cc66;
+        }
     </style>
     <!-- PWA Settings -->
     <link rel="manifest" href="manifest.json">
@@ -268,6 +341,17 @@
         <label><input type="checkbox" id="osnap-int" checked> 交点</label>
         <label><input type="checkbox" id="osnap-near" checked> 近接点</label>
         <label><input type="checkbox" id="osnap-perp" checked> 垂線</label>
+    </div>
+
+    <!-- フローティング・プロパティパネル -->
+    <div id="property-panel">
+        <div id="property-panel-header">
+            <span id="property-panel-title">プロパティ</span>
+            <button id="property-panel-close" onclick="hidePropertyPanel()">✕</button>
+        </div>
+        <div id="property-panel-content">
+            <!-- 動的コンテンツ -->
+        </div>
     </div>
 
     <!-- 全画面座標読取モード用オーバーレイ -->

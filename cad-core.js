@@ -30,14 +30,93 @@ function addCommandLog(t) { const d=document.createElement('div'); d.textContent
 function setPrompt(t) { document.getElementById('command-prompt').textContent=t; }
 function resetCommand() { 
     cmdState={mode:'IDLE',startWcs:null,points:[],highlightIdx:-1,selectedIndices:[]}; 
-    setPrompt('コマンド:'); activeCommandName=''; setActiveTool(null); updatePropertiesPanel(); 
+    setPrompt('コマンド:'); activeCommandName=''; setActiveTool(null);
+    hidePropertyPanel();
     // 寸法アクションバーを確実に隠す
     const actionbar = document.getElementById('fs-dim-actionbar');
     if(actionbar) actionbar.style.display = 'none';
     render(); 
 }
-function issueCommand(cmd) { cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd); updatePropertiesPanel(); }
+function issueCommand(cmd) { cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd); }
 function setActiveTool(name) { document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); if(name){document.querySelectorAll('.tool-cmd').forEach(el=>{if(el.textContent===name)el.parentElement.classList.add('active');});} }
+
+// ===== プロパティパネル制御 =====
+function hidePropertyPanel() {
+    const p = document.getElementById('property-panel');
+    if(p) p.style.display = 'none';
+}
+function showPropertyPanel(title, htmlContent) {
+    const p = document.getElementById('property-panel');
+    if(!p) return;
+    document.getElementById('property-panel-title').textContent = title;
+    document.getElementById('property-panel-content').innerHTML = htmlContent;
+    p.style.display = 'flex';
+}
+
+// プロパティパネルのドラッグ実装
+let isDraggingPanel = false, panelDragStartX, panelDragStartY, panelStartLeft, panelStartTop;
+document.addEventListener('DOMContentLoaded', () => {
+    const header = document.getElementById('property-panel-header');
+    const panel = document.getElementById('property-panel');
+    if(!header || !panel) return;
+
+    header.addEventListener('mousedown', (e) => {
+        isDraggingPanel = true;
+        panelDragStartX = e.clientX; panelDragStartY = e.clientY;
+        const rect = panel.getBoundingClientRect();
+        panelStartLeft = rect.left; panelStartTop = rect.top;
+        e.preventDefault();
+    });
+    header.addEventListener('touchstart', (e) => {
+        if(e.touches.length !== 1) return;
+        isDraggingPanel = true;
+        panelDragStartX = e.touches[0].clientX; panelDragStartY = e.touches[0].clientY;
+        const rect = panel.getBoundingClientRect();
+        panelStartLeft = rect.left; panelStartTop = rect.top;
+        // preventDefaultはボタン押下などを妨げるので最小限に
+    }, {passive:false});
+
+    document.addEventListener('mousemove', (e) => {
+        if(!isDraggingPanel) return;
+        const dx = e.clientX - panelDragStartX;
+        const dy = e.clientY - panelDragStartY;
+        panel.style.left = (panelStartLeft + dx) + 'px';
+        panel.style.top = (panelStartTop + dy) + 'px';
+        panel.style.right = 'auto'; // override right if set
+    });
+    document.addEventListener('touchmove', (e) => {
+        if(!isDraggingPanel) return;
+        const dx = e.touches[0].clientX - panelDragStartX;
+        const dy = e.touches[0].clientY - panelDragStartY;
+        panel.style.left = (panelStartLeft + dx) + 'px';
+        panel.style.top = (panelStartTop + dy) + 'px';
+        panel.style.right = 'auto';
+        e.preventDefault();
+    }, {passive:false});
+
+    document.addEventListener('mouseup', () => { isDraggingPanel = false; });
+    document.addEventListener('touchend', () => { isDraggingPanel = false; });
+});
+
+// テキスト用パネル開始関数
+function startTextPlacement() {
+    const txtInput = document.getElementById('prop-text-val');
+    const hInput = document.getElementById('prop-text-h');
+    const contInput = document.getElementById('prop-text-cont');
+    
+    if(!txtInput.value) { alert("文字を入力してください"); return; }
+    
+    cmdState.textStr = txtInput.value;
+    cmdState.textHeight = parseFloat(hInput.value) || 20;
+    cmdState.isContinuous = contInput.checked;
+    
+    cmdState.mode = 'WAITING_TEXT_PLACE';
+    setPrompt('文字の配置点を指定 (連続: ' + (cmdState.isContinuous ? 'ON' : 'OFF') + ')');
+    addCommandLog('-> 配置点をタップしてください');
+    
+    // カーソルにプレビューを出したいので再描画
+    render();
+}
 
 // コマンド名とツールバーラベルのマッピング
 let activeCommandName = '';
@@ -767,6 +846,22 @@ function drawRubberBand() {
         const c=wcsToScreen(cx,cy);
         ctx.beginPath(); ctx.ellipse(c.x, c.y, rx*view.scale, ry*view.scale, -rot, 0, Math.PI*2); ctx.stroke();
     }
+    else if(m==='WAITING_TEXT_PLACE' && cmdState.textStr) {
+        const p = wcsToScreen(mp.x, mp.y);
+        ctx.save();
+        ctx.font = `${cmdState.textHeight * view.scale}px sans-serif`;
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        
+        // UCSに合わせて回転してプレビュー
+        ctx.translate(p.x, p.y);
+        ctx.rotate(-view.rotation);
+        // 通常のTEXTエンティティは left/bottom で描画しているか確認 (通常は左下基準)
+        ctx.textBaseline = 'bottom';
+        ctx.textAlign = 'left';
+        ctx.fillText(cmdState.textStr, 0, 0);
+        
+        ctx.restore();
+    }
     else if(m==='WAITING_ROTATE_REF1'&&cmdState.rotateBase) {
         const a=wcsToScreen(cmdState.rotateBase.x, cmdState.rotateBase.y), b=wcsToScreen(mp.x, mp.y);
         ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
@@ -964,9 +1059,19 @@ function handlePointInput(wcs, fromMouse = false) {
         saveUndo(); entities.push({type:'ELLIPSE',layer:currentLayerIndex,color:null,cx:cx,cy:cy,rx:rx,ry:ry,rotation:rot});
         addCommandLog(`-> 楕円作成 X半径: ${rx.toFixed(2)} Y半径: ${ry.toFixed(2)}`); resetCommand(); return;
     }
-    if(m==='WAITING_TEXT_P1') { 
-        cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_TEXT_STR'; setPrompt('テキスト入力:'); 
-        addCommandLog(`-> 配置点: (${wcs.x.toFixed(2)},${wcs.y.toFixed(2)})。下部からテキストを入力してEnterしてください。`); render(); return; 
+    if(m==='WAITING_TEXT_PLACE') {
+        saveUndo(); 
+        entities.push({type:'TEXT', layer:currentLayerIndex, color:null, x:wcs.x, y:wcs.y, text:cmdState.textStr, height:cmdState.textHeight});
+        addCommandLog(`-> テキスト配置: "${cmdState.textStr}"`); 
+        
+        if(cmdState.isContinuous) {
+            // 連続配置の場合はそのまま
+            addCommandLog('-> 続けて配置点をタップしてください。終了するにはEsc/キャンセル');
+        } else {
+            resetCommand(); 
+        }
+        render(); 
+        return; 
     }
     if(m==='WAITING_HATCH_SELECT') {
         const idx=hitTestEntity(mouse.screenX,mouse.screenY);
@@ -1135,10 +1240,8 @@ function processCommand(cmdText) {
             addCommandLog(`-> 距離 ${cmdState.offsetDist} に設定。対象を選択`); return;
         }
     }
-    if(cmdState.mode==='WAITING_TEXT_STR' && cmdText.length>0) {
-        saveUndo(); entities.push({type:'TEXT',layer:currentLayerIndex,color:null,x:cmdState.startWcs.x,y:cmdState.startWcs.y,text:cmdText,height:20});
-        addCommandLog(`-> テキスト作成: "${cmdText}"`); resetCommand(); return;
     }
+    // WAITING_TEXT_STR was removed
     if(cmd==='C' && cmdState.mode==='WAITING_PLINE_NEXT' && cmdState.points.length>=2) { finishPline(true); return; }
     // 寸法コマンドの処理（cad-dimension.js から登録）
     if(typeof processDimCommand==='function' && processDimCommand(cmd)) return;
@@ -1150,7 +1253,32 @@ function processCommand(cmdText) {
     else if(cmd==='A'||cmd==='ARC') { cmdState.mode='WAITING_ARC_P1'; cmdState.points=[]; setPrompt('始点:'); setActiveTool('ARC'); addCommandLog('-> 始点を指定'); }
     else if(cmd==='PL'||cmd==='PLINE') { cmdState.mode='WAITING_PLINE_NEXT'; cmdState.points=[]; setPrompt('始点:'); setActiveTool('PLINE'); addCommandLog('-> 始点を指定'); }
     else if(cmd==='EL'||cmd==='ELLIPSE') { cmdState.mode='WAITING_ELLIPSE_CENTER'; setPrompt('中心:'); setActiveTool('ELLIPSE'); addCommandLog('-> 楕円の中心を指定'); }
-    else if(cmd==='T'||cmd==='TEXT') { cmdState.mode='WAITING_TEXT_P1'; setPrompt('文字の始点:'); setActiveTool('TEXT'); addCommandLog('-> 文字の始点を指定'); }
+    else if(cmd==='T'||cmd==='TEXT') { 
+        cmdState.mode='WAITING_TEXT_INPUT'; 
+        setPrompt('文字設定を入力'); 
+        setActiveTool('TEXT'); 
+        addCommandLog('-> 文字の内容と高さを設定');
+        
+        // 過去の値を保持
+        const lastH = cmdState.textHeight || 20;
+        const lastStr = cmdState.textStr || '';
+        
+        const html = `
+            <div class="prop-row">
+                <label>文字内容:</label>
+                <input type="text" id="prop-text-val" value="${lastStr}" placeholder="入力...">
+            </div>
+            <div class="prop-row">
+                <label>高さ:</label>
+                <input type="number" id="prop-text-h" value="${lastH}" min="1">
+            </div>
+            <div class="prop-row">
+                <label><input type="checkbox" id="prop-text-cont" checked> 連続配置</label>
+            </div>
+            <button class="prop-btn" onclick="startTextPlacement()">これで配置する</button>
+        `;
+        showPropertyPanel('テキスト設定', html);
+    }
     else if(cmd==='H'||cmd==='HATCH') { cmdState.mode='WAITING_HATCH_SELECT'; setPrompt('閉じた図形を選択:'); setActiveTool('HATCH'); addCommandLog('-> 塗りつぶす閉じた図形を選択'); }
     else if(cmd==='E'||cmd==='ERASE') {
         // IDLE時の選択を引き継ぎ
