@@ -252,7 +252,8 @@
             <span style="color:#aaa;">画層:</span>
             <div id="current-layer-color" style="width:12px;height:12px;background-color:white;border-radius:2px;"></div>
             <select id="layer-select"></select>
-            <button class="status-btn" onclick="toggleLayerPanel()" style="padding:0 5px;" title="画層一覧/表示設定">👁️</button>
+            <button class="status-btn" onclick="toggleLayerPanel()" style="padding:0 5px;" title="画層一括管理">👁️</button>
+            <button class="status-btn" onclick="issueCommand('LAYOFF')" style="padding:0 5px; color:#ffcc00; font-weight:bold;" title="図形をタッチして画層を非表示にする (LAYOFF)">🚫非表示</button>
         </div>
         <button class="top-btn" onclick="zoomToOrigin()" title="原点へズーム">🔍 原点</button>
         <button class="top-btn" onclick="zoomExtents()" title="全体表示">🔍 全体</button>
@@ -388,6 +389,10 @@
                     <button onclick="issueCommand('WCS'); autoCloseDrawer();" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">↩WCS</button>
                     <select id="fs-ucs-select" style="padding:6px 8px; font-size:12px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" onchange="loadUCS(this.value); autoCloseDrawer();"><option value="">--読込--</option></select>
                     <select id="fs-layer-select" style="padding:6px 8px; font-size:12px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" title="現在の画層" onchange="changeCurrentLayer(this.value); autoCloseDrawer();"><option value="">--画層--</option></select>
+                    <div style="display:flex; gap:6px; justify-content:space-between; width:100%;">
+                        <button onclick="toggleLayerPanel(); autoCloseDrawer();" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#00ff88; border:1px solid #00ff88; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; cursor:pointer;">👁️画層管理</button>
+                        <button onclick="issueCommand('LAYOFF'); autoCloseDrawer();" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#ffcc00; border:1px solid #ffcc00; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; cursor:pointer;">🚫タッチ消去</button>
+                    </div>
                     <div style="display:flex; gap:6px; justify-content:space-between;">
                         <button onclick="saveUCS(); autoCloseDrawer();" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">💾保存</button>
                         <button onclick="deleteUCS(); autoCloseDrawer();" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#ff6b6b; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🗑️消去</button>
