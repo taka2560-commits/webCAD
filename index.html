@@ -277,31 +277,44 @@
             <span id="fs-coord-y">Y: 0.000</span>
             <span id="fs-snap-label" class="snap-label"></span>
         </div>
-        <div id="fs-tools" style="position:fixed; top:60px; right:12px; display:flex; flex-direction:column; align-items:flex-end; gap:12px; z-index:100001; pointer-events:none;">
-            <!-- グループ1: 作図・寸法系 -->
-            <div style="background:rgba(30,34,40,0.85); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; pointer-events:auto; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
-                <button class="fs-active" onclick="issueCommand('DIMORDINATE')" title="引出線でXY両方の座標を配置します" style="padding:8px 12px; font-size:12px; border-radius:14px; border:1px solid #00ff88; background:rgba(40,44,52,0.9); color:#00ff88; box-shadow:0 1px 4px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">📍座標</button>
-                <button onclick="issueCommand('DIMCONT')" style="padding:8px 12px; font-size:12px; background:rgba(40,44,52,0.9); color:#ffcc00; border:1px solid #ffcc00; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">📏連続寸法</button>
-            </div>
+        <style>
+            #fs-tools-drawer { transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1); }
+            .fs-drawer-closed { transform: translateX(calc(100% - 32px)); }
+            .fs-drawer-open { transform: translateX(0); }
+        </style>
+        <div id="fs-tools-drawer" class="fs-drawer-closed" style="position:fixed; top:60px; right:0; display:flex; align-items:flex-start; z-index:100001; pointer-events:none;">
+            <!-- ドロワー引き手タブ -->
+            <button id="fs-drawer-toggle" onclick="toggleFsDrawer()" style="pointer-events:auto; background:rgba(30,34,40,0.9); color:#fff; border:1px solid rgba(255,255,255,0.2); border-right:none; border-radius:8px 0 0 8px; padding:16px 8px; box-shadow:-4px 0 12px rgba(0,0,0,0.5); font-size:12px; font-weight:bold; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:4px;">
+                <span id="fs-drawer-icon">◀</span>
+            </button>
 
-            <!-- グループ2: UCS・表示・画層制御系 -->
-            <div style="background:rgba(30,34,40,0.85); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; pointer-events:auto; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
-                <button onclick="issueCommand('UCS')" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🎯UCS</button>
-                <button onclick="issueCommand('UCS2P')" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📈2点</button>
-                <button onclick="togglePlanView()" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#61afef; border:1px solid #555; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🧭PLAN</button>
-                <button onclick="issueCommand('WCS')" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">↩WCS</button>
-                <select id="fs-ucs-select" style="padding:6px 8px; font-size:12px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" onchange="loadUCS(this.value)"><option value="">--読込--</option></select>
-                <select id="fs-layer-select" style="padding:6px 8px; font-size:12px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" title="現在の画層" onchange="changeCurrentLayer(this.value)"><option value="">--画層--</option></select>
-                <div style="display:flex; gap:6px; justify-content:space-between;">
-                    <button onclick="saveUCS()" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">💾保存</button>
-                    <button onclick="deleteUCS()" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#ff6b6b; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🗑️消去</button>
+            <!-- ツール群コンテナ -->
+            <div id="fs-tools" style="display:flex; flex-direction:column; align-items:flex-end; gap:12px; padding:0 12px 0 8px; pointer-events:none; background:rgba(20,22,26,0.6); border-radius:0 0 0 12px; padding-bottom:12px; backdrop-filter:blur(4px);">
+                <!-- グループ1: 作図・寸法系 -->
+                <div style="background:rgba(30,34,40,0.85); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; pointer-events:auto; box-shadow:0 4px 12px rgba(0,0,0,0.5); margin-top:8px;">
+                    <button class="fs-active" onclick="issueCommand('DIMORDINATE'); autoCloseDrawer();" title="引出線でXY両方の座標を配置します" style="padding:8px 12px; font-size:12px; border-radius:14px; border:1px solid #00ff88; background:rgba(40,44,52,0.9); color:#00ff88; box-shadow:0 1px 4px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">📍座標</button>
+                    <button onclick="issueCommand('DIMCONT'); autoCloseDrawer();" style="padding:8px 12px; font-size:12px; background:rgba(40,44,52,0.9); color:#ffcc00; border:1px solid #ffcc00; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">📏連続寸法</button>
                 </div>
-            </div>
 
-            <!-- グループ3: 図面管理系 -->
-            <div style="background:rgba(30,34,40,0.85); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; pointer-events:auto; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
-                <button onclick="saveProject()" style="padding:8px 12px; font-size:12px; background:rgba(40,44,52,0.9); color:#00ff88; border:1px solid #00ff88; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">💾図面保存</button>
-                <button onclick="showProjectList()" style="padding:8px 12px; font-size:12px; background:rgba(40,44,52,0.9); color:#61afef; border:1px solid #61afef; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">📂復元</button>
+                <!-- グループ2: UCS・表示・画層制御系 -->
+                <div style="background:rgba(30,34,40,0.85); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; pointer-events:auto; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
+                    <button onclick="issueCommand('UCS'); autoCloseDrawer();" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🎯UCS</button>
+                    <button onclick="issueCommand('UCS2P'); autoCloseDrawer();" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📈2点</button>
+                    <button onclick="togglePlanView(); autoCloseDrawer();" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#61afef; border:1px solid #555; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🧭PLAN</button>
+                    <button onclick="issueCommand('WCS'); autoCloseDrawer();" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">↩WCS</button>
+                    <select id="fs-ucs-select" style="padding:6px 8px; font-size:12px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" onchange="loadUCS(this.value); autoCloseDrawer();"><option value="">--読込--</option></select>
+                    <select id="fs-layer-select" style="padding:6px 8px; font-size:12px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" title="現在の画層" onchange="changeCurrentLayer(this.value); autoCloseDrawer();"><option value="">--画層--</option></select>
+                    <div style="display:flex; gap:6px; justify-content:space-between;">
+                        <button onclick="saveUCS(); autoCloseDrawer();" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">💾保存</button>
+                        <button onclick="deleteUCS(); autoCloseDrawer();" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#ff6b6b; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🗑️消去</button>
+                    </div>
+                </div>
+
+                <!-- グループ3: 図面管理系 -->
+                <div style="background:rgba(30,34,40,0.85); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; pointer-events:auto; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
+                    <button onclick="saveProject(); autoCloseDrawer();" style="padding:8px 12px; font-size:12px; background:rgba(40,44,52,0.9); color:#00ff88; border:1px solid #00ff88; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">💾図面保存</button>
+                    <button onclick="showProjectList(); autoCloseDrawer();" style="padding:8px 12px; font-size:12px; background:rgba(40,44,52,0.9); color:#61afef; border:1px solid #61afef; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">📂復元</button>
+                </div>
             </div>
         </div>
         <div id="fs-controls">
@@ -363,6 +376,27 @@
                 if (typeof checkAutoRestore === 'function') checkAutoRestore();
             }, 500);
         });
+
+        // 全画面ドロワーの開閉制御
+        function toggleFsDrawer() {
+            const drawer = document.getElementById('fs-tools-drawer');
+            const icon = document.getElementById('fs-drawer-icon');
+            if(drawer.classList.contains('fs-drawer-closed')) {
+                drawer.classList.remove('fs-drawer-closed');
+                drawer.classList.add('fs-drawer-open');
+                icon.textContent = '▶';
+            } else {
+                drawer.classList.remove('fs-drawer-open');
+                drawer.classList.add('fs-drawer-closed');
+                icon.textContent = '◀';
+            }
+        }
+        function autoCloseDrawer() {
+            const drawer = document.getElementById('fs-tools-drawer');
+            if(drawer && drawer.classList.contains('fs-drawer-open')) {
+                toggleFsDrawer();
+            }
+        }
 
         // 全画面表示の切り替え (iOS対応)
         let isPseudoFullscreen = false;
