@@ -44,9 +44,15 @@ function resetCommand() {
         hidePropertyPanel();
     }
     
-    // 寸法アクションバーを確実に隠す
+    // 寸法・非表示アクションバーを確実に隠す＆ボタン状態を復元
     const actionbar = document.getElementById('fs-dim-actionbar');
-    if(actionbar) actionbar.style.display = 'none';
+    if(actionbar) {
+        actionbar.style.display = 'none';
+        const confirmBtn = actionbar.querySelector('button[onclick="dimConfirmPoint()"]');
+        if (confirmBtn) confirmBtn.style.display = '';
+        const cancelBtn = actionbar.querySelector('button[onclick="resetCommand()"]');
+        if (cancelBtn) cancelBtn.textContent = '✖ キャンセル';
+    }
     render(); 
 }
 function issueCommand(cmd) { cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd); }
@@ -1303,11 +1309,35 @@ function processCommand(cmdText) {
     // WAITING_TEXT_STR was removed
     if(cmd==='C' && cmdState.mode==='WAITING_PLINE_NEXT' && cmdState.points.length>=2) { finishPline(true); return; }
     if(cmd==='LAYOFF') {
+        if (cmdState.mode === 'WAITING_LAYOFF_TOUCH') {
+            resetCommand();
+            addCommandLog('-> タッチ非表示モードを終了しました');
+            return;
+        }
         cmdState.mode='WAITING_LAYOFF_TOUCH';
         setPrompt('タッチ非表示: 非表示にする画層の図形をタッチしてください');
-        addCommandLog('-> 画層タッチ非表示モード: 図面上のオブジェクトをタッチするとその画層が非表示になります（終了するにはEsc/右クリック）');
+        addCommandLog('-> 画層タッチ非表示モード: 図面上のオブジェクトをタッチするとその画層が非表示になります（終了するには画面下の終了ボタン、Esc、またはもう一度タッチ非表示ボタンを押す）');
+        
         if (typeof window.showLayerManagerPanel === 'function') {
             window.showLayerManagerPanel();
+        }
+
+        // スマホなどのタッチデバイス向けに、画面下部に終了アクションバーを表示
+        const ab = document.getElementById('fs-dim-actionbar');
+        if (ab) {
+            ab.style.display = 'flex';
+            const confirmBtn = ab.querySelector('button[onclick="dimConfirmPoint()"]');
+            if (confirmBtn) confirmBtn.style.display = 'none'; // 確定ボタンは不要
+            const toggleBtn = document.getElementById('dim-mode-toggle');
+            if (toggleBtn) toggleBtn.style.display = 'none'; // 設定ボタンも不要
+            
+            const cancelBtn = ab.querySelector('button[onclick="resetCommand()"]');
+            if (cancelBtn) {
+                cancelBtn.textContent = '✖ 非表示終了';
+                cancelBtn.style.background = '#ff6b6b';
+                cancelBtn.style.padding = '8px 20px';
+                cancelBtn.style.borderRadius = '16px';
+            }
         }
         return;
     }
