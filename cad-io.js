@@ -252,14 +252,8 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
     // MTEXT
     if(e.type === 'MTEXT') {
         const pos = e.position || {x:0, y:0};
-        let text = e.text || '';
-        if (text) {
-            // 全角の￥や＼を半角のバックスラッシュに統一してパースエラーを防ぐ
-            text = text.replace(/[￥＼]/g, '\\');
-            // 元の貪欲マッチ（最長一致）によるテキスト消去を防止するため、最短一致（非貪欲）に修正
-            text = text.replace(/\\[Ppf].*?;/g, '').replace(/\\[A-Za-z][^;]*;/g, '');
-            text = text.replace(/\{|\}/g, '').replace(/\\[\\]/g, '');
-        }
+        // MTEXTの書式コード除去
+        let text = (e.text || '').replace(/\\[Ppf].*;/g, '').replace(/\\[A-Za-z][^;]*;/g, '').replace(/\{|\}/g, '').replace(/\\[\\]/g, '');
         let halign = 'left', valign = 'top';
         const attach = e.attachmentPoint || 1;
         if(attach === 2 || attach === 5 || attach === 8) halign = 'center';
@@ -573,12 +567,10 @@ function convertDwgDatabaseToApp(db) {
         try {
             // ブロック参照 (INSERT) の再帰展開
             if (ent.type === 'INSERT') {
-                const bName = ent.name || ent.blockName || ent.block_name || ent.blockRecordName || '';
-                const b = blocks[bName];
+                const b = blocks[ent.name];
                 if (b && b.entities && Array.isArray(b.entities)) {
-                    const insPt = ent.insertionPoint || ent.insertion_pt || ent.ins_pt || ent.insPt || ent.position || ent.point || {x:0, y:0};
-                    const insX = insPt.x !== undefined ? insPt.x : 0;
-                    const insY = insPt.y !== undefined ? insPt.y : 0;
+                    const insX = ent.insertionPoint ? ent.insertionPoint.x : 0;
+                    const insY = ent.insertionPoint ? ent.insertionPoint.y : 0;
                     
                     // 親の変換を適用した新しい原点
                     const newPx = pX + (insX * sX * Math.cos(rot) - insY * sY * Math.sin(rot));
@@ -647,41 +639,22 @@ function convertDwgDatabaseToApp(db) {
                     importCount++;
                 } else skipCount++;
             } else if (ent.type === 'TEXT') {
-                const pt = ent.alignmentPoint || ent.insertionPoint || ent.insertion_pt || ent.ins_pt || ent.insPt || ent.alignment_pt || ent.align_pt || ent.position || ent.point;
-                const textStr = ent.textValue !== undefined ? ent.textValue : 
-                                (ent.text_value !== undefined ? ent.text_value : 
-                                (ent.text !== undefined ? ent.text : 
-                                (ent.value !== undefined ? ent.value : 
-                                (ent.string !== undefined ? ent.string : ''))));
+                const pt = ent.alignmentPoint || ent.insertionPoint || ent.insertion_pt || ent.position;
+                const textStr = ent.textValue !== undefined ? ent.textValue : (ent.text || '');
                 let halign = 'left', valign = 'bottom';
                 if(ent.horizontalAlignment === 1 || ent.horizontalAlignment === 4) halign = 'center';
                 else if(ent.horizontalAlignment === 2) halign = 'right';
                 if(ent.verticalAlignment === 2) valign = 'middle';
                 else if(ent.verticalAlignment === 3) valign = 'top';
-                
-                let h = (ent.height || 2.5);
-                if (isNaN(h) || h <= 0) h = 2.5;
-
                 if (pt && textStr) {
                     result.entities.push({type:'TEXT', layer, color, 
-                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:textStr, height:h * Math.abs(sX), halign, valign});
+                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:textStr, height:(ent.height || 2.5) * Math.abs(sX), halign, valign});
                     importCount++;
                 } else skipCount++;
             } else if (ent.type === 'MTEXT') {
-                const pt = ent.insertionPoint || ent.insertion_pt || ent.ins_pt || ent.insPt || ent.position || ent.point;
-                let text = ent.text !== undefined ? ent.text : 
-                           (ent.textValue !== undefined ? ent.textValue : 
-                           (ent.text_value !== undefined ? ent.text_value : 
-                           (ent.value !== undefined ? ent.value : 
-                           (ent.string !== undefined ? ent.string : ''))));
-                
-                // MTEXTの書式コードの非貪欲（最短一致）処理（日本語本文の消去防止）
-                if (text) {
-                    text = text.replace(/[￥＼]/g, '\\'); // 全角の￥や＼を半角のバックスラッシュに統一してパースエラーを防ぐ
-                    text = text.replace(/\\[Ppf].*?;/g, '').replace(/\\[A-Za-z0-9][^;]*;/g, '');
-                    text = text.replace(/\{|\}/g, '').replace(/\\[\\]/g, '\\');
-                }
-
+                const pt = ent.insertionPoint || ent.position;
+                let text = ent.text || ent.textValue || '';
+                text = text.replace(/\\[A-Za-z0-9][^;]*;/g, '').replace(/\\[Ppf].*;/g, '').replace(/\{|\}/g, '').replace(/\\[\\]/g, '\\');
                 let halign = 'left', valign = 'top';
                 const attach = ent.attachmentPoint || ent.attachment || 1;
                 if(attach === 2 || attach === 5 || attach === 8) halign = 'center';
@@ -689,13 +662,9 @@ function convertDwgDatabaseToApp(db) {
                 if(attach >= 1 && attach <= 3) valign = 'top';
                 else if(attach >= 4 && attach <= 6) valign = 'middle';
                 else if(attach >= 7 && attach <= 9) valign = 'bottom';
-
-                let h = (ent.textHeight || ent.height || 2.5);
-                if (isNaN(h) || h <= 0) h = 2.5;
-
                 if (pt && text) {
                     result.entities.push({type:'TEXT', layer, color, 
-                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:text, height:h * Math.abs(sX), halign, valign});
+                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:text, height:(ent.textHeight || ent.height || 2.5) * Math.abs(sX), halign, valign});
                     importCount++;
                 } else skipCount++;
             } else if (ent.type && ent.type.includes('DIMENSION')) {
