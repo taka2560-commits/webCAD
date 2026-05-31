@@ -1240,7 +1240,6 @@ function processCommand(cmdText) {
             addCommandLog(`-> 距離 ${cmdState.offsetDist} に設定。対象を選択`); return;
         }
     }
-    }
     // WAITING_TEXT_STR was removed
     if(cmd==='C' && cmdState.mode==='WAITING_PLINE_NEXT' && cmdState.points.length>=2) { finishPline(true); return; }
     // 寸法コマンドの処理（cad-dimension.js から登録）
