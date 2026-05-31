@@ -567,10 +567,12 @@ function convertDwgDatabaseToApp(db) {
         try {
             // ブロック参照 (INSERT) の再帰展開
             if (ent.type === 'INSERT') {
-                const b = blocks[ent.name];
+                const bName = ent.name || ent.blockName || ent.block_name || ent.blockRecordName || '';
+                const b = blocks[bName];
                 if (b && b.entities && Array.isArray(b.entities)) {
-                    const insX = ent.insertionPoint ? ent.insertionPoint.x : 0;
-                    const insY = ent.insertionPoint ? ent.insertionPoint.y : 0;
+                    const insPt = ent.insertionPoint || ent.insertion_pt || ent.ins_pt || ent.insPt || ent.position || ent.point || {x:0, y:0};
+                    const insX = insPt.x !== undefined ? insPt.x : 0;
+                    const insY = insPt.y !== undefined ? insPt.y : 0;
                     
                     // 親の変換を適用した新しい原点
                     const newPx = pX + (insX * sX * Math.cos(rot) - insY * sY * Math.sin(rot));
@@ -670,7 +672,8 @@ function convertDwgDatabaseToApp(db) {
                 // MTEXTの書式コードの非貪欲（最短一致）安全クリーン処理
                 if (text) {
                     text = text.replace(/\\[Pp]/g, ' '); // 改行はスペースに置換
-                    text = text.replace(/\\[A-Za-z0-9_.-]+[^;]*?;/g, ''); // 最短一致 (*?) でフォントや色設定を除去
+                    text = text.replace(/\\f[^;]*?;/g, ''); // フォント名指定 (\fHGｺﾞｼｯｸM; 等) を確実に消去（日本語フォント名対応）
+                    text = text.replace(/\\[A-Za-z_][^;]*?;/g, ''); // その他の書式設定を最短一致で確実に消去
                     text = text.replace(/\{|\}/g, '').replace(/\\\\/g, '\\');
                 }
 
