@@ -252,8 +252,19 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
     // MTEXT
     if(e.type === 'MTEXT') {
         const pos = e.position || {x:0, y:0};
-        // MTEXTの書式コード除去
-        let text = (e.text || '').replace(/\\[Ppf].*;/g, '').replace(/\\[A-Za-z][^;]*;/g, '').replace(/\{|\}/g, '').replace(/\\[\\]/g, '');
+        let text = e.text || '';
+        if (text) {
+            // 全角の￥や＼を半角のバックスラッシュに統一してパースエラーを防ぐ
+            text = text.replace(/[￥＼]/g, '\\');
+            // \\P や \P などの改行をスペースに置換
+            text = text.replace(/\\+[Pp]/g, ' ');
+            // \\f や \f で始まるフォント名指定を最短一致で確実に消去（日本語フォント名対応）
+            text = text.replace(/\\+f[^;]*?;/g, '');
+            // その他の書式設定を最短一致で確実に消去
+            text = text.replace(/\\+[A-Za-z_][^;]*?;/g, '');
+            // 中括弧 { } やエスケープの処理
+            text = text.replace(/\{|\}/g, '').replace(/\\+/g, '\\').replace(/\\$/g, '');
+        }
         let halign = 'left', valign = 'top';
         const attach = e.attachmentPoint || 1;
         if(attach === 2 || attach === 5 || attach === 8) halign = 'center';
@@ -671,10 +682,11 @@ function convertDwgDatabaseToApp(db) {
                 
                 // MTEXTの書式コードの非貪欲（最短一致）安全クリーン処理
                 if (text) {
-                    text = text.replace(/\\[Pp]/g, ' '); // 改行はスペースに置換
-                    text = text.replace(/\\f[^;]*?;/g, ''); // フォント名指定 (\fHGｺﾞｼｯｸM; 等) を確実に消去（日本語フォント名対応）
-                    text = text.replace(/\\[A-Za-z_][^;]*?;/g, ''); // その他の書式設定を最短一致で確実に消去
-                    text = text.replace(/\{|\}/g, '').replace(/\\\\/g, '\\');
+                    text = text.replace(/[￥＼]/g, '\\'); // 全角の￥や＼を半角のバックスラッシュに統一してパースエラーを防ぐ
+                    text = text.replace(/\\+[Pp]/g, ' '); // 改行はスペースに置換
+                    text = text.replace(/\\+f[^;]*?;/g, ''); // フォント名指定を確実に消去（日本語フォント名・二重バックスラッシュ対応）
+                    text = text.replace(/\\+[A-Za-z_][^;]*?;/g, ''); // その他の書式設定を最短一致で確実に消去
+                    text = text.replace(/\{|\}/g, '').replace(/\\+/g, '\\').replace(/\\$/g, '');
                 }
 
                 let halign = 'left', valign = 'top';
