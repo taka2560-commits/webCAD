@@ -359,7 +359,7 @@ function drawDimRubberBand(mode, sw, mp) {
             }
             _drawDimLinearCore(pPrev, pNew, newOff, cmdState.dimContDir, '#ffff00', null);
         } else {
-            const PARALLEL_STEP = 10;
+            const PARALLEL_STEP = 25;
             const sign = cmdState.dimContBaseOffset >= 0 ? 1 : -1;
             const totalOff = cmdState.dimContBaseOffset + (PARALLEL_STEP * (cmdState.dimContLevel + 1) * sign);
             const D_y = (p1.y + pts[1].y)/2 + totalOff;
@@ -565,7 +565,7 @@ function handleDimPointInput(mode, wcs) {
             entities.push({type:'DIMENSION', subType:'LINEAR', layer:currentLayerIndex, color:null, p1:{x:pPrev.x,y:pPrev.y}, p2:{x:pNew.x,y:pNew.y}, offset:newOffset, dimDir:cmdState.dimContDir, textOverride:null});
         } else {
             cmdState.dimContLevel++;
-            const PARALLEL_STEP = 10;
+            const PARALLEL_STEP = 25;
             const sign = cmdState.dimContBaseOffset >= 0 ? 1 : -1;
             const totalOffset = cmdState.dimContBaseOffset + (PARALLEL_STEP * cmdState.dimContLevel * sign);
             const D_y = (p1.y + pts[1].y)/2 + totalOffset;
