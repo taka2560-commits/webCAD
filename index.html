@@ -267,6 +267,7 @@
             <span class="paper-space-label" style="opacity:0.6;font-size:0.9em;">モデル</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <button id="btn-area-select" class="status-btn" title="ドラッグによる交差選択（範囲選択）の有効/無効切り替え" onclick="toggleAreaSelect()">範囲選択: OFF</button>
             <button id="btn-ortho" class="status-btn" title="直交モード (F8)" onclick="toggleOrtho()">ORTHO</button>
             <div style="position:relative;">
                 <button id="btn-osnap" class="status-btn active" title="オブジェクトスナップ (F3)" onclick="toggleOsnapMain()">OSNAP</button>
@@ -407,6 +408,7 @@
             </div>
         </div>
         <div id="fs-controls">
+            <button id="fs-btn-area-select" onclick="toggleAreaSelect()" title="交差・範囲選択 ON/OFF" style="font-size:10px; font-weight:bold; width:65px; border-radius:15px;">範囲選択</button>
             <button id="fs-btn-osnap" class="fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
             <button id="fs-btn-coord" class="fs-active" onclick="toggleFsCoordAlways()" title="座標常時表示 ON/OFF">XY</button>
             <button id="fs-btn-extents" onclick="zoomExtents()" title="全体表示">⛶</button>

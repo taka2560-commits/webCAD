@@ -12,6 +12,7 @@ const snapIndicator = document.getElementById('snap-indicator');
 let layers = [{name:'0', color:'#00ffff', visible:true}];
 let currentLayerIndex = 0;
 window.ghostLayerMode = false; // 非表示画層をうっすら表示するモード
+window.areaSelectEnabled = false; // 交差・範囲選択を有効化するフラグ（基本OFF）
 let entities = [];
 let view = { x:0, y:0, scale:1, rotation:0 };
 let mouse = { screenX:0, screenY:0, wcsX:0, wcsY:0, ucsX:0, ucsY:0, isPanning:false, isSelecting:false, selStartX:0, selStartY:0 };
@@ -1472,9 +1473,11 @@ function setupEventListeners() {
                     }
                 } else {
                     if (cmdState.mode === 'IDLE') cmdState.highlightIdx = -1;
-                    mouse.isSelecting = true;
-                    mouse.selStartX = mouse.screenX;
-                    mouse.selStartY = mouse.screenY;
+                    if (window.areaSelectEnabled) {
+                        mouse.isSelecting = true;
+                        mouse.selStartX = mouse.screenX;
+                        mouse.selStartY = mouse.screenY;
+                    }
                 }
                 updatePropertiesPanel();
                 render();
@@ -1814,7 +1817,7 @@ function setupEventListeners() {
                 if(!isFullscreen) {
                     // IDLEモードまたは編集コマンドのオブジェクト選択待ちの場合は範囲選択開始
                     const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
-                    if(selectModes.includes(cmdState.mode)) {
+                    if(selectModes.includes(cmdState.mode) && window.areaSelectEnabled) {
                         touchState.isSelecting = true;
                         touchState.selStartX = touchState.startX;
                         touchState.selStartY = touchState.startY;
@@ -2274,6 +2277,21 @@ window.changeEntityProp = function(idx, prop, val) {
 };
 
 init();
+
+// 交差・範囲選択モードの切り替え
+window.toggleAreaSelect = function() {
+    window.areaSelectEnabled = !window.areaSelectEnabled;
+    const btn = document.getElementById('btn-area-select');
+    if(btn) {
+        btn.className = window.areaSelectEnabled ? 'status-btn active' : 'status-btn';
+        btn.textContent = window.areaSelectEnabled ? '範囲選択: ON' : '範囲選択: OFF';
+    }
+    const fsBtn = document.getElementById('fs-btn-area-select');
+    if(fsBtn) {
+        fsBtn.className = window.areaSelectEnabled ? 'fs-active' : '';
+    }
+    addCommandLog(`-> 交差選択（範囲選択）: ${window.areaSelectEnabled ? 'ON' : 'OFF'}`);
+};
 
 // UI連携関数(グローバル)
 window.toggleOrtho = function() {
