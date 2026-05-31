@@ -256,8 +256,8 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
         if (text) {
             // 全角の￥や＼を半角のバックスラッシュに統一してパースエラーを防ぐ
             text = text.replace(/[￥＼]/g, '\\');
-            // 元の貪欲マッチによる書式除去に戻す（余計な書式ゴミを残さないため）
-            text = text.replace(/\\[Ppf].*;/g, '').replace(/\\[A-Za-z][^;]*;/g, '');
+            // 元の貪欲マッチ（最長一致）によるテキスト消去を防止するため、最短一致（非貪欲）に修正
+            text = text.replace(/\\[Ppf].*?;/g, '').replace(/\\[A-Za-z][^;]*;/g, '');
             text = text.replace(/\{|\}/g, '').replace(/\\[\\]/g, '');
         }
         let halign = 'left', valign = 'top';
@@ -675,10 +675,10 @@ function convertDwgDatabaseToApp(db) {
                            (ent.value !== undefined ? ent.value : 
                            (ent.string !== undefined ? ent.string : ''))));
                 
-                // MTEXTの書式コードの貪欲（最長一致）処理（ゴミを残さないため）
+                // MTEXTの書式コードの非貪欲（最短一致）処理（日本語本文の消去防止）
                 if (text) {
                     text = text.replace(/[￥＼]/g, '\\'); // 全角の￥や＼を半角のバックスラッシュに統一してパースエラーを防ぐ
-                    text = text.replace(/\\[Ppf].*;/g, '').replace(/\\[A-Za-z0-9][^;]*;/g, '');
+                    text = text.replace(/\\[Ppf].*?;/g, '').replace(/\\[A-Za-z0-9][^;]*;/g, '');
                     text = text.replace(/\{|\}/g, '').replace(/\\[\\]/g, '\\');
                 }
 
