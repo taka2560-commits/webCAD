@@ -643,6 +643,7 @@ function moveEntity(e, dx, dy) {
 
 // アクションバー表示用のヘルパー
 function _showDimActionBar(isContinuous) {
+    if(document.body.classList.contains('fullscreen-mode')) return; // 全画面モード時は新UIがあるため何もしない
     const actionbar = document.getElementById('fs-dim-actionbar');
     if(actionbar) actionbar.style.display = 'flex';
     const toggleBtn = document.getElementById('dim-mode-toggle');

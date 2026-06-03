@@ -34,10 +34,15 @@ function resetCommand() {
     // 寸法アクションバーを確実に隠す
     const actionbar = document.getElementById('fs-dim-actionbar');
     if(actionbar) actionbar.style.display = 'none';
+    if(window.updateFsModernUI) window.updateFsModernUI();
     render(); 
 }
-function issueCommand(cmd) { cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd); updatePropertiesPanel(); }
-function setActiveTool(name) { document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); if(name){document.querySelectorAll('.tool-cmd').forEach(el=>{if(el.textContent===name)el.parentElement.classList.add('active');});} }
+function issueCommand(cmd) { cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd); updatePropertiesPanel(); if(window.updateFsModernUI) window.updateFsModernUI(); }
+function setActiveTool(name) { 
+    document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); 
+    if(name){document.querySelectorAll('.tool-cmd').forEach(el=>{if(el.textContent===name)el.parentElement.classList.add('active');});} 
+    if(window.updateFsModernUI) window.updateFsModernUI();
+}
 
 // コマンド名とツールバーラベルのマッピング
 let activeCommandName = '';
@@ -577,6 +582,7 @@ function render() {
         _renderPending = false;
         ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawAxes(); drawEntities(); drawDimensions(); drawRubberBand(); drawSnapMarker(); drawCrosshair();
+        if(window.updateFsModernUI) window.updateFsModernUI();
     });
 }
 // 即時描画版（ルーペ等、rAF待たずに描画したい場合）
@@ -584,6 +590,7 @@ function renderImmediate() {
     _renderPending = false;
     ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
     drawAxes(); drawEntities(); drawDimensions(); drawRubberBand(); drawSnapMarker(); drawCrosshair();
+    if(window.updateFsModernUI) window.updateFsModernUI();
 }
 
 function drawAxes() {
