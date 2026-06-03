@@ -244,9 +244,10 @@
         }
 
         /* 通常画面と全画面（座標読取）の表示分離制御 */
-        #fs-tools, #fs-zoom-panel, #fs-controls { display: none; }
+        #fs-tools, #fs-tools-toggle, #fs-zoom-panel, #fs-controls { display: none; }
 
         body.fullscreen-mode #fs-tools, body.reading-mode #fs-tools { display: flex !important; }
+        body.fullscreen-mode #fs-tools-toggle, body.reading-mode #fs-tools-toggle { display: flex !important; }
         body.fullscreen-mode #fs-zoom-panel, body.reading-mode #fs-zoom-panel { display: flex !important; }
         body.fullscreen-mode #fs-controls, body.reading-mode #fs-controls { display: flex !important; }
         body.fullscreen-mode #fs-dim-actionbar { display: none !important; }
@@ -297,8 +298,8 @@
             transform: translateX(0);
         }
         #fs-tools-toggle {
-            position: absolute;
-            left: -32px;
+            position: fixed;
+            right: 0;
             top: 50%;
             transform: translateY(-50%);
             width: 32px;
@@ -317,6 +318,11 @@
             justify-content: center;
             box-shadow: -2px 2px 8px rgba(0,0,0,0.3);
             pointer-events: auto;
+            z-index: 100016;
+            transition: right 0.3s cubic-bezier(0.1, 0.76, 0.55, 0.94);
+        }
+        #fs-tools-toggle.open {
+            right: 180px;
         }
 
         /* ツールバー内のボタンのスタイル */
@@ -757,8 +763,8 @@
             <span id="fs-coord-y">Y: 0.000</span>
             <span id="fs-snap-label" class="snap-label"></span>
         </div>
+        <button id="fs-tools-toggle" onclick="toggleFsTools(event)">◀</button>
         <div id="fs-tools">
-            <button id="fs-tools-toggle" onclick="toggleFsTools(event)">◀</button>
             <button class="fs-tool-panel-btn fs-tool-panel-btn-primary" onclick="issueCommand('DIMORDINATE'); toggleFsTools(false);" title="引出線でXY両方の座標を配置します">📍 座標</button>
             <button class="fs-tool-panel-btn fs-tool-panel-btn-accent" onclick="issueCommand('DIMCONT'); toggleFsTools(false);" title="連続寸法を作図します">📐 連続寸法</button>
             
@@ -1554,9 +1560,11 @@
 
             if (isOpen) {
                 tools.classList.add('open');
+                toggleBtn.classList.add('open');
                 toggleBtn.textContent = '▶';
             } else {
                 tools.classList.remove('open');
+                toggleBtn.classList.remove('open');
                 toggleBtn.textContent = '◀';
             }
         };
