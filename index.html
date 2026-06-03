@@ -249,9 +249,20 @@
         #fs-exit-reading-btn:active { transform: scale(0.95); }
         body.reading-mode #fs-exit-reading-btn { display: block !important; }
 
-        /* モバイル用のレイアウト非表示対応 */
-        body.fullscreen-mode #fs-controls { display: none !important; }
+        /* 通常画面と全画面（座標読取）の表示分離制御 */
+        #fs-tools, #fs-zoom-panel, #fs-controls { display: none; }
+
+        body.fullscreen-mode #fs-tools { display: flex !important; }
+        body.fullscreen-mode #fs-zoom-panel { display: flex !important; }
+        body.fullscreen-mode #fs-controls { display: flex !important; }
         body.fullscreen-mode #fs-dim-actionbar { display: none !important; }
+
+        body.fullscreen-mode .fs-modern-header,
+        body.fullscreen-mode .fs-modern-bottom-bar,
+        body.fullscreen-mode .fs-modern-bottom-sheet,
+        body.fullscreen-mode .fs-modern-actionbar {
+            display: none !important;
+        }
 
         /* モバイル標準UI（非全画面かつスマホ幅時）のレイアウト対応 */
         #fs-overlay { display: none; }
@@ -261,6 +272,175 @@
             /* スマホ通常幅の際はPC用のトップバー、ツールバー、コマンドラインを消し、モバイル用UIを表示 */
             #top-bar, #toolbar, #command-line-area { display: none !important; }
             #fs-overlay { display: block !important; }
+        }
+
+        /* === スライドツールバー (#fs-tools) のスタイリング === */
+        #fs-tools {
+            position: fixed;
+            top: 60px;
+            right: 0;
+            bottom: 80px;
+            width: 180px;
+            background: rgba(20, 22, 28, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-left: 1px solid rgba(255, 255, 255, 0.12);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px 0 0 12px;
+            z-index: 100015;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 8px;
+            gap: 8px;
+            box-shadow: -4px 0 20px rgba(0,0,0,0.5);
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.1, 0.76, 0.55, 0.94);
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+        #fs-tools.open {
+            transform: translateX(0);
+        }
+        #fs-tools-toggle {
+            position: absolute;
+            left: -32px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 32px;
+            height: 48px;
+            background: rgba(20, 22, 28, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-right: none;
+            border-radius: 8px 0 0 8px;
+            color: #00ff88;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: -2px 2px 8px rgba(0,0,0,0.3);
+            pointer-events: auto;
+        }
+
+        /* ツールバー内のボタンのスタイル */
+        .fs-tool-panel-btn {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #ddd;
+            border-radius: 14px;
+            padding: 8px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            box-sizing: border-box;
+            transition: all 0.15s;
+            min-height: 38px;
+            pointer-events: auto;
+        }
+        .fs-tool-panel-btn:active {
+            transform: scale(0.95);
+            background: rgba(0, 255, 136, 0.15);
+            border-color: #00ff88;
+        }
+        .fs-tool-panel-btn-primary {
+            border-color: rgba(0, 255, 136, 0.4);
+            color: #00ff88;
+            background: rgba(0, 255, 136, 0.05);
+        }
+        .fs-tool-panel-btn-accent {
+            border-color: rgba(255, 204, 0, 0.4);
+            color: #ffcc00;
+            background: rgba(255, 204, 0, 0.05);
+        }
+        .fs-tool-panel-btn-danger {
+            border-color: rgba(255, 107, 107, 0.4);
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.05);
+        }
+        
+        /* グループ化された枠 */
+        .fs-tool-group-box {
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            padding: 8px 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-sizing: border-box;
+            background: rgba(255,255,255,0.01);
+        }
+        .fs-tool-group-box select {
+            width: 100%;
+            max-width: 100%;
+            height: 32px;
+            border-radius: 14px;
+            padding: 0 8px;
+            font-size: 11px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(20, 22, 28, 0.8);
+            color: #fff;
+            box-sizing: border-box;
+            pointer-events: auto;
+            outline: none;
+        }
+        .fs-tool-group-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            width: 100%;
+        }
+
+        /* 右下コントロールの丸ボタン化 */
+        #fs-controls {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100018;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+        .fs-ctrl-circle-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255, 255, 255, 0.25);
+            background: rgba(20, 22, 28, 0.85);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+            transition: all 0.15s;
+            box-sizing: border-box;
+            pointer-events: auto;
+        }
+        .fs-ctrl-circle-btn:active {
+            transform: scale(0.92);
+        }
+        .fs-ctrl-circle-btn.fs-active {
+            border-color: #00ff88;
+            color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+        }
+        .fs-ctrl-circle-btn-exit {
+            border-color: #ff6b6b;
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
         }
 
         /* === 画層一括管理フローティングパネル === */
@@ -583,14 +763,42 @@
             <span id="fs-coord-y">Y: 0.000</span>
             <span id="fs-snap-label" class="snap-label"></span>
         </div>
-        <div id="fs-tools" style="position:fixed; top:60px; right:12px; display:flex; flex-direction:column; align-items:flex-end; gap:8px; z-index:100001; pointer-events:none;">
-            <button class="fs-active" onclick="issueCommand('DIMORDINATE')" title="引出線でXY両方の座標を配置します" style="pointer-events:auto; padding:5px 8px; font-size:11px; border-radius:14px; border:1px solid #00ff88; background:rgba(40,44,52,0.85); color:#00ff88; box-shadow:0 1px 4px rgba(0,0,0,0.5); white-space:nowrap;">📍座標</button>
-            <button onclick="issueCommand('DIMCONT')" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ffcc00; border:1px solid #ffcc00; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📏連続寸法</button>
+        <div id="fs-tools">
+            <button id="fs-tools-toggle" onclick="toggleFsTools(event)">◀</button>
+            <button class="fs-tool-panel-btn fs-tool-panel-btn-primary" onclick="issueCommand('DIMORDINATE'); toggleFsTools(false);" title="引出線でXY両方の座標を配置します">📍 座標</button>
+            <button class="fs-tool-panel-btn fs-tool-panel-btn-accent" onclick="issueCommand('DIMCONT'); toggleFsTools(false);" title="連続寸法を作図します">📐 連続寸法</button>
+            
+            <div class="fs-tool-group-box">
+                <div class="fs-tool-group-row">
+                    <button class="fs-tool-panel-btn" onclick="issueCommand('UCS'); toggleFsTools(false);" title="新しい原点を指定">🎯 UCS</button>
+                    <button class="fs-tool-panel-btn" onclick="issueCommand('UCS2P'); toggleFsTools(false);" title="基点+方向で座標系を設定">📈 2点</button>
+                </div>
+                <div class="fs-tool-group-row">
+                    <button class="fs-tool-panel-btn" onclick="togglePlanView(); toggleFsTools(false);" title="画面をUCSに平行・直角に合わせる">🧭 PLAN</button>
+                    <button class="fs-tool-panel-btn" onclick="issueCommand('WCS'); toggleFsTools(false);" title="ワールド座標系に戻す">↩ WCS</button>
+                </div>
+                
+                <select id="fs-ucs-select" onchange="loadUCS(this.value); toggleFsTools(false);"><option value="">--読込--</option></select>
+                <select id="fs-layer-select" title="現在の画層" onchange="changeCurrentLayer(this.value); toggleFsTools(false);"><option value="">--画層--</option></select>
+                
+                <div class="fs-tool-group-row">
+                    <button class="fs-tool-panel-btn fs-tool-panel-btn-primary" onclick="openLayerManagerDialog(); toggleFsTools(false);" title="画層一括管理を開く">👁️ 画層管理</button>
+                    <button class="fs-tool-panel-btn fs-tool-panel-btn-accent" onclick="toggleTouchLayerHide(); toggleFsTools(false);" title="画面タップで画層を消す">🚫 タッチ消去</button>
+                </div>
+                <div class="fs-tool-group-row">
+                    <button class="fs-tool-panel-btn" onclick="saveUCS(); toggleFsTools(false);" title="現在のUCSを保存">💾 保存</button>
+                    <button class="fs-tool-panel-btn fs-tool-panel-btn-danger" onclick="deleteUCS(); toggleFsTools(false);" title="UCSを削除">🗑️ 消去</button>
+                </div>
+            </div>
+
+            <button class="fs-tool-panel-btn fs-tool-panel-btn-primary" onclick="saveProject(); toggleFsTools(false);" title="プロジェクト保存">💾 図面保存</button>
+            <button class="fs-tool-panel-btn" onclick="showProjectList(); toggleFsTools(false);" title="保存済みプロジェクトを復元">📂 復元</button>
         </div>
         <div id="fs-controls">
-            <button id="fs-btn-osnap" class="fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
-            <button id="fs-btn-coord" class="fs-active" onclick="toggleFsCoordAlways()" title="座標常時表示 ON/OFF">XY</button>
-            <button id="fs-btn-extents" onclick="zoomExtents()" title="全体表示">⛶</button>
+            <button id="fs-btn-osnap" class="fs-ctrl-circle-btn fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
+            <button id="fs-btn-coord" class="fs-ctrl-circle-btn fs-active" onclick="toggleFsCoordAlways()" title="座標常時表示 ON/OFF">XY</button>
+            <button id="fs-btn-extents" class="fs-ctrl-circle-btn" onclick="zoomExtents()" title="全体表示">⛶</button>
+            <button id="fs-btn-exit" class="fs-ctrl-circle-btn fs-ctrl-circle-btn-exit" onclick="toggleFullscreen()" title="全画面解除">✕</button>
         </div>
         
         <div id="fs-zoom-panel">
@@ -782,6 +990,7 @@
         function enablePseudoFullscreen() {
             isPseudoFullscreen = true;
             document.body.classList.add('fullscreen-mode');
+            if (typeof toggleFsTools === 'function') toggleFsTools(false);
             window.scrollTo(0, 1); // iOSのURLバー配置ハック
             setTimeout(() => { if(window.resizeCanvas) window.resizeCanvas(); }, 100);
         }
@@ -789,6 +998,7 @@
         function disablePseudoFullscreen() {
             isPseudoFullscreen = false;
             document.body.classList.remove('fullscreen-mode');
+            if (typeof toggleFsTools === 'function') toggleFsTools(false);
             const tt = document.getElementById('fs-coord-tooltip');
             if(tt) tt.style.display = 'none';
             setTimeout(() => { if(window.resizeCanvas) window.resizeCanvas(); }, 100);
@@ -798,8 +1008,10 @@
         function onFullscreenChange() {
             if (document.fullscreenElement || document.webkitFullscreenElement) {
                 document.body.classList.add('fullscreen-mode');
+                if (typeof toggleFsTools === 'function') toggleFsTools(false);
             } else {
                 document.body.classList.remove('fullscreen-mode');
+                if (typeof toggleFsTools === 'function') toggleFsTools(false);
                 // ツールチップを非表示にする
                 const tt = document.getElementById('fs-coord-tooltip');
                 if(tt) tt.style.display = 'none';
@@ -1326,6 +1538,29 @@
             if (sheet) sheet.classList.remove('open');
             document.querySelectorAll('.fs-bar-btn').forEach(btn => btn.classList.remove('active'));
         }
+
+        // 全画面スライドツールバー (#fs-tools) の開閉制御
+        window.toggleFsTools = function(forceVal) {
+            const tools = document.getElementById('fs-tools');
+            const toggleBtn = document.getElementById('fs-tools-toggle');
+            if (!tools || !toggleBtn) return;
+
+            // イベントオブジェクトが渡された場合は伝播を止める
+            if (forceVal && typeof forceVal.stopPropagation === 'function') {
+                forceVal.stopPropagation();
+                forceVal = undefined;
+            }
+
+            const isOpen = (forceVal !== undefined) ? forceVal : !tools.classList.contains('open');
+
+            if (isOpen) {
+                tools.classList.add('open');
+                toggleBtn.textContent = '▶';
+            } else {
+                tools.classList.remove('open');
+                toggleBtn.textContent = '◀';
+            }
+        };
 
         function triggerFileInput() {
             const input = document.getElementById('dxf-file-input');

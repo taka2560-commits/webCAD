@@ -1,4 +1,4 @@
-const CACHE_NAME = 'webcad-pwa-cache-v12';
+const CACHE_NAME = 'webcad-pwa-cache-v13';
 const urlsToCache = [
   './',
   './index.html',
