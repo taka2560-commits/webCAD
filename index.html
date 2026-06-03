@@ -145,18 +145,25 @@
 
         /* === モバイルハイブリッドUI用スタイル === */
         .fs-modern-header {
-            position: fixed; top: 0; left: 0; right: 0; height: 46px;
-            background: rgba(25, 28, 34, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            position: fixed; top: 0; left: 0; right: 0; height: 50px;
+            background: rgba(25, 28, 34, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
             border-bottom: 1px solid rgba(255,255,255,0.08); z-index: 100010;
-            display: flex; align-items: center; justify-content: space-between; padding: 0 12px;
+            display: flex; align-items: center; justify-content: flex-start; padding: 0 10px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            overflow-x: auto; white-space: nowrap; gap: 8px;
+            -webkit-overflow-scrolling: touch;
         }
+        .fs-modern-header::-webkit-scrollbar { display: none; } /* スクロールバー非表示 */
+        
+        .fs-hdr-item { flex-shrink: 0; }
+        
         .fs-modern-title {
-            font-size: 13px; font-weight: bold; color: #e0e0e0; display: flex; align-items: center; gap: 6px;
+            font-size: 13px; font-weight: bold; color: #e0e0e0; display: flex; align-items: center; gap: 5px; margin-right: 5px;
         }
         .fs-modern-title span {
             background: rgba(0, 255, 136, 0.15); color: #00ff88; padding: 2px 6px; border-radius: 10px; font-size: 10px; font-weight: bold;
         }
+        
         .fs-modern-bottom-bar {
             position: fixed; bottom: 0; left: 0; right: 0; height: 62px;
             background: rgba(25, 28, 34, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
@@ -180,7 +187,7 @@
 
         .fs-modern-bottom-sheet {
             position: fixed; bottom: 0; left: 0; right: 0;
-            background: rgba(20, 22, 28, 0.92); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            background: rgba(20, 22, 28, 0.94); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             border-top: 1px solid rgba(255,255,255,0.12); border-radius: 16px 16px 0 0;
             z-index: 100009; padding: 12px 16px calc(78px + env(safe-area-inset-bottom));
             transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.1, 0.76, 0.55, 0.94);
@@ -216,7 +223,7 @@
         }
         .fs-modern-actionbar.open { transform: translateX(-50%) translateY(0); }
         .fs-action-btn {
-            border: none; border-radius: 18px; padding: 8px 14px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: transform 0.15s;
+            border: none; border-radius: 18px; padding: 6px 12px; font-weight: bold; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: transform 0.15s;
         }
         .fs-action-btn:active { transform: scale(0.95); }
         .fs-action-btn-confirm { background: #00ff88; color: #000; }
@@ -225,11 +232,38 @@
         .fs-action-btn-active { background: rgba(0, 255, 136, 0.15); border: 1.5px solid #00ff88; color: #00ff88; }
         .fs-action-btn-danger { background: rgba(255,107,107,0.15); border: 1px solid #ff6b6b; color: #ff6b6b; }
 
+        /* 座標読み取りモード (`reading-mode`) 専用UIの定義 */
+        body.reading-mode .fs-modern-header,
+        body.reading-mode .fs-modern-bottom-bar,
+        body.reading-mode .fs-modern-bottom-sheet,
+        body.reading-mode .fs-modern-actionbar {
+            display: none !important;
+        }
+        #fs-exit-reading-btn {
+            display: none; position: fixed; bottom: 20px; right: 20px; z-index: 100020;
+            background: rgba(255, 107, 107, 0.9); border: none; color: #fff;
+            padding: 10px 18px; border-radius: 20px; font-weight: bold; font-size: 13px;
+            cursor: pointer; box-shadow: 0 4px 15px rgba(255,107,107,0.4);
+            transition: transform 0.1s;
+        }
+        #fs-exit-reading-btn:active { transform: scale(0.95); }
+        body.reading-mode #fs-exit-reading-btn { display: block !important; }
+
         /* モバイル用のレイアウト非表示対応 */
         body.fullscreen-mode #fs-zoom-panel { display: none !important; }
         body.fullscreen-mode #fs-tools { display: none !important; }
         body.fullscreen-mode #fs-controls { display: none !important; }
         body.fullscreen-mode #fs-dim-actionbar { display: none !important; }
+
+        /* モバイル標準UI（非全画面かつスマホ幅時）のレイアウト対応 */
+        #fs-overlay { display: none; }
+        body.fullscreen-mode #fs-overlay { display: block; }
+        
+        @media screen and (max-width: 430px) {
+            /* スマホ通常幅の際はPC用のトップバー、ツールバー、コマンドラインを消し、モバイル用UIを表示 */
+            #top-bar, #toolbar, #command-line-area { display: none !important; }
+            #fs-overlay { display: block !important; }
+        }
     </style>
     <!-- PWA Settings -->
     <link rel="manifest" href="manifest.json">
@@ -395,12 +429,22 @@
 
         <!-- === スマホ最適化 新UI === -->
         <div class="fs-modern-header">
-            <div class="fs-modern-title">📱 WebCAD <span id="fs-modern-ucs-label">WCS</span></div>
-            <div style="display:flex; align-items:center; gap:6px;">
-                <button onclick="toggleFsOsnap()" id="fs-modern-osnap-btn" class="fs-action-btn fs-action-btn-neutral" style="padding: 4px 10px; font-size: 11px; border-radius: 12px; height: 26px;">OSNAP</button>
-                <button onclick="toggleFsOrtho()" id="fs-modern-ortho-btn" class="fs-action-btn fs-action-btn-neutral" style="padding: 4px 10px; font-size: 11px; border-radius: 12px; height: 26px;">直交</button>
-                <button onclick="toggleFullscreen()" style="background:transparent; border:1px solid #ff6b6b; color:#ff6b6b; border-radius:12px; padding:4px 10px; font-size:11px; font-weight:bold; cursor:pointer; height: 26px; display:flex; align-items:center;">✖解除</button>
-            </div>
+            <div class="fs-modern-title fs-hdr-item">📱 WebCAD <span id="fs-modern-ucs-label">WCS</span></div>
+            <button onclick="toggleFsReadingMode()" id="fs-modern-read-btn" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">🎯 座標読取</button>
+            <button onclick="toggleFullscreen()" id="fs-modern-fullscreen-btn" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">⛶ 全画面</button>
+            <button onclick="resetUCS()" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">🌐 WCS戻す</button>
+            <select id="fs-modern-ucs-select" class="fs-hdr-item" style="padding:4px 6px; font-size:11px; background:rgba(40,44,52,0.85); color:#fff; border:1px solid #666; border-radius:14px; height: 28px;" onchange="loadUCS(this.value)">
+                <option value="">--UCS読込--</option>
+            </select>
+            <button onclick="togglePlanView()" id="fs-modern-plan-btn" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">🧭 PLAN</button>
+            <button onclick="toggleFsOsnap()" id="fs-modern-osnap-btn" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">⊕ OSNAP</button>
+            <button onclick="toggleFsOrtho()" id="fs-modern-ortho-btn" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">直交</button>
+            <button onclick="toggleFsTouchSelection()" id="fs-modern-select-btn" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">🔲 範囲選択</button>
+            <button onclick="triggerFileInput()" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">📁 開く</button>
+            <button onclick="saveProject()" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">💾 保存</button>
+            <button onclick="showProjectList()" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">📂 復元</button>
+            <button onclick="zoomToOrigin()" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">🔍 原点</button>
+            <button onclick="closeDrawing()" class="fs-action-btn fs-action-btn-danger fs-hdr-item" style="height: 28px;">✕ 閉じる</button>
         </div>
 
         <div class="fs-modern-bottom-bar" id="fs-modern-bottom-bar">
@@ -410,14 +454,14 @@
             <button class="fs-bar-btn" id="fs-bar-btn-draw" onclick="toggleFsSheet('draw')">
                 <span class="fs-bar-btn-icon">➕</span><span>作図</span>
             </button>
-            <button class="fs-bar-btn" id="fs-bar-btn-edit" onclick="toggleFsSheet('edit')">
-                <span class="fs-bar-btn-icon">⚙</span><span>編集</span>
+            <button class="fs-bar-btn" id="fs-bar-btn-undo" onclick="undo()">
+                <span class="fs-bar-btn-icon">↩</span><span>戻す</span>
             </button>
             <button class="fs-bar-btn" id="fs-bar-btn-dim" onclick="toggleFsSheet('dim')">
                 <span class="fs-bar-btn-icon">📐</span><span>寸法</span>
             </button>
             <button class="fs-bar-btn" id="fs-bar-btn-layer" onclick="toggleFsSheet('layer')">
-                <span class="fs-bar-btn-icon">🎨</span><span>画層</span>
+                <span class="fs-bar-btn-icon">🎨</span><span>設定</span>
             </button>
         </div>
 
@@ -432,6 +476,9 @@
         <div class="fs-modern-actionbar" id="fs-modern-actionbar">
             <!-- 動的生成 -->
         </div>
+
+        <!-- 座標読み取りモード解除ボタン -->
+        <button id="fs-exit-reading-btn" onclick="toggleFsReadingMode()">✖ 読取解除</button>
     </div>
     
     <!-- 寸法入力専用アクションバー（通常画面・全画面共通で使用） -->
@@ -741,6 +788,17 @@
                     <div class="fs-sheet-btn" onclick="closeDrawing(); closeFsSheet();" style="border-color: rgba(255,107,107,0.3); color: #ff6b6b;">
                         <span class="fs-sheet-btn-icon">✕</span><span>新規図面</span>
                     </div>
+                    
+                    <div style="grid-column: span 4; border-top: 1px solid rgba(255,255,255,0.08); margin: 5px 0; padding-top: 8px; font-size: 11px; color:#aaa;">🎨 キャンバス背景色</div>
+                    <div class="fs-sheet-btn" style="${typeof canvasBgColor !== 'undefined' && canvasBgColor==='#000000'?'border-color:#00ff88; color:#00ff88; background:rgba(0,255,136,0.08);':''}" onclick="changeFsBgColor('#000000')">
+                        <span class="fs-sheet-btn-icon">⚫</span><span>ブラック</span>
+                    </div>
+                    <div class="fs-sheet-btn" style="${typeof canvasBgColor !== 'undefined' && canvasBgColor==='#212830'?'border-color:#00ff88; color:#00ff88; background:rgba(0,255,136,0.08);':''}" onclick="changeFsBgColor('#212830')">
+                        <span class="fs-sheet-btn-icon">🔘</span><span>チャコール</span>
+                    </div>
+                    <div class="fs-sheet-btn" style="${typeof canvasBgColor !== 'undefined' && canvasBgColor==='#ffffff'?'border-color:#00ff88; color:#00ff88; background:rgba(0,255,136,0.08);':''}" onclick="changeFsBgColor('#ffffff')">
+                        <span class="fs-sheet-btn-icon">⚪</span><span>ホワイト</span>
+                    </div>
                 `;
             } else if (id === 'draw') {
                 sheetTitle = '➕ 作図コマンド';
@@ -770,31 +828,6 @@
                         <span class="fs-sheet-btn-icon">░</span><span>ハッチ</span>
                     </div>
                 `;
-            } else if (id === 'edit') {
-                sheetTitle = '⚙ 編集・ツール';
-                html = `
-                    <div class="fs-sheet-btn" onclick="issueCommand('MOVE'); closeFsSheet();">
-                        <span class="fs-sheet-btn-icon">✥</span><span>移動</span>
-                    </div>
-                    <div class="fs-sheet-btn" onclick="issueCommand('COPY'); closeFsSheet();">
-                        <span class="fs-sheet-btn-icon">⊞</span><span>複写</span>
-                    </div>
-                    <div class="fs-sheet-btn" onclick="issueCommand('ROTATE'); closeFsSheet();">
-                        <span class="fs-sheet-btn-icon">↻</span><span>回転</span>
-                    </div>
-                    <div class="fs-sheet-btn" onclick="issueCommand('OFFSET'); closeFsSheet();">
-                        <span class="fs-sheet-btn-icon">◱</span><span>オフセット</span>
-                    </div>
-                    <div class="fs-sheet-btn" onclick="issueCommand('ERASE'); closeFsSheet();">
-                        <span class="fs-sheet-btn-icon" style="color:#ff6b6b;">✖</span><span>削除</span>
-                    </div>
-                    <div class="fs-sheet-btn" onclick="undo(); closeFsSheet();">
-                        <span class="fs-sheet-btn-icon">↩</span><span>戻す</span>
-                    </div>
-                    <div class="fs-sheet-btn" onclick="redo(); closeFsSheet();">
-                        <span class="fs-sheet-btn-icon">↪</span><span>やり直し</span>
-                    </div>
-                `;
             } else if (id === 'dim') {
                 sheetTitle = '📐 寸法コマンド';
                 html = `
@@ -821,31 +854,97 @@
                     </div>
                 `;
             } else if (id === 'layer') {
-                sheetTitle = '🎨 画層切り替え';
-                // 既存の画層配列から項目を動的に生成
+                sheetTitle = '🎨 画層・スナップ設定';
+                
+                // 画層一括管理（既存のパネル開閉）
+                html += `
+                    <div class="fs-sheet-btn" onclick="toggleLayerPanel(); closeFsSheet();" style="grid-column: span 4; background: rgba(82, 139, 255, 0.15); border-color: rgba(82, 139, 255, 0.4); height: 48px;">
+                        <span class="fs-sheet-btn-icon">👁️</span><span>画層一括管理を開く</span>
+                    </div>
+                    
+                    <div style="grid-column: span 4; border-top: 1px solid rgba(255,255,255,0.08); margin: 5px 0; padding-top: 8px; font-size: 11px; color:#aaa;">🎨 簡易画層切り替え</div>
+                `;
+                
                 if (typeof layers !== 'undefined') {
                     layers.forEach((l, idx) => {
                         const isCurrent = (idx === currentLayerIndex);
-                        const activeStyle = isCurrent ? 'border-color: #00ff88; background: rgba(0, 255, 136, 0.12); color: #00ff88; font-weight: bold;' : '';
+                        const activeStyle = isCurrent ? 'border-color: #00ff88; background: rgba(0, 255, 136, 0.1); color: #00ff88; font-weight: bold;' : '';
                         html += `
-                            <div class="fs-sheet-btn" style="${activeStyle}" onclick="changeCurrentLayer(${idx}); closeFsSheet();">
-                                <span style="display:inline-block; width:12px; height:12px; background:${l.color}; border:1px solid #777; border-radius:2px; margin-bottom:4px;"></span>
-                                <span style="font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:60px;">${l.name}</span>
+                            <div class="fs-sheet-btn" style="${activeStyle} height:46px;" onclick="changeCurrentLayer(${idx}); closeFsSheet();">
+                                <span style="display:inline-block; width:10px; height:10px; background:${l.color}; border:1px solid #777; border-radius:2px; margin-bottom:2px;"></span>
+                                <span style="font-size:9px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:60px;">${l.name}</span>
                             </div>
                         `;
                     });
                 }
-                // 画層一覧パネルを開くためのボタンも追加
+                
+                // OSNAP個別選択セクション
                 html += `
-                    <div class="fs-sheet-btn" onclick="toggleLayerPanel(); closeFsSheet();" style="grid-column: span 2; background: rgba(82, 139, 255, 0.1); border-color: rgba(82, 139, 255, 0.3);">
-                        <span class="fs-sheet-btn-icon">👁️</span><span>画層プロパティ</span>
-                    </div>
+                    <div style="grid-column: span 4; border-top: 1px solid rgba(255,255,255,0.08); margin: 5px 0; padding-top: 8px; font-size: 11px; color:#aaa;">⊕ OSNAP 個別設定</div>
                 `;
+                
+                if (typeof osnapState !== 'undefined') {
+                    const snTypes = [
+                        {key:'end', name:'端点', icon:'📐'},
+                        {key:'mid', name:'中点', icon:'▱'},
+                        {key:'cen', name:'中心', icon:'◯'},
+                        {key:'int', name:'交点', icon:'✕'},
+                        {key:'near', name:'近接点', icon:'◰'},
+                        {key:'perp', name:'垂線', icon:'⟂'}
+                    ];
+                    
+                    snTypes.forEach(sn => {
+                        const active = osnapState[sn.key];
+                        const activeStyle = active ? 'border-color: #00ff88; color: #00ff88; background: rgba(0, 255, 136, 0.1); font-weight: bold;' : '';
+                        html += `
+                            <div class="fs-sheet-btn" style="${activeStyle} height:46px;" onclick="toggleFsOsnapType('${sn.key}')">
+                                <span style="font-size:12px; margin-bottom:2px;">${sn.icon}</span>
+                                <span>${sn.name}</span>
+                            </div>
+                        `;
+                    });
+                }
             }
 
             title.textContent = sheetTitle;
             grid.innerHTML = html;
             sheet.classList.add('open');
+        }
+
+        // スナップ個別切り替え
+        function toggleFsOsnapType(type) {
+            if (typeof osnapState !== 'undefined') {
+                osnapState[type] = !osnapState[type];
+                // PC側のチェックボックスも同期
+                const cb = document.getElementById('osnap-' + type);
+                if (cb) cb.checked = osnapState[type];
+                
+                if (typeof render === 'function') render();
+                openFsSheet('layer'); // 表示状態を更新してシートを開いたままにする
+            }
+        }
+
+        // 背景色変更
+        function changeFsBgColor(color) {
+            if (typeof canvasBgColor !== 'undefined') {
+                canvasBgColor = color;
+                if (typeof render === 'function') render();
+            }
+        }
+
+        // 範囲選択のON/OFF切り替え
+        function toggleFsTouchSelection() {
+            if (typeof touchSelectionEnabled !== 'undefined') {
+                touchSelectionEnabled = !touchSelectionEnabled;
+                if (typeof render === 'function') render();
+            }
+        }
+
+        // 座標読み取りモードの切り替え
+        function toggleFsReadingMode() {
+            document.body.classList.toggle('reading-mode');
+            closeFsSheet();
+            if (typeof render === 'function') render();
         }
 
         function closeFsSheet() {
@@ -866,27 +965,59 @@
             if (typeof toggleOrtho === 'function') toggleOrtho();
         }
         
-        // ヘッダーUI表示の更新（OsnapとOrthoの同期）
+        // ヘッダーUI表示の更新（Osnap、Ortho、範囲選択、座標読取等の同期）
         function updateFsHeaderButtons() {
-            if (!document.body.classList.contains('fullscreen-mode')) return;
+            // 全画面またはスマホ幅以外のときは同期をスキップ
+            if (!document.body.classList.contains('fullscreen-mode') && window.innerWidth > 430) return;
             
+            // 1. OSNAPボタン
             const osnapBtn = document.getElementById('fs-modern-osnap-btn');
             if (osnapBtn && typeof osnapState !== 'undefined') {
                 const active = osnapState.main;
-                osnapBtn.className = active ? 'fs-action-btn fs-action-btn-active' : 'fs-action-btn fs-action-btn-neutral';
-                osnapBtn.innerHTML = active ? '⊕ OSNAP' : '⊖ OSNAP';
+                osnapBtn.className = active ? 'fs-action-btn fs-action-btn-active fs-hdr-item' : 'fs-action-btn fs-action-btn-neutral fs-hdr-item';
+                osnapBtn.innerHTML = active ? '⊕ OSNAP:ON' : '⊖ OSNAP:OFF';
             }
 
+            // 2. 直交モードボタン
             const orthoBtn = document.getElementById('fs-modern-ortho-btn');
             if (orthoBtn && typeof orthoMode !== 'undefined') {
-                orthoBtn.className = orthoMode ? 'fs-action-btn fs-action-btn-active' : 'fs-action-btn fs-action-btn-neutral';
-                orthoBtn.innerHTML = orthoMode ? '📴 直交 ON' : '📶 直交 OFF';
+                orthoBtn.className = orthoMode ? 'fs-action-btn fs-action-btn-active fs-hdr-item' : 'fs-action-btn fs-action-btn-neutral fs-hdr-item';
+                orthoBtn.innerHTML = orthoMode ? '📴 直交:ON' : '📶 直交:OFF';
             }
 
+            // 3. 範囲選択ボタン
+            const selectBtn = document.getElementById('fs-modern-select-btn');
+            if (selectBtn && typeof touchSelectionEnabled !== 'undefined') {
+                selectBtn.className = touchSelectionEnabled ? 'fs-action-btn fs-action-btn-active fs-hdr-item' : 'fs-action-btn fs-action-btn-neutral fs-hdr-item';
+                selectBtn.innerHTML = touchSelectionEnabled ? '🔲 範囲選択:ON' : '🔲 範囲選択:OFF';
+            }
+
+            // 4. 座標読取モードボタン
+            const readBtn = document.getElementById('fs-modern-read-btn');
+            if (readBtn) {
+                const isReading = document.body.classList.contains('reading-mode');
+                readBtn.className = isReading ? 'fs-action-btn fs-action-btn-active fs-hdr-item' : 'fs-action-btn fs-action-btn-neutral fs-hdr-item';
+            }
+
+            // 5. 全画面ボタン
+            const fsBtn = document.getElementById('fs-modern-fullscreen-btn');
+            if (fsBtn) {
+                const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || isPseudoFullscreen);
+                fsBtn.className = isFs ? 'fs-action-btn fs-action-btn-active fs-hdr-item' : 'fs-action-btn fs-action-btn-neutral fs-hdr-item';
+            }
+
+            // 6. UCSステータス表示
             const ucsLabel = document.getElementById('fs-modern-ucs-label');
             if (ucsLabel && typeof ucs !== 'undefined') {
                 const isWcs = ucs.originX === 0 && ucs.originY === 0 && ucs.angle === 0;
                 ucsLabel.textContent = isWcs ? 'WCS' : 'UCS';
+            }
+
+            // 7. PLANボタン
+            const planBtn = document.getElementById('fs-modern-plan-btn');
+            if (planBtn && typeof view !== 'undefined' && typeof ucs !== 'undefined') {
+                const active = view.rotation === -ucs.angle && ucs.angle !== 0;
+                planBtn.className = active ? 'fs-action-btn fs-action-btn-active fs-hdr-item' : 'fs-action-btn fs-action-btn-neutral fs-hdr-item';
             }
         }
 
@@ -896,7 +1027,8 @@
         let _lastSelectedCount = -1;
 
         window.updateFsModernUI = function() {
-            if (!document.body.classList.contains('fullscreen-mode')) return;
+            // 全画面またはスマホ幅以外のときはスマホUIの同期を行わない
+            if (!document.body.classList.contains('fullscreen-mode') && window.innerWidth > 430) return;
 
             const mode = cmdState.mode;
             const highlightIdx = cmdState.highlightIdx;
@@ -904,7 +1036,6 @@
 
             // 状態に変更がない場合はDOM更新をスキップして軽量化
             if (mode === _lastCmdMode && highlightIdx === _lastHighlightIdx && selectedCount === _lastSelectedCount) {
-                // OSNAPと直交ボタンの状態だけは同期する
                 updateFsHeaderButtons();
                 return;
             }
@@ -925,7 +1056,7 @@
                     actionbar.classList.remove('open');
                     bottomBar.classList.remove('hidden');
                 } 
-                // 図形選択がある場合 (オブジェクトコンテキストメニュー)
+                // 図形選択がある場合 (全画面・スマホモードでは編集はしないため、プロパティと選択解除のみ表示)
                 else {
                     bottomBar.classList.add('hidden');
                     closeFsSheet(); // シートが開いていたら閉じる
@@ -933,14 +1064,7 @@
                     const countText = selectedCount > 0 ? `${selectedCount}個選択` : '図形選択中';
                     
                     let html = `<span style="color:#00ff88; font-size:11px; font-weight:bold; margin-right:4px;">📍 ${countText}</span>`;
-                    html += `<button class="fs-action-btn fs-action-btn-neutral" onclick="processCommand('MOVE')">✥ 移動</button>`;
-                    html += `<button class="fs-action-btn fs-action-btn-neutral" onclick="processCommand('COPY')">⊞ 複写</button>`;
-                    html += `<button class="fs-action-btn fs-action-btn-neutral" onclick="processCommand('ROTATE')">↻ 回転</button>`;
-                    
-                    // プロパティ表示切替
                     html += `<button class="fs-action-btn fs-action-btn-neutral" onclick="togglePropertiesPanel()">📋 プロパティ</button>`;
-                    
-                    html += `<button class="fs-action-btn fs-action-btn-danger" onclick="processCommand('ERASE')">🗑️ 削除</button>`;
                     html += `<button class="fs-action-btn fs-action-btn-cancel" onclick="processCommand('CANCEL')">❌ 解除</button>`;
 
                     actionbar.innerHTML = html;

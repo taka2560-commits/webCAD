@@ -23,8 +23,14 @@ const SNAP_R = 10, ERASE_R = 5;
 // スナップ・直交状態
 let osnapState = { main: true, end: true, mid: true, cen: true, int: true, near: true, perp: true };
 let orthoMode = false;
+let touchSelectionEnabled = false;
+let canvasBgColor = '#000000';
 
 // ===== ユーティリティ =====
+function isBgColorLight() {
+    const color = canvasBgColor.toLowerCase();
+    return color === '#ffffff' || color === '#f5f5f5' || color === '#e0e0e0';
+}
 function isMobile() { return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window); }
 function addCommandLog(t) { const d=document.createElement('div'); d.textContent=t; commandLog.appendChild(d); commandLog.scrollTop=commandLog.scrollHeight; }
 function setPrompt(t) { document.getElementById('command-prompt').textContent=t; }
@@ -232,7 +238,7 @@ function loadUCS(indexStr) {
 }
 
 function updateUCSDropdowns() {
-    ['ucs-select', 'fs-ucs-select'].forEach(id => {
+    ['ucs-select', 'fs-ucs-select', 'fs-modern-ucs-select'].forEach(id => {
         const sel = document.getElementById(id);
         if(!sel) return;
         sel.innerHTML = '<option value="">--読込--</option>';
@@ -580,7 +586,7 @@ function render() {
     _renderPending = true;
     requestAnimationFrame(() => {
         _renderPending = false;
-        ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = canvasBgColor; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawAxes(); drawEntities(); drawDimensions(); drawRubberBand(); drawSnapMarker(); drawCrosshair();
         if(window.updateFsModernUI) window.updateFsModernUI();
     });
@@ -588,14 +594,14 @@ function render() {
 // 即時描画版（ルーペ等、rAF待たずに描画したい場合）
 function renderImmediate() {
     _renderPending = false;
-    ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = canvasBgColor; ctx.fillRect(0,0,canvas.width,canvas.height);
     drawAxes(); drawEntities(); drawDimensions(); drawRubberBand(); drawSnapMarker(); drawCrosshair();
     if(window.updateFsModernUI) window.updateFsModernUI();
 }
 
 function drawAxes() {
     ctx.save(); ctx.lineWidth=1;
-    const ws=wcsToScreen(0,0); ctx.strokeStyle='rgba(255,255,255,0.1)';
+    const ws=wcsToScreen(0,0); ctx.strokeStyle = isBgColorLight() ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.15)';
     ctx.beginPath();ctx.moveTo(0,ws.y);ctx.lineTo(canvas.width,ws.y);ctx.stroke();
     ctx.beginPath();ctx.moveTo(ws.x,0);ctx.lineTo(ws.x,canvas.height);ctx.stroke();
     const us=wcsToScreen(ucs.originX,ucs.originY);
@@ -609,12 +615,12 @@ function drawAxes() {
     const yAxisDx = -axLen * sinA, yAxisDy = -axLen * cosA;
 
     // UCS軸線（半透明の全画面ライン）
-    ctx.strokeStyle='rgba(255,50,50,0.4)';
+    ctx.strokeStyle = isBgColorLight() ? 'rgba(255,50,50,0.25)' : 'rgba(255,50,50,0.4)';
     ctx.beginPath(); ctx.moveTo(us.x - xAxisDx*500, us.y - xAxisDy*500); ctx.lineTo(us.x + xAxisDx*500, us.y + xAxisDy*500); ctx.stroke();
-    ctx.strokeStyle='rgba(50,255,50,0.4)';
+    ctx.strokeStyle = isBgColorLight() ? 'rgba(50,200,50,0.25)' : 'rgba(50,255,50,0.4)';
     ctx.beginPath(); ctx.moveTo(us.x - yAxisDx*500, us.y - yAxisDy*500); ctx.lineTo(us.x + yAxisDx*500, us.y + yAxisDy*500); ctx.stroke();
 
-    const isWcs=ucs.originX===0&&ucs.originY===0&&ucs.angle===0; ctx.strokeStyle=isWcs?'#528bff':'#ffcc00'; ctx.fillStyle=ctx.strokeStyle; ctx.lineWidth=2;
+    const isWcs=ucs.originX===0&&ucs.originY===0&&ucs.angle===0; ctx.strokeStyle=isWcs?(isBgColorLight()?'#1f57c3':'#528bff'):'#ffcc00'; ctx.fillStyle=ctx.strokeStyle; ctx.lineWidth=2;
     ctx.strokeRect(us.x-5,us.y-5,10,10);
     // 回転した軸矢印
     ctx.beginPath();ctx.moveTo(us.x,us.y);ctx.lineTo(us.x+xAxisDx,us.y+xAxisDy);ctx.stroke();
@@ -625,11 +631,25 @@ function drawAxes() {
     ctx.fillText(isWcs?'WCS':'UCS',us.x+5,us.y+15); ctx.restore();
 }
 
-// ByLayer色解決: e.color が null/undefined ならレイヤー色を返す
+// ByLayer色解決: e.color が null/undefined ならレイヤー色を返す。また、背景色明度に応じて白黒反転を施す。
 function getEntityColor(e) {
-    if(e.color) return e.color;
-    if(e.layer !== undefined && layers[e.layer]) return layers[e.layer].color;
-    return '#FFFFFF';
+    let color = e.color;
+    if(!color && e.layer !== undefined && layers[e.layer]) color = layers[e.layer].color;
+    if(!color) color = '#FFFFFF';
+    
+    const ucColor = color.toUpperCase();
+    const isLight = isBgColorLight();
+    
+    // 背景が明るい（白）のとき、白線の色は黒に反転
+    if(isLight && (ucColor === '#FFFFFF' || ucColor === '#FFF' || ucColor === '#000000' || ucColor === '#000')) {
+        // 白も黒もコントラストを出すため、白は黒に変換
+        if(ucColor === '#FFFFFF' || ucColor === '#FFF') return '#000000';
+    }
+    // 背景が暗い（黒）のとき、黒線の色は白に反転
+    if(!isLight && (ucColor === '#000000' || ucColor === '#000')) {
+        return '#FFFFFF';
+    }
+    return color;
 }
 
 function drawOneEntity(e, color) {
@@ -834,7 +854,7 @@ function drawSnapMarker() {
 }
 
 function drawCrosshair() {
-    ctx.save(); ctx.strokeStyle='#e2c288'; ctx.lineWidth=1;
+    ctx.save(); ctx.strokeStyle = isBgColorLight() ? '#333333' : '#e2c288'; ctx.lineWidth=1;
     const totalAngle = ucs.angle + view.rotation;
     const c = Math.cos(totalAngle), s = Math.sin(totalAngle);
     const mx = mouse.screenX, my = mouse.screenY;
@@ -1577,9 +1597,10 @@ function setupEventListeners() {
             if(!touchState.hasMoved && moved > DRAG_THRESHOLD) {
                 touchState.hasMoved = true;
                 touchState.isDragging = true;
-                // 全画面モード中は範囲選択しない（座標読取専用）
-                const isFullscreen = document.body.classList.contains('fullscreen-mode');
-                if(!isFullscreen) {
+                // 範囲選択の判定（全画面・スマホUI時は touchSelectionEnabled が true のときのみ許可）
+                const isFs = document.body.classList.contains('fullscreen-mode');
+                const isMobileLayout = window.innerWidth <= 430;
+                if ((!isFs && !isMobileLayout) || touchSelectionEnabled) {
                     // IDLEモードまたは編集コマンドのオブジェクト選択待ちの場合は範囲選択開始
                     const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
                     if(selectModes.includes(cmdState.mode)) {
