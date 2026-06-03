@@ -240,21 +240,15 @@
             display: none !important;
         }
         #fs-exit-reading-btn {
-            display: none; position: fixed; bottom: 20px; right: 20px; z-index: 100020;
-            background: rgba(255, 107, 107, 0.9); border: none; color: #fff;
-            padding: 10px 18px; border-radius: 20px; font-weight: bold; font-size: 13px;
-            cursor: pointer; box-shadow: 0 4px 15px rgba(255,107,107,0.4);
-            transition: transform 0.1s;
+            display: none !important;
         }
-        #fs-exit-reading-btn:active { transform: scale(0.95); }
-        body.reading-mode #fs-exit-reading-btn { display: block !important; }
 
         /* 通常画面と全画面（座標読取）の表示分離制御 */
         #fs-tools, #fs-zoom-panel, #fs-controls { display: none; }
 
-        body.fullscreen-mode #fs-tools { display: flex !important; }
-        body.fullscreen-mode #fs-zoom-panel { display: flex !important; }
-        body.fullscreen-mode #fs-controls { display: flex !important; }
+        body.fullscreen-mode #fs-tools, body.reading-mode #fs-tools { display: flex !important; }
+        body.fullscreen-mode #fs-zoom-panel, body.reading-mode #fs-zoom-panel { display: flex !important; }
+        body.fullscreen-mode #fs-controls, body.reading-mode #fs-controls { display: flex !important; }
         body.fullscreen-mode #fs-dim-actionbar { display: none !important; }
 
         body.fullscreen-mode .fs-modern-header,
@@ -957,6 +951,10 @@
         let isPseudoFullscreen = false;
 
         function toggleFullscreen() {
+            // 座標読み取りモードならそれを解除する
+            if (document.body.classList.contains('reading-mode')) {
+                toggleFsReadingMode();
+            }
             const docEl = document.documentElement;
             const hasFullscreenAPI = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
 
@@ -1528,6 +1526,7 @@
         // 座標読み取りモードの切り替え
         function toggleFsReadingMode() {
             document.body.classList.toggle('reading-mode');
+            if (typeof toggleFsTools === 'function') toggleFsTools(false);
             closeFsSheet();
             if (typeof render === 'function') render();
         }
