@@ -250,8 +250,6 @@
         body.reading-mode #fs-exit-reading-btn { display: block !important; }
 
         /* モバイル用のレイアウト非表示対応 */
-        body.fullscreen-mode #fs-zoom-panel { display: none !important; }
-        body.fullscreen-mode #fs-tools { display: none !important; }
         body.fullscreen-mode #fs-controls { display: none !important; }
         body.fullscreen-mode #fs-dim-actionbar { display: none !important; }
 
@@ -263,6 +261,192 @@
             /* スマホ通常幅の際はPC用のトップバー、ツールバー、コマンドラインを消し、モバイル用UIを表示 */
             #top-bar, #toolbar, #command-line-area { display: none !important; }
             #fs-overlay { display: block !important; }
+        }
+
+        /* === 画層一括管理フローティングパネル === */
+        #layer-manager-dialog {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 360px;
+            background: rgba(30, 34, 42, 0.96);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+            z-index: 210000;
+            padding: 16px;
+            color: #e0e0e0;
+            display: none;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+        #layer-manager-dialog.open {
+            display: flex;
+        }
+        .layer-dialog-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+        }
+        .layer-dialog-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #00ff88;
+        }
+        .layer-dialog-close {
+            background: none;
+            border: none;
+            color: #ff6b6b;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .layer-dialog-option {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+        .layer-dialog-option input[type="checkbox"] {
+            transform: scale(1.2);
+            margin-right: 8px;
+            cursor: pointer;
+        }
+        .layer-dialog-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .layer-dialog-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #ddd;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            transition: all 0.15s;
+        }
+        .layer-dialog-btn-active {
+            background: #00ff88;
+            border-color: #00ff88;
+            color: #000;
+        }
+        .layer-dialog-note {
+            font-size: 11px;
+            color: #ffcc00;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        .layer-list-section {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 240px;
+        }
+        .layer-list-section::-webkit-scrollbar {
+            width: 4px;
+        }
+        .layer-list-section::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 2px;
+        }
+        .layer-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: bold;
+            margin: 10px 0 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .layer-list-header-active {
+            color: #00ff88;
+        }
+        .layer-list-header-inactive {
+            color: #aaa;
+        }
+        .layer-list-header-btn {
+            background: none;
+            border: none;
+            color: #ff6b6b;
+            font-size: 11px;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #ff6b6b;
+        }
+        .layer-list-header-btn-show {
+            color: #528bff;
+            border-color: #528bff;
+        }
+        .layer-row {
+            display: flex;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 13px;
+        }
+        .layer-row-btn {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 14px;
+            cursor: pointer;
+            width: 28px;
+            text-align: center;
+        }
+        .layer-row-btn:hover {
+            color: #fff;
+        }
+        .layer-row-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            margin: 0 8px;
+        }
+        .layer-row-pin {
+            font-size: 12px;
+            cursor: pointer;
+            margin-right: 8px;
+            opacity: 0.3;
+        }
+        .layer-row-pin.active {
+            opacity: 1;
+        }
+        .layer-row-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .layer-row-name.current {
+            font-weight: bold;
+            color: #00ff88;
+        }
+        .layer-empty-text {
+            font-size: 11px;
+            color: #666;
+            font-style: italic;
+            text-align: center;
+            padding: 10px 0;
         }
     </style>
     <!-- PWA Settings -->
@@ -402,23 +586,11 @@
         <div id="fs-tools" style="position:fixed; top:60px; right:12px; display:flex; flex-direction:column; align-items:flex-end; gap:8px; z-index:100001; pointer-events:none;">
             <button class="fs-active" onclick="issueCommand('DIMORDINATE')" title="引出線でXY両方の座標を配置します" style="pointer-events:auto; padding:5px 8px; font-size:11px; border-radius:14px; border:1px solid #00ff88; background:rgba(40,44,52,0.85); color:#00ff88; box-shadow:0 1px 4px rgba(0,0,0,0.5); white-space:nowrap;">📍座標</button>
             <button onclick="issueCommand('DIMCONT')" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ffcc00; border:1px solid #ffcc00; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📏連続寸法</button>
-            <button onclick="issueCommand('UCS')" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🎯UCS</button>
-            <button onclick="issueCommand('UCS2P')" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📈2点</button>
-            <button onclick="togglePlanView()" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#61afef; border:1px solid #555; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🧭PLAN</button>
-            <button onclick="issueCommand('WCS')" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">↩WCS</button>
-            <select id="fs-ucs-select" style="pointer-events:auto; padding:4px 6px; font-size:11px; background:rgba(40,44,52,0.8); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" onchange="loadUCS(this.value)"><option value="">--読込--</option></select>
-            <select id="fs-layer-select" style="pointer-events:auto; padding:4px 6px; font-size:11px; background:rgba(40,44,52,0.8); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" title="現在の画層" onchange="changeCurrentLayer(this.value)"><option value="">--画層--</option></select>
-            <button onclick="saveUCS()" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">💾保存</button>
-            <button onclick="deleteUCS()" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#ff6b6b; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🗑️消去</button>
-            <div style="border-top:1px solid #444; margin:2px 0; width:100%;"></div>
-            <button onclick="saveProject()" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#00ff88; border:1px solid #00ff88; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">💾図面保存</button>
-            <button onclick="showProjectList()" style="pointer-events:auto; padding:5px 8px; font-size:11px; background:rgba(40,44,52,0.8); color:#61afef; border:1px solid #61afef; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📂復元</button>
         </div>
         <div id="fs-controls">
             <button id="fs-btn-osnap" class="fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
             <button id="fs-btn-coord" class="fs-active" onclick="toggleFsCoordAlways()" title="座標常時表示 ON/OFF">XY</button>
             <button id="fs-btn-extents" onclick="zoomExtents()" title="全体表示">⛶</button>
-            <button id="fs-btn-exit" onclick="toggleFullscreen()" title="全画面解除" style="border-color:#ff6b6b;color:#ff6b6b;">✕</button>
         </div>
         
         <div id="fs-zoom-panel">
@@ -487,6 +659,52 @@
         <button id="dim-mode-toggle" onclick="dimToggleMode()" style="background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">📏 直列 (変更)</button>
         <button id="dim-dir-toggle" onclick="dimToggleDir()" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⚙ 自動 (X/Y)</button>
         <button onclick="issueCommand('CANCEL')" style="background:transparent; color:#ff6b6b; border:1px solid #ff6b6b; padding:6px 12px; border-radius:12px; font-size:12px;">❌ 終了</button>
+    </div>
+
+    <!-- 新・画層一括管理ダイアログ -->
+    <div id="layer-manager-dialog">
+        <div class="layer-dialog-header">
+            <span class="layer-dialog-title">画層一括管理</span>
+            <button class="layer-dialog-close" onclick="closeLayerManagerDialog()">✕</button>
+        </div>
+        
+        <label class="layer-dialog-option">
+            <input type="checkbox" id="chk-ghost-layers" onchange="toggleGhostLayers(this.checked)">
+            <span>非表示画層をうっすら表示する</span>
+        </label>
+        
+        <div class="layer-dialog-actions">
+            <button id="btn-touch-layer-hide" class="layer-dialog-btn" onclick="toggleTouchLayerHide()">
+                <span>👇 タッチ非表示</span>
+            </button>
+            <button class="layer-dialog-btn" onclick="invertAllLayers()">
+                <span>🔄 表示反転</span>
+            </button>
+        </div>
+        
+        <div id="layer-dialog-note" class="layer-dialog-note" style="display:none;">
+            図面上の図形をタップして画層を消せます (Escで終了)
+        </div>
+        
+        <div class="layer-list-section">
+            <!-- 表示中セクション -->
+            <div>
+                <div class="layer-list-header layer-list-header-active">
+                    <span id="lbl-active-layers-count">👁️ 表示中 (0)</span>
+                    <button class="layer-list-header-btn" onclick="hideAllLayers()">すべて非表示</button>
+                </div>
+                <div id="layer-list-active-items"></div>
+            </div>
+            
+            <!-- 非表示中セクション -->
+            <div>
+                <div class="layer-list-header layer-list-header-inactive">
+                    <span id="lbl-inactive-layers-count">➖ 非表示中 (0)</span>
+                    <button class="layer-list-header-btn layer-list-header-btn-show" onclick="showAllLayers()">すべて表示</button>
+                </div>
+                <div id="layer-list-inactive-items"></div>
+            </div>
+        </div>
     </div>
 
     <!-- プロジェクト一覧パネル（モーダル） -->
@@ -689,7 +907,7 @@
 
         // フローティング座標ツールチップの更新（cad-core.jsから呼ばれる）
         window.updateFsCoordTooltip = function(screenX, screenY, ucsX, ucsY, snapType) {
-            if(!document.body.classList.contains('fullscreen-mode')) return;
+            if(!document.body.classList.contains('fullscreen-mode') && !document.body.classList.contains('reading-mode')) return;
             const tt = document.getElementById('fs-coord-tooltip');
             if(!tt) return;
 
@@ -725,6 +943,161 @@
             const tt = document.getElementById('fs-coord-tooltip');
             if(tt) tt.style.display = 'none';
         };
+
+        // === 画層一括管理（フローティングパネル）の制御 ===
+        window.ghostLayersEnabled = false;
+        window.touchLayerHideMode = false;
+
+        window.openLayerManagerDialog = function() {
+            const dlg = document.getElementById('layer-manager-dialog');
+            if (dlg) {
+                dlg.classList.add('open');
+                updateLayerManagerDialog();
+            }
+        };
+
+        window.closeLayerManagerDialog = function() {
+            const dlg = document.getElementById('layer-manager-dialog');
+            if (dlg) {
+                dlg.classList.remove('open');
+            }
+            if (window.touchLayerHideMode) {
+                toggleTouchLayerHide(false);
+            }
+        };
+
+        window.toggleGhostLayers = function(checked) {
+            window.ghostLayersEnabled = checked;
+            if (typeof render === 'function') render();
+        };
+
+        window.toggleTouchLayerHide = function(forceVal) {
+            window.touchLayerHideMode = (forceVal !== undefined) ? forceVal : !window.touchLayerHideMode;
+            const btn = document.getElementById('btn-touch-layer-hide');
+            const note = document.getElementById('layer-dialog-note');
+            
+            if (btn) {
+                if (window.touchLayerHideMode) {
+                    btn.classList.add('layer-dialog-btn-active');
+                    btn.querySelector('span').textContent = '👇 タッチ非表示中';
+                    if (note) note.style.display = 'block';
+                    addCommandLog("-> タッチ非表示モードON: 図面上の図形をタップするとその画層が非表示になります (Escキーで終了)");
+                } else {
+                    btn.classList.remove('layer-dialog-btn-active');
+                    btn.querySelector('span').textContent = '👇 タッチ非表示';
+                    if (note) note.style.display = 'none';
+                }
+            }
+        };
+
+        window.invertAllLayers = function() {
+            if (typeof layers !== 'undefined') {
+                layers.forEach((l, i) => {
+                    l.visible = (l.visible === false) ? true : false;
+                });
+                // カレントレイヤーは強制的に表示を維持
+                if (layers[currentLayerIndex]) {
+                    layers[currentLayerIndex].visible = true;
+                }
+                updateLayerManagerDialog();
+                if (typeof render === 'function') render();
+                addCommandLog("-> 画層の表示状態を反転しました");
+            }
+        };
+
+        window.showAllLayers = function() {
+            if (typeof layers !== 'undefined') {
+                layers.forEach(l => l.visible = true);
+                updateLayerManagerDialog();
+                if (typeof render === 'function') render();
+                addCommandLog("-> すべての画層を表示しました");
+            }
+        };
+
+        window.hideAllLayers = function() {
+            if (typeof layers !== 'undefined') {
+                layers.forEach((l, i) => {
+                    if (i !== currentLayerIndex) {
+                        l.visible = false;
+                    }
+                });
+                updateLayerManagerDialog();
+                if (typeof render === 'function') render();
+                addCommandLog("-> カレント画層以外のすべての画層を非表示にしました");
+            }
+        };
+
+        window.updateLayerManagerDialog = function() {
+            if (typeof layers === 'undefined') return;
+
+            const activeContainer = document.getElementById('layer-list-active-items');
+            const inactiveContainer = document.getElementById('layer-list-inactive-items');
+            
+            let activeHtml = '';
+            let inactiveHtml = '';
+            let activeCount = 0;
+            let inactiveCount = 0;
+
+            layers.forEach((l, i) => {
+                const isCurrent = (i === currentLayerIndex);
+                const isVisible = (l.visible !== false);
+                const pinClass = isCurrent ? 'layer-row-pin active' : 'layer-row-pin';
+                const nameClass = isCurrent ? 'layer-row-name current' : 'layer-row-name';
+
+                const rowHtml = `
+                    <div class="layer-row">
+                        <button class="layer-row-btn" onclick="toggleDialogLayerVisibility(${i})">${isVisible ? '👁️' : '➖'}</button>
+                        <div class="layer-row-color" style="background-color: ${l.color};"></div>
+                        <span class="${pinClass}" onclick="changeDialogCurrentLayer(${i})" title="カレント画層に設定">${isCurrent ? '📌' : '📍'}</span>
+                        <span class="${nameClass}" onclick="changeDialogCurrentLayer(${i})">${l.name}</span>
+                    </div>
+                `;
+
+                if (isVisible) {
+                    activeHtml += rowHtml;
+                    activeCount++;
+                } else {
+                    inactiveHtml += rowHtml;
+                    inactiveCount++;
+                }
+            });
+
+            if (activeContainer) activeContainer.innerHTML = activeHtml;
+            if (inactiveContainer) {
+                if (inactiveCount === 0) {
+                    inactiveContainer.innerHTML = '<div class="layer-empty-text">非表示の画層はありません</div>';
+                } else {
+                    inactiveContainer.innerHTML = inactiveHtml;
+                }
+            }
+
+            const lblActive = document.getElementById('lbl-active-layers-count');
+            const lblInactive = document.getElementById('lbl-inactive-layers-count');
+            if (lblActive) lblActive.textContent = `👁️ 表示中 (${activeCount})`;
+            if (lblInactive) lblInactive.textContent = `➖ 非表示中 (${inactiveCount})`;
+        };
+
+        window.toggleDialogLayerVisibility = function(idx) {
+            if (typeof toggleLayerVisibility === 'function') {
+                toggleLayerVisibility(idx);
+                updateLayerManagerDialog();
+            }
+        };
+
+        window.changeDialogCurrentLayer = function(idx) {
+            if (typeof changeCurrentLayer === 'function') {
+                changeCurrentLayer(idx);
+                updateLayerManagerDialog();
+                if (typeof render === 'function') render();
+            }
+        };
+
+        // Escキーでタッチ非表示モードを終了する
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && window.touchLayerHideMode) {
+                toggleTouchLayerHide(false);
+            }
+        });
 
         // === スマホ最適化 新UI用制御ロジック ===
         let currentFsSheet = null;
@@ -858,7 +1231,7 @@
                 
                 // 画層一括管理（既存のパネル開閉）
                 html += `
-                    <div class="fs-sheet-btn" onclick="toggleLayerPanel(); closeFsSheet();" style="grid-column: span 4; background: rgba(82, 139, 255, 0.15); border-color: rgba(82, 139, 255, 0.4); height: 48px;">
+                    <div class="fs-sheet-btn" onclick="openLayerManagerDialog(); closeFsSheet();" style="grid-column: span 4; background: rgba(82, 139, 255, 0.15); border-color: rgba(82, 139, 255, 0.4); height: 48px;">
                         <span class="fs-sheet-btn-icon">👁️</span><span>画層一括管理を開く</span>
                     </div>
                     

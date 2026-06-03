@@ -238,6 +238,20 @@ function drawAllDimensions() {
     ctx.save();
     entities.forEach((e, i) => {
         if(e.type !== 'DIMENSION') return;
+        
+        const layerIdx = e.layer;
+        const layerVisible = layerIdx === undefined || !layers[layerIdx] || layers[layerIdx].visible !== false;
+        
+        // 非表示で且つ「うっすら表示」がOFFなら描画スキップ
+        if (!layerVisible) {
+            if (window.ghostLayersEnabled) {
+                ctx.save();
+                ctx.globalAlpha = 0.15; // 不透明度15%
+            } else {
+                return;
+            }
+        }
+        
         const color = i === cmdState.highlightIdx ? '#ff6b6b' : null;
         if(e.subType === 'LINEAR') drawDimLinear(e, color);
         else if(e.subType === 'ALIGNED') drawDimAligned(e, color);
@@ -245,6 +259,10 @@ function drawAllDimensions() {
         else if(e.subType === 'DIAMETER') drawDimDiameter(e, color);
         else if(e.subType === 'ANGULAR') drawDimAngular(e, color);
         else if(e.subType === 'ORDINATE') drawDimOrdinate(e, color);
+
+        if (!layerVisible && window.ghostLayersEnabled) {
+            ctx.restore();
+        }
     });
     ctx.restore();
 }

@@ -653,6 +653,19 @@ function getEntityColor(e) {
 }
 
 function drawOneEntity(e, color) {
+    const layerIdx = e.layer;
+    const layerVisible = layerIdx === undefined || !layers[layerIdx] || layers[layerIdx].visible !== false;
+
+    // 非表示で且つ「うっすら表示」がOFFなら描画スキップ
+    if (!layerVisible) {
+        if (window.ghostLayersEnabled) {
+            ctx.save();
+            ctx.globalAlpha = 0.15; // 不透明度15%
+        } else {
+            return;
+        }
+    }
+
     ctx.strokeStyle = color || getEntityColor(e); ctx.lineWidth = 1;
     if(e.type==='LINE') { const a=wcsToScreen(e.x1,e.y1),b=wcsToScreen(e.x2,e.y2); ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke(); }
     else if(e.type==='CIRCLE') { const c=wcsToScreen(e.cx,e.cy); ctx.beginPath();ctx.arc(c.x,c.y,e.radius*view.scale,0,Math.PI*2);ctx.stroke(); }
@@ -694,6 +707,10 @@ function drawOneEntity(e, color) {
         }
         ctx.globalAlpha = 1.0;
     }
+
+    if (!layerVisible && window.ghostLayersEnabled) {
+        ctx.restore();
+    }
 }
 
 // 図形のバウンディングボックスを計算 (初回のみ実行される)
@@ -728,7 +745,7 @@ function calcBBox(e) {
 
 function drawEntities() {
     ctx.save();
-    const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
+    const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible || window.ghostLayersEnabled) && !e.hidden;
     const selSet = new Set(cmdState.selectedIndices || []);
 
     // カリング用の画面の表示範囲 (WCS座標)。100ピクセルずつ余裕をもたせる
@@ -1252,6 +1269,21 @@ function setupEventListeners() {
                 const pt=getInputPoint(); handlePointInput(pt, true);
             } else {
                 const idx = hitTestEntity(mouse.screenX, mouse.screenY);
+                if (window.touchLayerHideMode && cmdState.mode === 'IDLE' && idx >= 0) {
+                    const e = entities[idx];
+                    if (e && e.layer !== undefined && layers[e.layer]) {
+                        if (e.layer === currentLayerIndex) {
+                            alert("カレント画層は非表示にできません。");
+                        } else {
+                            layers[e.layer].visible = false;
+                            addCommandLog(`-> タッチ非表示: 画層「${layers[e.layer].name}」を非表示にしました`);
+                            cmdState.highlightIdx = -1;
+                            if (window.updateLayerManagerDialog) window.updateLayerManagerDialog();
+                            render();
+                        }
+                    }
+                    return;
+                }
                 if(idx >= 0) {
                     if (cmdState.mode === 'IDLE') {
                         cmdState.highlightIdx = (cmdState.highlightIdx === idx) ? -1 : idx;
@@ -1710,6 +1742,23 @@ function setupEventListeners() {
             } else if(!touchState.hasMoved) {
                 // 短いタップでIDLEモード: エンティティ選択/選択解除
                 const idx = hitTestEntity(mouse.screenX, mouse.screenY);
+                if (window.touchLayerHideMode && cmdState.mode === 'IDLE' && idx >= 0) {
+                    const e = entities[idx];
+                    if (e && e.layer !== undefined && layers[e.layer]) {
+                        if (e.layer === currentLayerIndex) {
+                            alert("カレント画層は非表示にできません。");
+                        } else {
+                            layers[e.layer].visible = false;
+                            addCommandLog(`-> タッチ非表示: 画層「${layers[e.layer].name}」を非表示にしました`);
+                            cmdState.highlightIdx = -1;
+                            if (window.updateLayerManagerDialog) window.updateLayerManagerDialog();
+                            render();
+                        }
+                    }
+                    touchState.isDragging = false;
+                    touchState.hasMoved = false;
+                    return;
+                }
                 if(idx >= 0) {
                     cmdState.highlightIdx = (cmdState.highlightIdx === idx) ? -1 : idx;
                 } else {
