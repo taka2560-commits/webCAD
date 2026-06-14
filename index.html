@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web CAD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root { --bg-color:#212830;--panel-bg:#333842;--border-color:#181c21;--text-color:#e0e0e0;--highlight-color:#528bff;--ucs-color:#ffcc00;--crosshair-color:#ffffff;--btn-hover:rgba(255,255,255,0.1); }
+        :root { --bg-color:#14161c;--panel-bg:#1a1d24;--border-color:rgba(255,255,255,0.08);--text-color:#e0e0e0;--highlight-color:#00ff88;--ucs-color:#ffcc00;--crosshair-color:#ffffff;--btn-hover:rgba(255,255,255,0.08); }
         body,html { margin:0;padding:0;height:100%;font-family:'Segoe UI',sans-serif;background-color:var(--bg-color);color:var(--text-color);overflow:hidden;display:flex;flex-direction:column; }
         #top-bar { min-height:40px;background-color:var(--panel-bg);border-bottom:1px solid var(--border-color);display:flex;flex-wrap:wrap;align-items:center;padding:4px 10px;gap:6px; }
         .top-btn { background-color:transparent;border:1px solid #555;color:var(--text-color);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:5px; }
@@ -17,7 +20,7 @@
         #toolbar::-webkit-scrollbar { width:4px; } #toolbar::-webkit-scrollbar-thumb { background:#555;border-radius:4px; }
         .tool-btn { width:54px;height:50px;background-color:transparent;border:1px solid transparent;color:var(--text-color);border-radius:4px;cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;flex-shrink:0; }
         .tool-btn:hover { background-color:var(--btn-hover);border-color:var(--border-color); }
-        .tool-btn.active { background-color:rgba(82,139,255,0.3);border-color:var(--highlight-color); }
+        .tool-btn.active { background-color:rgba(0, 255, 136, 0.15); border: 1.5px solid var(--highlight-color); color: var(--highlight-color); }
         .tool-icon { font-size:18px;font-weight:bold;margin-bottom:2px; } .tool-cmd { font-size:9px;color:#aaa; }
         .tool-sep { height:1px;width:80%;background-color:#444;margin:5px 0; }
         #canvas-container { flex:1;position:relative;background-color:#000;overflow:hidden;cursor:none; }
@@ -43,6 +46,249 @@
         #osnap-panel input { transform: scale(1.3); margin-right: 12px; cursor: pointer; }
         #ucs-label { margin-right:5px; font-weight:bold; }
         #coords-display { font-family: 'Consolas', monospace; min-width: 130px; text-align: right; }
+
+        /* PCモード限定のプレミアム・フローティングデザイン刷新 */
+        @media screen and (min-width: 431px) {
+            body, html {
+                font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                background-color: #0e1014;
+            }
+            #middle-area {
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 0;
+                z-index: 1;
+            }
+            #canvas-container {
+                width: 100%;
+                height: 100%;
+            }
+            #top-bar {
+                position: fixed;
+                top: 16px; left: 16px; right: 16px;
+                height: 52px;
+                min-height: 52px;
+                background: rgba(26, 29, 36, 0.75);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 16px;
+                z-index: 100010;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+                padding: 0 16px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                box-sizing: border-box;
+            }
+            .top-btn {
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                color: #e0e0e0;
+                padding: 6px 12px;
+                border-radius: 10px;
+                font-weight: 500;
+                transition: all 0.2s cubic-bezier(0.1, 0.76, 0.55, 0.94);
+            }
+            .top-btn:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border-color: rgba(255, 255, 255, 0.2);
+                transform: translateY(-1px);
+            }
+            .control-group {
+                background: rgba(0, 0, 0, 0.25);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 10px;
+                padding: 5px 10px;
+                box-sizing: border-box;
+            }
+            select {
+                background: rgba(20, 22, 28, 0.85);
+                color: #fff;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 8px;
+                padding: 4px 8px;
+                outline: none;
+                transition: border-color 0.2s;
+            }
+            select:focus {
+                border-color: var(--highlight-color);
+            }
+            #toolbar {
+                position: fixed;
+                top: 84px; left: 16px;
+                bottom: 120px;
+                width: 68px;
+                background: rgba(26, 29, 36, 0.75);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 16px;
+                z-index: 100010;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+                padding: 12px 0;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 6px;
+                overflow-y: auto;
+            }
+            #toolbar::-webkit-scrollbar { display: none; }
+            .tool-btn {
+                width: 52px;
+                height: 52px;
+                border-radius: 12px;
+                margin: 0;
+                transition: all 0.2s cubic-bezier(0.1, 0.76, 0.55, 0.94);
+            }
+            .tool-btn:hover {
+                background: rgba(255, 255, 255, 0.08);
+                transform: scale(1.05);
+            }
+            .tool-btn.active {
+                background: rgba(0, 255, 136, 0.15);
+                border: 1px solid var(--highlight-color);
+                color: var(--highlight-color);
+            }
+            .tool-icon {
+                font-size: 20px;
+            }
+            .tool-cmd {
+                font-size: 8px;
+                opacity: 0.7;
+            }
+            #properties-panel, #layer-panel {
+                position: fixed;
+                top: 84px; right: 16px;
+                bottom: 40px;
+                width: 290px;
+                background: rgba(26, 29, 36, 0.85);
+                backdrop-filter: blur(20px);
+                -webkit-backdrop-filter: blur(20px);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 18px;
+                z-index: 100010;
+                box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+                transition: transform 0.3s cubic-bezier(0.1, 0.76, 0.55, 0.94), opacity 0.2s;
+                box-sizing: border-box;
+                display: flex !important;
+            }
+            #properties-panel.collapsed, #layer-panel.collapsed {
+                transform: translateX(330px);
+                opacity: 0;
+                pointer-events: none;
+            }
+            .props-header {
+                background: rgba(0, 0, 0, 0.15);
+                padding: 12px 16px;
+                font-family: 'Outfit', sans-serif;
+                font-size: 14px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            }
+            .props-content {
+                padding: 16px;
+            }
+            .prop-val {
+                background: rgba(20, 22, 28, 0.85);
+                color: #fff;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 8px;
+                padding: 5px 10px;
+                outline: none;
+                transition: border-color 0.2s;
+            }
+            .prop-val:focus {
+                border-color: var(--highlight-color);
+            }
+            
+            /* コマンド入力エリアのFigma風スマートバー化 */
+            #command-line-area {
+                position: fixed;
+                bottom: 35px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 480px;
+                max-width: 90%;
+                height: auto;
+                background: transparent;
+                border: none;
+                z-index: 100015;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                pointer-events: none;
+                box-sizing: border-box;
+            }
+            #command-log {
+                background: rgba(20, 22, 28, 0.92);
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 14px;
+                padding: 10px 14px;
+                max-height: 160px;
+                overflow-y: auto;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+                pointer-events: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                opacity: 0.85;
+                transition: opacity 0.2s;
+                font-size: 12px;
+                color: #b0b5c0;
+            }
+            #command-log:hover {
+                opacity: 1;
+            }
+            #command-input-wrapper {
+                background: rgba(26, 29, 36, 0.92);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1.5px solid rgba(255, 255, 255, 0.15);
+                border-radius: 24px;
+                padding: 8px 18px;
+                display: flex;
+                align-items: center;
+                box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+                pointer-events: auto;
+                transition: border-color 0.2s, box-shadow 0.2s;
+                box-sizing: border-box;
+            }
+            #command-input-wrapper:focus-within {
+                border-color: #00ff88;
+                box-shadow: 0 12px 30px rgba(0, 255, 136, 0.18);
+            }
+            #command-prompt {
+                color: #00ff88;
+                font-weight: bold;
+                font-size: 11px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            #command-input {
+                flex: 1;
+                border: none;
+                outline: none;
+                background: transparent;
+                color: #fff;
+                font-size: 13px;
+                font-family: 'Outfit', sans-serif;
+            }
+            #status-bar {
+                position: fixed;
+                bottom: 0; left: 0; right: 0;
+                height: 26px;
+                background: rgba(14, 16, 20, 0.7);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                border-top: 1px solid rgba(255, 255, 255, 0.05);
+                z-index: 100005;
+                padding: 0 16px;
+                color: #888;
+                box-sizing: border-box;
+            }
+        }
         
         /* 全画面モード時のUI非表示設定 */
         body.fullscreen-mode #top-bar,
@@ -232,24 +478,13 @@
         .fs-action-btn-active { background: rgba(0, 255, 136, 0.15); border: 1.5px solid #00ff88; color: #00ff88; }
         .fs-action-btn-danger { background: rgba(255,107,107,0.15); border: 1px solid #ff6b6b; color: #ff6b6b; }
 
-        /* 座標読み取りモード (`reading-mode`) 専用UIの定義 */
-        body.reading-mode .fs-modern-header,
-        body.reading-mode .fs-modern-bottom-bar,
-        body.reading-mode .fs-modern-bottom-sheet,
-        body.reading-mode .fs-modern-actionbar {
-            display: none !important;
-        }
-        #fs-exit-reading-btn {
-            display: none !important;
-        }
-
         /* 通常画面と全画面（座標読取）の表示分離制御 */
         #fs-tools, #fs-tools-toggle, #fs-zoom-panel, #fs-controls { display: none; }
 
-        body.fullscreen-mode #fs-tools, body.reading-mode #fs-tools { display: flex !important; }
-        body.fullscreen-mode #fs-tools-toggle, body.reading-mode #fs-tools-toggle { display: flex !important; }
-        body.fullscreen-mode #fs-zoom-panel, body.reading-mode #fs-zoom-panel { display: flex !important; }
-        body.fullscreen-mode #fs-controls, body.reading-mode #fs-controls { display: flex !important; }
+        body.fullscreen-mode #fs-tools { display: flex !important; }
+        body.fullscreen-mode #fs-tools-toggle { display: flex !important; }
+        body.fullscreen-mode #fs-zoom-panel { display: flex !important; }
+        body.fullscreen-mode #fs-controls { display: flex !important; }
         body.fullscreen-mode #fs-dim-actionbar { display: none !important; }
 
         body.fullscreen-mode .fs-modern-header,
@@ -810,8 +1045,7 @@
         <!-- === スマホ最適化 新UI === -->
         <div class="fs-modern-header">
             <div class="fs-modern-title fs-hdr-item">📱 WebCAD <span id="fs-modern-ucs-label">WCS</span></div>
-            <button onclick="toggleFsReadingMode()" id="fs-modern-read-btn" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">🎯 座標読取</button>
-            <button onclick="toggleFullscreen()" id="fs-modern-fullscreen-btn" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">⛶ 全画面</button>
+            <button onclick="toggleFullscreen()" id="fs-modern-read-btn" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">🎯 座標読取</button>
             <button onclick="resetUCS()" class="fs-action-btn fs-action-btn-neutral fs-hdr-item" style="height: 28px;">🌐 WCS戻す</button>
             <select id="fs-modern-ucs-select" class="fs-hdr-item" style="padding:4px 6px; font-size:11px; background:rgba(40,44,52,0.85); color:#fff; border:1px solid #666; border-radius:14px; height: 28px;" onchange="loadUCS(this.value)">
                 <option value="">--UCS読込--</option>
@@ -857,8 +1091,7 @@
             <!-- 動的生成 -->
         </div>
 
-        <!-- 座標読み取りモード解除ボタン -->
-        <button id="fs-exit-reading-btn" onclick="toggleFsReadingMode()">✖ 読取解除</button>
+
     </div>
     
     <!-- 寸法入力専用アクションバー（通常画面・全画面共通で使用） -->
@@ -957,10 +1190,6 @@
         let isPseudoFullscreen = false;
 
         function toggleFullscreen() {
-            // 座標読み取りモードならそれを解除する
-            if (document.body.classList.contains('reading-mode')) {
-                toggleFsReadingMode();
-            }
             const docEl = document.documentElement;
             const hasFullscreenAPI = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
 
@@ -1123,7 +1352,7 @@
 
         // フローティング座標ツールチップの更新（cad-core.jsから呼ばれる）
         window.updateFsCoordTooltip = function(screenX, screenY, ucsX, ucsY, snapType) {
-            if(!document.body.classList.contains('fullscreen-mode') && !document.body.classList.contains('reading-mode')) return;
+            if(!document.body.classList.contains('fullscreen-mode')) return;
             const tt = document.getElementById('fs-coord-tooltip');
             if(!tt) return;
 
@@ -1529,13 +1758,6 @@
             }
         }
 
-        // 座標読み取りモードの切り替え
-        function toggleFsReadingMode() {
-            document.body.classList.toggle('reading-mode');
-            if (typeof toggleFsTools === 'function') toggleFsTools(false);
-            closeFsSheet();
-            if (typeof render === 'function') render();
-        }
 
         function closeFsSheet() {
             currentFsSheet = null;
@@ -1610,15 +1832,8 @@
             // 4. 座標読取モードボタン
             const readBtn = document.getElementById('fs-modern-read-btn');
             if (readBtn) {
-                const isReading = document.body.classList.contains('reading-mode');
-                readBtn.className = isReading ? 'fs-action-btn fs-action-btn-active fs-hdr-item' : 'fs-action-btn fs-action-btn-neutral fs-hdr-item';
-            }
-
-            // 5. 全画面ボタン
-            const fsBtn = document.getElementById('fs-modern-fullscreen-btn');
-            if (fsBtn) {
-                const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || isPseudoFullscreen);
-                fsBtn.className = isFs ? 'fs-action-btn fs-action-btn-active fs-hdr-item' : 'fs-action-btn fs-action-btn-neutral fs-hdr-item';
+                const isFs = document.body.classList.contains('fullscreen-mode') || !!(document.fullscreenElement || document.webkitFullscreenElement || isPseudoFullscreen);
+                readBtn.className = isFs ? 'fs-action-btn fs-action-btn-active fs-hdr-item' : 'fs-action-btn fs-action-btn-neutral fs-hdr-item';
             }
 
             // 6. UCSステータス表示
