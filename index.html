@@ -5,21 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web CAD</title>
     <style>
-        :root { --bg-color:#212830;--panel-bg:#333842;--border-color:#181c21;--text-color:#e0e0e0;--highlight-color:#528bff;--ucs-color:#ffcc00;--crosshair-color:#ffffff;--btn-hover:rgba(255,255,255,0.1); }
+        :root {
+            --bg-color:#212830;--panel-bg:#333842;--panel-2:#2a2e35;--border-color:#181c21;--text-color:#e0e0e0;--highlight-color:#528bff;--ucs-color:#ffcc00;--crosshair-color:#ffffff;--btn-hover:rgba(255,255,255,0.1);
+            /* 新デザイン トークン: border3段階 / 補助色 / 角丸 */
+            --border-1:#181c21;--border-2:#3a4049;--border-3:#4a525e;
+            --dim:#9aa3ad;--mute:#6b7480;--green:#00ff88;--cyan:#00ffff;--warn:#ff6b6b;
+            --r-card:12px;--r-btn:10px;--r-sub:8px;--r-pill:6px;
+        }
         body,html { margin:0;padding:0;height:100%;font-family:'Segoe UI',sans-serif;background-color:var(--bg-color);color:var(--text-color);overflow:hidden;display:flex;flex-direction:column; }
-        #top-bar { min-height:40px;background-color:var(--panel-bg);border-bottom:1px solid var(--border-color);display:flex;flex-wrap:wrap;align-items:center;padding:4px 10px;gap:6px; }
-        .top-btn { background-color:transparent;border:1px solid #555;color:var(--text-color);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:5px; }
-        .top-btn:hover { background-color:var(--btn-hover);border-color:#888; }
-        .control-group { display:flex;align-items:center;gap:5px;font-size:12px;background-color:#2a2e35;padding:4px 8px;border-radius:4px;border:1px solid #444; }
-        select { background-color:#1e2227;color:white;border:1px solid #555;padding:2px 5px;outline:none;max-width:80px; }
+        #top-bar { min-height:58px;background-color:var(--panel-bg);border-bottom:1px solid var(--border-1);display:flex;flex-wrap:nowrap;align-items:center;padding:8px 10px;gap:8px;overflow-x:auto;overflow-y:hidden; }
+        #top-bar::-webkit-scrollbar { height:0; }
+        .top-btn { flex:0 0 auto;height:42px;padding:0 12px;background-color:transparent;border:1px solid var(--border-3);color:var(--text-color);border-radius:var(--r-btn);cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;white-space:nowrap; }
+        .top-btn:hover { background-color:var(--btn-hover);border-color:#5a6470; }
+        .top-btn.primary { background-color:rgba(0,255,136,0.14);border-color:var(--green);color:var(--green);font-weight:700; }
+        .control-group { flex:0 0 auto;display:flex;flex-direction:column;background-color:var(--panel-2);padding:5px 8px 6px;border-radius:var(--r-card);border:1px solid var(--border-2);gap:4px; }
+        .cg-label { color:var(--mute);font:600 9px/1 'Segoe UI',sans-serif;letter-spacing:.1em;margin-left:2px; }
+        .cg-row { display:flex;gap:5px;align-items:center; }
+        .cg-btn { height:32px;min-width:38px;padding:0 10px;background-color:transparent;border:1px solid var(--border-3);border-radius:var(--r-sub);color:var(--text-color);font:700 12px 'Segoe UI',sans-serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap; }
+        .cg-btn:hover { background-color:var(--btn-hover); }
+        .cg-btn.primary { background-color:rgba(0,255,136,0.12);border-color:var(--green);color:var(--green); }
+        /* 上部バー右端のスクロール示唆フェード */
+        #top-fade { position:fixed;top:0;right:0;width:42px;height:58px;background:linear-gradient(90deg,rgba(51,56,66,0) 0%,rgba(51,56,66,.85) 55%,var(--panel-bg) 100%);pointer-events:none;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;z-index:5; }
+        #top-fade span { color:var(--text-color);font:800 16px/1 'Segoe UI',sans-serif;opacity:.65; }
+        body.fullscreen-mode #top-fade { display:none; }
+        select { background-color:#1e2227;color:white;border:1px solid var(--border-3);padding:4px 6px;outline:none;max-width:90px;border-radius:var(--r-sub);font-size:11px; }
         #middle-area { flex:1;display:flex;position:relative;overflow:hidden; }
-        #toolbar { width:65px;background-color:var(--panel-bg);border-right:1px solid var(--border-color);display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:5px;overflow-y:auto; }
-        #toolbar::-webkit-scrollbar { width:4px; } #toolbar::-webkit-scrollbar-thumb { background:#555;border-radius:4px; }
-        .tool-btn { width:54px;height:50px;background-color:transparent;border:1px solid transparent;color:var(--text-color);border-radius:4px;cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;flex-shrink:0; }
-        .tool-btn:hover { background-color:var(--btn-hover);border-color:var(--border-color); }
-        .tool-btn.active { background-color:rgba(82,139,255,0.3);border-color:var(--highlight-color); }
-        .tool-icon { font-size:18px;font-weight:bold;margin-bottom:2px; } .tool-cmd { font-size:9px;color:#aaa; }
-        .tool-sep { height:1px;width:80%;background-color:#444;margin:5px 0; }
+        /* === 左ツールバー: 44pxレール ⇔ 148pxオーバーレイ展開 === */
+        #toolbar { width:44px;flex-shrink:0;background-color:var(--panel-bg);border-right:1px solid var(--border-1);display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 0 8px;overflow-y:auto;overflow-x:hidden; }
+        #toolbar::-webkit-scrollbar { width:0; }
+        .tool-btn { width:36px;height:36px;background-color:transparent;border:1px solid transparent;color:var(--text-color);border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+        .tool-btn:hover { background-color:var(--btn-hover); }
+        .tool-btn.active { background-color:rgba(82,139,255,0.18);border-color:var(--highlight-color); }
+        .tool-btn.active .tool-icon, .tool-btn.active .tool-cmd { color:var(--highlight-color); }
+        .tool-icon { font-size:16px;font-weight:700;margin:0; }
+        .tool-cmd { display:none;font-size:12px;font-weight:600;color:var(--text-color); }
+        .tool-sep { height:1px;width:24px;background-color:#1c2026;margin:5px 0 3px;flex-shrink:0; }
+        .tool-grp-label { color:var(--mute);font:700 7.5px/1 'Segoe UI',sans-serif;letter-spacing:.14em;margin:2px 0 3px;flex-shrink:0;text-align:center; }
+        .tool-toggle { width:36px;height:36px;background:rgba(255,255,255,.04);border:1px solid var(--border-3);border-radius:9px;color:var(--text-color);font:700 14px/1 'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-bottom:4px;cursor:pointer; }
+        #tool-header { display:none;align-items:center;justify-content:space-between;padding:0 2px 6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:6px;flex-shrink:0; }
+        #tool-header span { color:var(--text-color);font:700 12px 'Segoe UI',sans-serif;letter-spacing:.04em; }
+        #tool-header button { width:30px;height:30px;background:rgba(255,255,255,.04);border:1px solid var(--border-3);border-radius:8px;color:var(--text-color);font:700 13px/1 'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;cursor:pointer; }
+        /* 展開オーバーレイ */
+        #toolbar.expanded { position:absolute;left:0;top:0;height:100%;width:148px;z-index:50;align-items:stretch;padding:8px 8px 12px;gap:2px;background:rgba(33,40,48,.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:6px 0 16px rgba(0,0,0,.5);border-right:1px solid rgba(255,255,255,.10); }
+        #toolbar.expanded .tool-toggle { display:none; }
+        #toolbar.expanded #tool-header { display:flex; }
+        #toolbar.expanded .tool-btn { width:100%;height:38px;justify-content:flex-start;padding:0 10px;gap:10px;border-radius:9px; }
+        #toolbar.expanded .tool-icon { width:18px;text-align:center;font-size:15px; }
+        #toolbar.expanded .tool-cmd { display:inline; }
+        #toolbar.expanded .tool-sep { width:auto;margin:8px 4px 4px;background:rgba(255,255,255,.06); }
+        #toolbar.expanded .tool-grp-label { font-size:8.5px;letter-spacing:.16em;text-align:left;margin:6px 0 4px 4px; }
         #canvas-container { flex:1;position:relative;background-color:#000;overflow:hidden;cursor:none; }
         canvas { display:block; }
         #properties-panel, #layer-panel { width:250px; background-color:var(--panel-bg); border-left:1px solid var(--border-color); display:flex; flex-direction:column; overflow-y:auto; transition:width 0.2s; }
@@ -29,15 +63,27 @@
         .prop-row { display:flex; margin-bottom:5px; align-items:center; }
         .prop-label { width:80px; color:#aaa; }
         .prop-val { flex:1; background-color:#1e2227; color:#fff; border:1px solid #444; padding:2px 5px; outline:none; }
-        #command-line-area { height:120px;background-color:var(--bg-color);border-top:1px solid var(--border-color);display:flex;flex-direction:column;font-family:'Consolas',monospace;font-size:13px; }
+        /* === コマンド欄: 32pxピル ⇔ 展開 === */
+        #command-line-area { background-color:var(--bg-color);border-top:1px solid var(--border-1);display:flex;flex-direction:column;font-family:'Consolas',monospace;font-size:13px;flex:0 0 auto; }
+        #command-line-area.collapsed { height:32px; }
+        #command-line-area:not(.collapsed) { height:140px; }
+        #command-pill { display:none;height:32px;width:100%;background:var(--bg-color);border:none;align-items:center;gap:8px;padding:0 12px;cursor:pointer;font-family:'Consolas',monospace; }
+        #command-line-area.collapsed #command-pill { display:flex; }
+        #command-line-area.collapsed #command-log, #command-line-area.collapsed #command-input-wrapper { display:none; }
+        #cmd-pill-dot { width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px rgba(0,255,136,.6);flex-shrink:0; }
+        #cmd-pill-name { color:var(--green);font:700 11px 'Consolas',monospace;letter-spacing:.04em;flex-shrink:0; }
+        #cmd-pill-sep { color:var(--border-2);font-size:11px;flex-shrink:0; }
+        #cmd-pill-prompt { color:var(--text-color);font:600 11px 'Consolas',monospace;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+        #cmd-pill-hint { color:var(--mute);font:700 10px 'Segoe UI',sans-serif;white-space:nowrap;flex-shrink:0; }
         #command-log { flex:1;padding:5px 10px;overflow-y:auto;color:#aaa;display:flex;flex-direction:column;justify-content:flex-end; }
         #command-input-wrapper { display:flex;padding:5px 10px;background-color:#fff;color:#000; }
         #command-prompt { margin-right:5px;font-weight:bold;color:#333; }
         #command-input { flex:1;border:none;outline:none;background:transparent;font-family:inherit;font-size:inherit;font-weight:bold; }
-        #status-bar { height:24px;background-color:var(--panel-bg);border-bottom:1px solid var(--border-color);display:flex;align-items:center;padding:0 10px;font-size:12px;justify-content:space-between; }
-        .status-btn { background:transparent; border:none; color:#aaa; cursor:pointer; padding:2px 6px; font-size:11px; }
-        .status-btn:hover { color:#fff; background:var(--btn-hover); }
-        .status-btn.active { color:var(--highlight-color); font-weight:bold; }
+        #status-bar { height:36px;background-color:var(--panel-2);border-bottom:1px solid var(--border-1);display:flex;align-items:center;padding:0 12px;font-size:12px;justify-content:space-between;gap:8px; }
+        .status-btn { background:transparent;border:1px solid transparent;color:var(--dim);cursor:pointer;padding:0 8px;height:24px;font:600 11px 'Segoe UI',sans-serif;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:3px; }
+        .status-btn:hover { color:#fff;background:var(--btn-hover); }
+        .status-btn.active { color:var(--highlight-color);background:rgba(82,139,255,0.12);border-color:var(--highlight-color);font-weight:700; }
+        #btn-osnap.active { color:var(--green);background:rgba(0,255,136,0.12);border-color:var(--green); }
         #osnap-panel { display:none; position:fixed; background:var(--panel-bg); border:1px solid var(--border-color); padding:10px; z-index:999999 !important; box-shadow:0 5px 25px rgba(0,0,0,0.8); pointer-events: auto; }
         #osnap-panel label { display:block; margin-bottom:12px; font-size:14px; cursor:pointer; min-width:120px; padding:4px 0; color: #fff; }
         #osnap-panel input { transform: scale(1.3); margin-right: 12px; cursor: pointer; }
@@ -59,38 +105,39 @@
         /* フローティング座標ツールチップ */
         #fs-coord-tooltip {
             position: fixed; display: none; pointer-events: none; z-index: 100000;
-            background: rgba(0,0,0,0.8); border: 1px solid rgba(0,255,0,0.6); border-radius: 6px;
-            padding: 6px 10px; font-family: 'Consolas', monospace; font-size: 13px;
-            color: #00ff88; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.86); border: 1.5px solid rgba(0,255,136,0.65); border-radius: 10px;
+            padding: 10px 14px; font-family: 'Consolas', monospace; font-size: 17px; font-weight: 700; line-height: 1.3;
+            color: #00ff88; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,0.7), 0 0 24px rgba(0,255,136,0.15);
+            -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
         }
-        #fs-coord-tooltip .snap-label { color: #ffff00; font-size: 11px; display: block; margin-top: 2px; }
+        #fs-coord-tooltip .snap-label { color: #ffcc00; font-size: 11px; font-weight: 600; display: block; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.12); }
 
         /* 全画面コントロールパネル（右下固定） */
         #fs-controls {
-            position: fixed; bottom: 20px; right: 10px; z-index: 100001;
-            display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+            position: fixed; bottom: 18px; right: 14px; z-index: 100001;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
         }
         #fs-controls button {
-            width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.3);
-            background: rgba(40,44,52,0.85); color: #e0e0e0; font-size: 15px;
+            width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.3);
+            background: rgba(30,34,40,0.85); color: #e0e0e0; font-size: 17px;
             cursor: pointer; display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 1px 5px rgba(0,0,0,0.4); backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px); transition: all 0.15s;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.55); backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px); transition: all 0.15s;
         }
         #fs-controls button:active { transform: scale(0.92); }
         #fs-controls button.fs-active { border-color: #00ff88; color: #00ff88; }
 
         /* ズームスライダー（左下固定） */
         #fs-zoom-panel {
-            position: fixed; bottom: 10px; left: 10px; z-index: 100001;
-            display: flex; flex-direction: column; align-items: center; gap: 3px;
-            background: rgba(40,44,52,0.85); border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 20px; padding: 6px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-            backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+            position: fixed; bottom: 18px; left: 14px; z-index: 100001;
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            background: rgba(30,34,40,0.78); border: 1px solid rgba(255,255,255,0.16);
+            border-radius: 26px; padding: 8px 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.55);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
         }
         #fs-zoom-panel button {
-            width: 32px; height: 32px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
-            background: transparent; color: #e0e0e0; font-size: 18px; font-weight: bold;
+            width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.18);
+            background: rgba(255,255,255,0.04); color: #e0e0e0; font-size: 19px; font-weight: bold;
             cursor: pointer; display: flex; align-items: center; justify-content: center;
         }
         #fs-zoom-panel button:active { background: rgba(255,255,255,0.15); }
@@ -108,28 +155,20 @@
 
         /* レスポンシブ調整 (iPhone15基準: 393px) */
         @media screen and (max-width: 430px) {
-            #top-bar { padding: 2px 4px; gap: 3px; min-height: 34px; }
-            .top-btn { padding: 3px 6px; font-size: 11px; gap: 3px; }
-            .control-group { padding: 2px 4px; gap: 3px; font-size: 11px; }
-            /* 座標系グループはモバイルで非表示 */
-            #ucs-control-group { display: none; }
+            /* 横1行スクロール前提なのでグループは隠さず温存。図面名のみ省略 */
             #drawing-name { display: none; }
-            #status-bar { padding: 0 4px; font-size: 10px; height: 28px; flex-wrap: nowrap; gap: 4px; }
-            .status-btn { padding: 2px 3px; font-size: 10px; }
-            #ucs-label { margin-right: 2px; font-size: 10px; }
-            #coords-display { min-width: 100px; font-size: 10px; }
+            #status-bar { padding: 0 8px; font-size: 11px; height: 34px; flex-wrap: nowrap; gap: 6px; }
+            .status-btn { padding: 0 6px; font-size: 10px; }
+            #ucs-label { margin-right: 2px; }
+            #coords-display { min-width: 96px; font-size: 10px; }
             #snap-indicator { width: 26px !important; font-size: 9px; }
             #status-bar > div { flex-shrink: 0; }
-            #toolbar { width: 50px; padding-top: 5px; gap: 2px; }
-            .tool-btn { width: 42px; height: 40px; }
-            .tool-icon { font-size: 15px; }
-            .tool-cmd { font-size: 8px; }
-            #command-line-area { height: 80px; font-size: 12px; }
-            select { max-width: 55px; font-size: 10px; }
+            #command-line-area:not(.collapsed) { height: 120px; }
+            select { max-width: 64px; font-size: 10px; }
         }
         @media screen and (min-width: 431px) and (max-width: 600px) {
-            #status-bar { padding: 0 5px; font-size: 10px; height: 30px; flex-wrap: nowrap; gap: 5px; }
-            .status-btn { padding: 2px 4px; font-size: 10px; }
+            #status-bar { padding: 0 8px; font-size: 11px; height: 34px; flex-wrap: nowrap; gap: 6px; }
+            .status-btn { padding: 0 6px; font-size: 10px; }
             #coords-display { min-width: 110px; font-size: 10px; }
             #snap-indicator { width: 30px !important; font-size: 10px; }
             #status-bar > div { flex-shrink: 0; }
@@ -225,41 +264,52 @@
     <input type="file" id="dxf-file-input" accept=".dxf,.dwg" style="display:none;">
     <div id="top-bar">
         <button class="top-btn" id="btn-load-dxf" title="ファイルを開く (DXF/DWG)">📁 開く</button>
-        <button class="top-btn" onclick="closeDrawing()" title="図面を閉じて新規作成">✕ 閉じる</button>
+        <button class="top-btn" onclick="closeDrawing()" title="図面を閉じて新規作成"><span style="color:var(--warn);">✕</span> 閉じる</button>
         <button class="top-btn" onclick="togglePropertiesPanel()" title="プロパティパネル表示切替">📋 プロパティ</button>
         <div class="control-group">
-            <span style="color:#aaa;">保存:</span>
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="saveProject()" title="プロジェクト保存">💾 保存</button>
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="showProjectList()" title="保存済みプロジェクトを復元">📂 復元</button>
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="exportDxf()" title="DXF形式でエクスポート">DXF</button>
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="exportDwg()" title="DWG形式でエクスポート">DWG</button>
+            <span class="cg-label">保存</span>
+            <div class="cg-row">
+                <button class="cg-btn primary" onclick="saveProject()" title="プロジェクト保存">💾</button>
+                <button class="cg-btn" onclick="showProjectList()" title="保存済みプロジェクトを復元">📂</button>
+                <button class="cg-btn" onclick="exportDxf()" title="DXF形式でエクスポート">DXF</button>
+                <button class="cg-btn" onclick="exportDwg()" title="DWG形式でエクスポート">DWG</button>
+            </div>
         </div>
         <div class="control-group">
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="undo()" title="元に戻す (Ctrl+Z)">↩ 戻す</button>
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="redo()" title="やり直し (Ctrl+Y)">↪ やり直し</button>
+            <span class="cg-label">編集</span>
+            <div class="cg-row">
+                <button class="cg-btn" style="font-size:16px;" onclick="undo()" title="元に戻す (Ctrl+Z)">↩</button>
+                <button class="cg-btn" style="font-size:16px;" onclick="redo()" title="やり直し (Ctrl+Y)">↪</button>
+            </div>
         </div>
         <div class="control-group" id="ucs-control-group">
-            <span style="color:#aaa;">座標系:</span>
-            <span id="ucs-status-display" style="font-weight:bold;color:var(--highlight-color);width:30px;text-align:center;">WCS</span>
-            <select id="ucs-select" style="max-width:80px;font-size:11px;" onchange="loadUCS(this.value)"><option value="">--</option></select>
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="saveUCS()" title="現在のUCSを保存">💾保存</button>
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="togglePlanView()" title="画面をUCSに平行・直角に合わせる">🧭 PLAN</button>
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="issueCommand('WCS')" title="ワールド座標系に戻す">リセット</button>
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="issueCommand('UCS')" title="新しい原点を指定">原点移動</button>
-            <button class="top-btn" style="padding:2px 5px;font-size:10px;" onclick="issueCommand('UCS2P')" title="基点+方向で座標系を設定">2点指定</button>
+            <span class="cg-label">座標系</span>
+            <div class="cg-row">
+                <span id="ucs-status-display" style="height:32px;padding:0 10px;display:inline-flex;align-items:center;background:rgba(82,139,255,.16);border:1px solid var(--highlight-color);border-radius:var(--r-sub);color:var(--highlight-color);font-weight:700;font-size:12px;letter-spacing:.04em;">WCS</span>
+                <select id="ucs-select" style="max-width:90px;font-size:11px;" onchange="loadUCS(this.value)"><option value="">--</option></select>
+                <button class="cg-btn" onclick="saveUCS()" title="現在のUCSを保存">💾</button>
+                <button class="cg-btn" onclick="togglePlanView()" title="画面をUCSに平行・直角に合わせる">🧭 PLAN</button>
+                <button class="cg-btn" onclick="issueCommand('WCS')" title="ワールド座標系に戻す">リセット</button>
+                <button class="cg-btn" onclick="issueCommand('UCS')" title="新しい原点を指定">原点移動</button>
+                <button class="cg-btn" onclick="issueCommand('UCS2P')" title="基点+方向で座標系を設定">2点</button>
+            </div>
         </div>
         <div class="control-group">
-            <span style="color:#aaa;">画層:</span>
-            <div id="current-layer-color" style="width:12px;height:12px;background-color:white;border-radius:2px;"></div>
-            <select id="layer-select"></select>
-            <button class="status-btn" onclick="toggleLayerPanel()" style="padding:0 5px;" title="画層一括管理">👁️</button>
-            <button class="status-btn" onclick="issueCommand('LAYOFF')" style="padding:0 5px; color:#ffcc00; font-weight:bold;" title="図形をタッチして画層を非表示にする (LAYOFF)">🚫非表示</button>
+            <span class="cg-label">画層</span>
+            <div class="cg-row">
+                <div id="current-layer-color" style="width:18px;height:18px;background-color:white;border-radius:4px;border:1px solid #5a5a5a;flex-shrink:0;"></div>
+                <select id="layer-select"></select>
+                <button class="cg-btn" onclick="toggleLayerPanel()" style="color:var(--green);" title="画層一括管理">👁</button>
+                <button class="cg-btn" onclick="issueCommand('LAYOFF')" style="color:var(--ucs-color);" title="図形をタッチして画層を非表示にする (LAYOFF)">🚫</button>
+            </div>
         </div>
         <button class="top-btn" onclick="zoomToOrigin()" title="原点へズーム">🔍 原点</button>
         <button class="top-btn" onclick="zoomExtents()" title="全体表示">🔍 全体</button>
-        <button class="top-btn" onclick="toggleFullscreen()" title="全画面表示で座標読取に特化">🎯 座標読取モード</button>
-        <span id="drawing-name" style="color:#aaa;font-size:11px;margin-left:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;" title="">新規図面</span>
+        <button class="top-btn primary" onclick="toggleFullscreen()" title="全画面表示で座標読取に特化">🎯 座標読取</button>
+        <span id="drawing-name" style="color:var(--dim);font-size:11px;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;flex:0 0 auto;" title="">新規図面</span>
+        <div style="flex:0 0 auto;width:36px;"></div>
     </div>
+    <div id="top-fade"><span>›</span></div>
     <div id="status-bar">
         <div style="display:flex;align-items:center;flex-shrink:0;">
             <button id="btn-exit-fullscreen" onclick="toggleFullscreen()">✖ 解除</button>
@@ -280,7 +330,11 @@
     </div>
     <div id="middle-area">
         <div id="toolbar">
+            <!-- レール展開トグル / 展開時ヘッダー -->
+            <button class="tool-toggle" onclick="toggleToolbar()" title="ツールを展開">☰</button>
+            <div id="tool-header"><span>ツール</span><button onclick="toggleToolbar()" title="折りたたむ">◀</button></div>
             <!-- 作図コマンド -->
+            <span class="tool-grp-label">作図</span>
             <button class="tool-btn" onclick="toggleCommand('LINE')" title="線分 (L)"><div class="tool-icon">／</div><div class="tool-cmd">LINE</div></button>
             <button class="tool-btn" onclick="toggleCommand('PLINE')" title="ポリライン (PL)"><div class="tool-icon">∧</div><div class="tool-cmd">PLINE</div></button>
             <button class="tool-btn" onclick="toggleCommand('RECTANG')" title="長方形 (REC)"><div class="tool-icon">□</div><div class="tool-cmd">RECT</div></button>
@@ -291,6 +345,7 @@
             <button class="tool-btn" onclick="toggleCommand('HATCH')" title="ハッチング (H)"><div class="tool-icon" style="background:repeating-linear-gradient(45deg, transparent, transparent 2px, #fff 2px, #fff 3px); width:16px; height:16px; margin-bottom:2px;"></div><div class="tool-cmd">HATCH</div></button>
             <div class="tool-sep"></div>
             <!-- 編集 -->
+            <span class="tool-grp-label">編集</span>
             <button class="tool-btn" onclick="toggleCommand('ERASE')" title="削除 (E)"><div class="tool-icon" style="color:#ff6b6b;">✖</div><div class="tool-cmd">ERASE</div></button>
             <button class="tool-btn" onclick="toggleCommand('MOVE')" title="移動 (M)"><div class="tool-icon" style="color:#ffff00;">✥</div><div class="tool-cmd">MOVE</div></button>
             <button class="tool-btn" onclick="toggleCommand('COPY')" title="コピー (CO)"><div class="tool-icon" style="color:#ffff00;">⊞</div><div class="tool-cmd">COPY</div></button>
@@ -298,6 +353,7 @@
             <button class="tool-btn" onclick="toggleCommand('ROTATE')" title="回転 (RO)"><div class="tool-icon" style="color:#ffff00;">↻</div><div class="tool-cmd">ROTATE</div></button>
             <div class="tool-sep"></div>
             <!-- 寸法コマンド -->
+            <span class="tool-grp-label">寸法</span>
             <button class="tool-btn" onclick="toggleCommand('DIMLINEAR')" title="平行寸法 (DLI)"><div class="tool-icon" style="color:#00ffff;">↔</div><div class="tool-cmd">DIMLIN</div></button>
             <button class="tool-btn" onclick="toggleCommand('DIMALIGNED')" title="整列寸法 (DAL)"><div class="tool-icon" style="color:#00ffff;">⤢</div><div class="tool-cmd">DIMALN</div></button>
             <button class="tool-btn" onclick="toggleCommand('DIMRADIUS')" title="半径寸法 (DRA)"><div class="tool-icon" style="color:#00ffff;">R</div><div class="tool-cmd">DIMRAD</div></button>
@@ -325,7 +381,14 @@
             </div>
         </div>
     </div>
-    <div id="command-line-area">
+    <div id="command-line-area" class="collapsed">
+        <button id="command-pill" onclick="toggleCommandLine()" title="コマンドラインを開閉">
+            <span id="cmd-pill-dot"></span>
+            <span id="cmd-pill-name">READY</span>
+            <span id="cmd-pill-sep">·</span>
+            <span id="cmd-pill-prompt">コマンド入力</span>
+            <span id="cmd-pill-hint">コマンド ▲</span>
+        </button>
         <div id="command-log">
             <div>Web CADシステム v2.0 初期化完了。</div>
             <div>・作図: LINE(L), CIRCLE(C), RECTANG(REC), ARC(A), PLINE(PL)</div>
@@ -367,6 +430,19 @@
             #fs-tools-drawer { transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1); }
             .fs-drawer-closed { transform: translateX(calc(100% - 32px)); }
             .fs-drawer-open { transform: translateX(0); }
+            #fs-tools { display:flex; flex-direction:column; align-items:stretch; gap:10px; width:226px; padding:4px 10px 14px; pointer-events:auto; background:rgba(18,21,26,0.72); border-left:1px solid rgba(255,255,255,0.08); border-radius:0 0 0 12px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); max-height:calc(100vh - 70px); overflow-y:auto; }
+            .fsd-card { background:rgba(30,34,40,0.85); border:1px solid rgba(255,255,255,0.10); border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:8px; box-shadow:0 4px 12px rgba(0,0,0,0.4); }
+            .fsd-label { color:#6b7480; font:700 9px/1 'Segoe UI',sans-serif; letter-spacing:.16em; margin:0 0 2px 2px; }
+            .fsd-row { display:flex; gap:6px; }
+            .fsd-btn { min-height:40px; padding:0 10px; border-radius:10px; background:transparent; border:1px solid #4a525e; color:#e0e0e0; font:600 12px 'Segoe UI',sans-serif; display:flex; align-items:center; justify-content:center; gap:5px; cursor:pointer; white-space:nowrap; }
+            .fsd-btn.flex { flex:1; }
+            .fsd-btn.green { border-color:#00ff88; color:#00ff88; font-weight:700; }
+            .fsd-btn.green.on { background:rgba(0,255,136,0.10); }
+            .fsd-btn.yellow { border-color:#ffcc00; color:#ffcc00; font-weight:700; }
+            .fsd-btn.blue { border-color:#528bff; color:#528bff; font-weight:700; }
+            .fsd-btn.blue.on { background:rgba(82,139,255,0.14); }
+            .fsd-btn.red { color:#ff6b6b; }
+            .fsd-sel { min-height:40px; border-radius:10px; background:rgba(30,34,40,0.95); border:1px solid #4a525e; color:#e0e0e0; font:600 12px 'Segoe UI',sans-serif; padding:0 12px; max-width:none; }
         </style>
         <div id="fs-tools-drawer" class="fs-drawer-closed" style="position:fixed; top:60px; right:0; display:flex; align-items:flex-start; z-index:100001; pointer-events:none;">
             <!-- ドロワー引き手タブ -->
@@ -375,35 +451,42 @@
             </button>
 
             <!-- ツール群コンテナ -->
-            <div id="fs-tools" style="display:flex; flex-direction:column; align-items:flex-end; gap:12px; padding:0 12px 0 8px; pointer-events:none; background:rgba(20,22,26,0.6); border-radius:0 0 0 12px; padding-bottom:12px; backdrop-filter:blur(4px);">
-                <!-- グループ1: 作図・寸法系 -->
-                <div style="background:rgba(30,34,40,0.85); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; pointer-events:auto; box-shadow:0 4px 12px rgba(0,0,0,0.5); margin-top:8px;">
-                    <button class="fs-active" onclick="issueCommand('DIMORDINATE'); autoCloseDrawer();" title="引出線でXY両方の座標を配置します" style="padding:8px 12px; font-size:12px; border-radius:14px; border:1px solid #00ff88; background:rgba(40,44,52,0.9); color:#00ff88; box-shadow:0 1px 4px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">📍座標</button>
-                    <button onclick="issueCommand('DIMCONT'); autoCloseDrawer();" style="padding:8px 12px; font-size:12px; background:rgba(40,44,52,0.9); color:#ffcc00; border:1px solid #ffcc00; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">📏連続寸法</button>
+            <div id="fs-tools">
+                <!-- グループ1: 計測 -->
+                <div class="fsd-card">
+                    <span class="fsd-label">計測</span>
+                    <button class="fsd-btn green on" onclick="issueCommand('DIMORDINATE'); autoCloseDrawer();" title="引出線でXY両方の座標を配置します"><span style="font-size:14px;">📍</span>座標</button>
+                    <button class="fsd-btn yellow" onclick="issueCommand('DIMCONT'); autoCloseDrawer();" title="連続した寸法を記入"><span style="font-size:14px;">📏</span>連続寸法</button>
                 </div>
 
-                <!-- グループ2: UCS・表示・画層制御系 -->
-                <div style="background:rgba(30,34,40,0.85); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; pointer-events:auto; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
-                    <button onclick="issueCommand('UCS'); autoCloseDrawer();" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🎯UCS</button>
-                    <button onclick="issueCommand('UCS2P'); autoCloseDrawer();" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">📈2点</button>
-                    <button onclick="togglePlanView(); autoCloseDrawer();" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#61afef; border:1px solid #555; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🧭PLAN</button>
-                    <button onclick="issueCommand('WCS'); autoCloseDrawer();" style="padding:6px 10px; font-size:12px; background:rgba(40,44,52,0.9); color:#ddd; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">↩WCS</button>
-                    <select id="fs-ucs-select" style="padding:6px 8px; font-size:12px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" onchange="loadUCS(this.value); autoCloseDrawer();"><option value="">--読込--</option></select>
-                    <select id="fs-layer-select" style="padding:6px 8px; font-size:12px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5);" title="現在の画層" onchange="changeCurrentLayer(this.value); autoCloseDrawer();"><option value="">--画層--</option></select>
-                    <div style="display:flex; gap:6px; justify-content:space-between; width:100%;">
-                        <button onclick="toggleLayerPanel(); autoCloseDrawer();" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#00ff88; border:1px solid #00ff88; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; cursor:pointer;">👁️画層管理</button>
-                        <button onclick="issueCommand('LAYOFF'); autoCloseDrawer();" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#ffcc00; border:1px solid #ffcc00; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; cursor:pointer;">🚫タッチ消去</button>
+                <!-- グループ2: 座標系・画層 -->
+                <div class="fsd-card">
+                    <span class="fsd-label">座標系・画層</span>
+                    <div class="fsd-row">
+                        <button class="fsd-btn flex" onclick="issueCommand('UCS'); autoCloseDrawer();">🎯 UCS</button>
+                        <button class="fsd-btn flex" onclick="issueCommand('UCS2P'); autoCloseDrawer();">📈 2点</button>
                     </div>
-                    <div style="display:flex; gap:6px; justify-content:space-between;">
-                        <button onclick="saveUCS(); autoCloseDrawer();" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#fff; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">💾保存</button>
-                        <button onclick="deleteUCS(); autoCloseDrawer();" style="flex:1; padding:6px 4px; font-size:11px; background:rgba(40,44,52,0.9); color:#ff6b6b; border:1px solid #666; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap;">🗑️消去</button>
+                    <div class="fsd-row">
+                        <button class="fsd-btn flex blue" onclick="togglePlanView(); autoCloseDrawer();">🧭 PLAN</button>
+                        <button class="fsd-btn flex" onclick="issueCommand('WCS'); autoCloseDrawer();">↩ WCS</button>
+                    </div>
+                    <select id="fs-ucs-select" class="fsd-sel" onchange="loadUCS(this.value); autoCloseDrawer();"><option value="">－ UCS読込 －</option></select>
+                    <select id="fs-layer-select" class="fsd-sel" title="現在の画層" onchange="changeCurrentLayer(this.value); autoCloseDrawer();"><option value="">－ 画層 －</option></select>
+                    <div class="fsd-row">
+                        <button class="fsd-btn flex green" onclick="toggleLayerPanel(); autoCloseDrawer();">👁 画層管理</button>
+                        <button class="fsd-btn flex yellow" onclick="issueCommand('LAYOFF'); autoCloseDrawer();">🚫 タッチ消去</button>
+                    </div>
+                    <div class="fsd-row">
+                        <button class="fsd-btn flex" onclick="saveUCS(); autoCloseDrawer();">💾 保存</button>
+                        <button class="fsd-btn flex red" onclick="deleteUCS(); autoCloseDrawer();">🗑 消去</button>
                     </div>
                 </div>
 
-                <!-- グループ3: 図面管理系 -->
-                <div style="background:rgba(30,34,40,0.85); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; pointer-events:auto; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
-                    <button onclick="saveProject(); autoCloseDrawer();" style="padding:8px 12px; font-size:12px; background:rgba(40,44,52,0.9); color:#00ff88; border:1px solid #00ff88; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">💾図面保存</button>
-                    <button onclick="showProjectList(); autoCloseDrawer();" style="padding:8px 12px; font-size:12px; background:rgba(40,44,52,0.9); color:#61afef; border:1px solid #61afef; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; font-weight:bold;">📂復元</button>
+                <!-- グループ3: 図面 -->
+                <div class="fsd-card">
+                    <span class="fsd-label">図面</span>
+                    <button class="fsd-btn green on" onclick="saveProject(); autoCloseDrawer();">💾 図面保存</button>
+                    <button class="fsd-btn blue" onclick="showProjectList(); autoCloseDrawer();">📂 復元</button>
                 </div>
             </div>
         </div>

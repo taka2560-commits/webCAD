@@ -29,7 +29,7 @@ let orthoMode = false;
 // ===== ユーティリティ =====
 function isMobile() { return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window); }
 function addCommandLog(t) { const d=document.createElement('div'); d.textContent=t; commandLog.appendChild(d); commandLog.scrollTop=commandLog.scrollHeight; }
-function setPrompt(t) { document.getElementById('command-prompt').textContent=t; }
+function setPrompt(t) { document.getElementById('command-prompt').textContent=t; updateCommandPill(); }
 function resetCommand() { 
     cmdState={mode:'IDLE',startWcs:null,points:[],highlightIdx:-1,selectedIndices:[]}; 
     setPrompt('コマンド:'); activeCommandName=''; setActiveTool(null);
@@ -57,7 +57,33 @@ function resetCommand() {
     render(); 
 }
 function issueCommand(cmd) { cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd); }
-function setActiveTool(name) { document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); if(name){document.querySelectorAll('.tool-cmd').forEach(el=>{if(el.textContent===name)el.parentElement.classList.add('active');});} }
+function setActiveTool(name) { document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); if(name){document.querySelectorAll('.tool-cmd').forEach(el=>{if(el.textContent===name)el.parentElement.classList.add('active');});} updateCommandPill(); }
+
+// === 新UI: ツールバー展開 / コマンドピル ===
+// 左ツールバーを 44pxレール ⇔ 148pxオーバーレイ で切り替える
+function toggleToolbar() {
+    const tb = document.getElementById('toolbar');
+    if (tb) tb.classList.toggle('expanded');
+}
+// コマンドラインを 32pxピル ⇔ 展開（ログ+入力）で切り替える
+function toggleCommandLine() {
+    const area = document.getElementById('command-line-area');
+    if (!area) return;
+    area.classList.toggle('collapsed');
+    const hint = document.getElementById('cmd-pill-hint');
+    if (hint) hint.textContent = area.classList.contains('collapsed') ? 'コマンド ▲' : 'コマンド ▼';
+}
+// ピルに現在のコマンド名・プロンプト文を反映する（setPrompt / setActiveTool から呼ばれる）
+function updateCommandPill() {
+    const nameEl = document.getElementById('cmd-pill-name');
+    if (!nameEl) return;
+    const pEl = document.getElementById('cmd-pill-prompt');
+    const promptEl = document.getElementById('command-prompt');
+    const promptText = promptEl ? promptEl.textContent : '';
+    const active = (typeof activeCommandName !== 'undefined') && activeCommandName && activeCommandName.length;
+    nameEl.textContent = active ? activeCommandName : 'READY';
+    if (pEl) pEl.textContent = (promptText && promptText !== 'コマンド:') ? promptText : 'コマンド入力';
+}
 
 // ===== プロパティパネル制御 =====
 function hidePropertyPanel() {
