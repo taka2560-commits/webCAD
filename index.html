@@ -79,6 +79,8 @@
         #command-input-wrapper { display:flex;padding:5px 10px;background-color:#fff;color:#000; }
         #command-prompt { margin-right:5px;font-weight:bold;color:#333; }
         #command-input { flex:1;border:none;outline:none;background:transparent;font-family:inherit;font-size:inherit;font-weight:bold; }
+        #cmd-collapse { flex:0 0 auto;width:28px;height:24px;margin-left:6px;background:#2a2e35;color:#e0e0e0;border:1px solid var(--border-3);border-radius:var(--r-sub);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
+        #cmd-collapse:hover { background:#3a4049; }
         #status-bar { height:36px;background-color:var(--panel-2);border-bottom:1px solid var(--border-1);display:flex;align-items:center;padding:0 12px;font-size:12px;justify-content:space-between;gap:8px; }
         .status-btn { background:transparent;border:1px solid transparent;color:var(--dim);cursor:pointer;padding:0 8px;height:24px;font:600 11px 'Segoe UI',sans-serif;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:3px; }
         .status-btn:hover { color:#fff;background:var(--btn-hover); }
@@ -254,6 +256,9 @@
         .prop-btn:hover {
             background: #00cc66;
         }
+        .opt-bg-btn { background:#2a2e35 !important; color:#e0e0e0 !important; border:1px solid var(--border-3) !important; }
+        .opt-bg-btn:hover { background:#3a4049 !important; }
+        .opt-bg-btn.active { border-color:var(--green) !important; color:var(--green) !important; background:rgba(0,255,136,0.10) !important; }
     </style>
     <!-- PWA Settings -->
     <link rel="manifest" href="manifest.json">
@@ -266,6 +271,7 @@
         <button class="top-btn" id="btn-load-dxf" title="ファイルを開く (DXF/DWG)">📁 開く</button>
         <button class="top-btn" onclick="closeDrawing()" title="図面を閉じて新規作成"><span style="color:var(--warn);">✕</span> 閉じる</button>
         <button class="top-btn" onclick="togglePropertiesPanel()" title="プロパティパネル表示切替">📋 プロパティ</button>
+        <button class="top-btn primary" onclick="toggleFullscreen()" title="全画面表示で座標読取に特化">🎯 座標読取</button>
         <div class="control-group">
             <span class="cg-label">保存</span>
             <div class="cg-row">
@@ -305,7 +311,7 @@
         </div>
         <button class="top-btn" onclick="zoomToOrigin()" title="原点へズーム">🔍 原点</button>
         <button class="top-btn" onclick="zoomExtents()" title="全体表示">🔍 全体</button>
-        <button class="top-btn primary" onclick="toggleFullscreen()" title="全画面表示で座標読取に特化">🎯 座標読取</button>
+        <button class="top-btn" onclick="showOptionsPanel()" title="オプション（背景色など）">⚙ オプション</button>
         <span id="drawing-name" style="color:var(--dim);font-size:11px;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;flex:0 0 auto;" title="">新規図面</span>
         <div style="flex:0 0 auto;width:36px;"></div>
     </div>
@@ -395,7 +401,7 @@
             <div>・寸法: DIMLIN(DLI), DIMALN(DAL), DIMRAD(DRA), DIMDIA(DDI), DIMANG(DAN), DIMORD(DOR)</div>
             <div>・ファイル: DXF/DWG読み込み・エクスポート対応</div>
         </div>
-        <div id="command-input-wrapper"><span id="command-prompt">コマンド:</span><input type="text" id="command-input" autocomplete="off" autofocus></div>
+        <div id="command-input-wrapper"><span id="command-prompt">コマンド:</span><input type="text" id="command-input" autocomplete="off"><button id="cmd-collapse" onclick="toggleCommandLine()" title="コマンドラインを閉じる">▼</button></div>
     </div>
 
     <!-- オブジェクトスナップ設定パネル（固定配置用） -->
