@@ -498,7 +498,7 @@
         </div>
         <div id="fs-controls">
             <button id="fs-btn-osnap" class="fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
-            <button id="fs-btn-coord" class="fs-active" onclick="toggleFsCoordAlways()" title="座標常時表示 ON/OFF">XY</button>
+            <button id="fs-btn-coord" class="fs-active" onclick="toggleFsCoordAlways()" title="座標表示 ON/OFF（OFFで座標ツールチップを非表示）">XY</button>
             <button id="fs-btn-extents" onclick="zoomExtents()" title="全体表示">⛶</button>
             <button id="fs-btn-exit" onclick="toggleFullscreen()" title="全画面解除" style="border-color:#ff6b6b;color:#ff6b6b;">✕</button>
         </div>
@@ -742,6 +742,9 @@
             if(!document.body.classList.contains('fullscreen-mode')) return;
             const tt = document.getElementById('fs-coord-tooltip');
             if(!tt) return;
+
+            // XYトグルOFF時は座標ツールチップ自体を表示しない（寸法計測時に邪魔になるため）
+            if(!fsCoordAlways) { tt.style.display = 'none'; return; }
 
             // 最新の座標を保存（常時表示用）
             window._lastFsCoord = { ucsX, ucsY, snapType };
