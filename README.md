@@ -17,7 +17,7 @@
   - ホーム画面に追加することで、ネイティブアプリのように全画面で利用可能です。
 - **新モバイルUI（`new-mobile-ui` ブランチ）** 
   - 🌐 **[Vercel プレビュー環境](https://antigravity-web-cad-git-new-mobile-ui-yoga66962476s-projects.vercel.app)**
-  - 👉 **[モバイルUI モックアッププレビュー](Web%20CAD%20Mobile%20UI.html)** / **[モックアップV2](ui-mock-mobile.html)** / **[UIデザインブリーフ](claude-design-ブリーフ.md)**
+  - 👉 **[モバイルUI モックアッププレビュー](docs/mockups/Web%20CAD%20Mobile%20UI.html)** / **[モックアップV2](docs/mockups/ui-mock-mobile.html)** / **[UIデザインブリーフ](docs/mockups/claude-design-ブリーフ.md)**
   - iPhone縦持ちを基準に、上部バーを「ラベル＋カード」でグループ化し横1行スクロール化。左ツールバーは44pxアイコンレール＋`☰`でラベル付きパネルに展開。コマンドラインは32pxピルに収まり、タップで全ログを展開します。
   - 配色の役割を固定（青=座標系/ORTHO・緑=確定/保存/OSNAP・水色=寸法・黄=編集・赤=削除）し、現場での視認性を向上。
 

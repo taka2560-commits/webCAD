@@ -1,6 +1,10 @@
 // ===== Web CAD ファイル入出力モジュール =====
 // cad-io.js - DXF/DWGの読み込みとエクスポート
 
+// テキスト処理は cad-text-parse.js に集約（読込失敗時は素通しにフォールバック）
+function _decodeCadText(s) { return (typeof decodeDxfText === 'function') ? decodeDxfText(s) : s; }
+function _cleanCadMtext(s) { return (typeof parseCadText === 'function') ? parseCadText(s) : s; }
+
 // ===== DXF読み込み =====
 function loadDxfFile(file) {
     const reader = new FileReader();
@@ -26,9 +30,13 @@ function loadDxfFile(file) {
         }
 
         try {
-            // 日本語環境のAutoCAD出力に多いShift-JIS (ANSI_932)でデコード
-            const decoder = new TextDecoder('shift-jis');
-            const text = decoder.decode(buffer);
+            // 文字コード自動判定: UTF-8(AC1021以降のDXF)を厳格モードで試し、
+            // 失敗したら日本語環境のAutoCAD出力に多いShift-JIS (ANSI_932)へフォールバック
+            const decoded = (typeof decodeDxfBuffer === 'function')
+                ? decodeDxfBuffer(buffer)
+                : { text: new TextDecoder('shift-jis').decode(buffer), encoding: 'Shift-JIS' };
+            const text = decoded.text;
+            addCommandLog(`  文字コード: ${decoded.encoding} として読み込み`);
 
             const parser = new window.DxfParser();
             const dxf = parser.parseSync(text);
@@ -247,13 +255,13 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
         else if(e.halign === 2) halign = 'right';
         if(e.valign === 2) valign = 'middle';
         else if(e.valign === 3) valign = 'top';
-        return {type:'TEXT', layer, color, x:tx(pos.x, pos.y), y:ty(pos.x, pos.y), text:e.text || '', height:(e.textHeight || 2.5)*Math.abs(scaleX), halign, valign};
+        return {type:'TEXT', layer, color, x:tx(pos.x, pos.y), y:ty(pos.x, pos.y), text:_decodeCadText(e.text || ''), height:(e.textHeight || 2.5)*Math.abs(scaleX), halign, valign};
     }
     // MTEXT
     if(e.type === 'MTEXT') {
         const pos = e.position || {x:0, y:0};
-        // MTEXTの書式コード除去
-        let text = (e.text || '').replace(/\\[Ppf].*;/g, '').replace(/\\[A-Za-z][^;]*;/g, '').replace(/\{|\}/g, '').replace(/\\[\\]/g, '');
+        // MTEXTの書式コード除去（cad-text-parse.js: 貪欲マッチのデグレ対策済み・回帰テストあり）
+        let text = _cleanCadMtext(e.text || '');
         let halign = 'left', valign = 'top';
         const attach = e.attachmentPoint || 1;
         if(attach === 2 || attach === 5 || attach === 8) halign = 'center';
@@ -640,7 +648,7 @@ function convertDwgDatabaseToApp(db) {
                 } else skipCount++;
             } else if (ent.type === 'TEXT') {
                 const pt = ent.alignmentPoint || ent.insertionPoint || ent.insertion_pt || ent.position;
-                const textStr = ent.textValue !== undefined ? ent.textValue : (ent.text || '');
+                const textStr = _decodeCadText(ent.textValue !== undefined ? ent.textValue : (ent.text || ''));
                 let halign = 'left', valign = 'bottom';
                 if(ent.horizontalAlignment === 1 || ent.horizontalAlignment === 4) halign = 'center';
                 else if(ent.horizontalAlignment === 2) halign = 'right';
@@ -653,8 +661,7 @@ function convertDwgDatabaseToApp(db) {
                 } else skipCount++;
             } else if (ent.type === 'MTEXT') {
                 const pt = ent.insertionPoint || ent.position;
-                let text = ent.text || ent.textValue || '';
-                text = text.replace(/\\[A-Za-z0-9][^;]*;/g, '').replace(/\\[Ppf].*;/g, '').replace(/\{|\}/g, '').replace(/\\[\\]/g, '\\');
+                let text = _cleanCadMtext(ent.text || ent.textValue || '');
                 let halign = 'left', valign = 'top';
                 const attach = ent.attachmentPoint || ent.attachment || 1;
                 if(attach === 2 || attach === 5 || attach === 8) halign = 'center';
@@ -675,6 +682,7 @@ function convertDwgDatabaseToApp(db) {
                 } else if (dimText && dimText.includes('<>')) {
                     dimText = dimText.replace('<>', parseFloat(ent.measurement || 0).toFixed(0));
                 }
+                if (dimText) dimText = _decodeCadText(dimText);
                 if (pt && dimText) {
                     result.entities.push({type:'TEXT', layer, color, 
                         x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:dimText, height: (ent.textHeight || ent.height || 2.5) * Math.abs(sX)});
