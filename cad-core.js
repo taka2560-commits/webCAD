@@ -1337,6 +1337,7 @@ function handlePointInput(wcs, fromMouse = false) {
 function isOffsetable(e) { return e.type==='LINE'||e.type==='CIRCLE'||e.type==='ARC'||e.type==='RECTANG'; }
 function createOffsetEntity(e, d, wx, wy) {
     const copy = JSON.parse(JSON.stringify(e));
+    delete copy.bbox; // 元図形のbboxを引き継ぐとスナップ/描画カリングが誤判定する
     if(e.type==='CIRCLE'||e.type==='ARC') {
         const dc = dist(e.cx, e.cy, wx, wy);
         if(dc > e.radius) copy.radius += d; else { copy.radius -= d; if(copy.radius<=0) return null; }
@@ -1366,6 +1367,7 @@ function createOffsetEntity(e, d, wx, wy) {
 
 // ===== 回転処理 =====
 function rotateEntity(e, cx, cy, angle) {
+    delete e.bbox; // 座標変更後は次回描画時に再計算させる
     const rx = (x, y) => (x - cx) * Math.cos(angle) - (y - cy) * Math.sin(angle) + cx;
     const ry = (x, y) => (x - cx) * Math.sin(angle) + (y - cy) * Math.cos(angle) + cy;
     if(e.type === 'LINE' || e.type === 'RECTANG') {

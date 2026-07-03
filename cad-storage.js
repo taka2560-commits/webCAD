@@ -130,9 +130,9 @@ function applyProjectData(data) {
     if (typeof render === 'function') render();
     if (typeof populateLayerPanel === 'function') populateLayerPanel();
     if (typeof updateUcsSelectBoxes === 'function') updateUcsSelectBoxes();
-    // BBox再計算
+    // BBox再計算（HATCHは対象外: render側の遅延計算と同じ条件）
     entities.forEach(e => {
-        if (typeof computeBBox === 'function') e.bbox = computeBBox(e);
+        if (typeof calcBBox === 'function' && e.type !== 'HATCH') e.bbox = calcBBox(e);
     });
 
     return true;
