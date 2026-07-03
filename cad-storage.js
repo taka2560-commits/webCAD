@@ -229,23 +229,45 @@ window.showProjectList = async function() {
         const listEl = document.getElementById('project-list-items');
         if (!listEl) return;
         
+        listEl.innerHTML = '';
         if (projects.length === 0) {
-            listEl.innerHTML = '<div style="color:#888; text-align:center; padding:20px;">保存されたプロジェクトはありません</div>';
+            const empty = document.createElement('div');
+            empty.style.cssText = 'color:#888; text-align:center; padding:20px;';
+            empty.textContent = '保存されたプロジェクトはありません';
+            listEl.appendChild(empty);
         } else {
             // 更新日時で降順ソート（新しい順）
             projects.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
-            let html = '';
             projects.forEach(p => {
                 const dt = new Date(p.savedAt);
                 const dateStr = `${dt.getMonth()+1}/${dt.getDate()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
                 const isCurrent = (_currentProjectName === p.name);
-                html += `<div class="project-item${isCurrent ? ' current' : ''}" onclick="loadProjectFromList('${p.name.replace(/'/g, "\\'")}')">
-                    <div class="project-name">${p.name}${isCurrent ? ' (現在)' : ''}</div>
-                    <div class="project-meta">${dateStr} | ${p.entityCount || 0}図形</div>
-                    <button class="project-delete-btn" onclick="event.stopPropagation();deleteProjectFromList('${p.name.replace(/'/g, "\\'")}')" title="削除">🗑</button>
-                </div>`;
+
+                // プロジェクト名はユーザー入力のため、innerHTML連結ではなく
+                // textContent/DOM APIで組み立てる（HTML・引用符の混入対策）
+                const item = document.createElement('div');
+                item.className = 'project-item' + (isCurrent ? ' current' : '');
+                item.addEventListener('click', () => window.loadProjectFromList(p.name));
+
+                const nameEl = document.createElement('div');
+                nameEl.className = 'project-name';
+                nameEl.textContent = p.name + (isCurrent ? ' (現在)' : '');
+
+                const metaEl = document.createElement('div');
+                metaEl.className = 'project-meta';
+                metaEl.textContent = `${dateStr} | ${p.entityCount || 0}図形`;
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'project-delete-btn';
+                delBtn.title = '削除';
+                delBtn.textContent = '🗑';
+                delBtn.addEventListener('click', (ev) => { ev.stopPropagation(); window.deleteProjectFromList(p.name); });
+
+                item.appendChild(nameEl);
+                item.appendChild(metaEl);
+                item.appendChild(delBtn);
+                listEl.appendChild(item);
             });
-            listEl.innerHTML = html;
         }
         panel.style.display = 'flex';
     } catch (err) {
