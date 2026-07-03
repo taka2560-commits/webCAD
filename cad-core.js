@@ -842,12 +842,14 @@ function drawOneEntity(e, color) {
     }
     else if(e.type==='TEXT') {
         const p=wcsToScreen(e.x,e.y);
-        ctx.font = `${(e.height||10)*view.scale}px sans-serif`;
+        const px=(e.height||10)*view.scale;
+        ctx.font = `${px}px sans-serif`;
         ctx.fillStyle = ctx.strokeStyle;
         ctx.save();
         ctx.translate(p.x, p.y);
         if(view.rotation !== 0) ctx.rotate(-view.rotation);
-        ctx.fillText(e.text, 0, 0);
+        // MTEXT由来の改行(\n)を複数行として描画
+        String(e.text).split('\n').forEach((line, i) => ctx.fillText(line, 0, i * px * 1.4));
         ctx.restore();
     }
     else if(e.type==='HATCH') {
