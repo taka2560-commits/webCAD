@@ -531,8 +531,12 @@
     </div>
 
     <!-- 外部ライブラリ (CDN) -->
-    <script src="https://cdn.jsdelivr.net/npm/dxf-parser/dist/dxf-parser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dxf-writer@1.4.0/dist/Drawing.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.min.js"></script>
+    <!-- dxf-writer はブラウザ用ビルド(dist/Drawing.min.js)が存在しないため、jsdelivrのESM変換経由で読み込む -->
+    <script type="module">
+        import Drawing from 'https://cdn.jsdelivr.net/npm/dxf-writer@1.18.4/+esm';
+        window.Drawing = Drawing;
+    </script>
     <!-- CADモジュール -->
     <script src="cad-text-parse.js"></script>
     <script src="cad-dimension.js"></script>

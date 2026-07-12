@@ -126,16 +126,33 @@ function applyProjectData(data) {
     undoStack = [];
     redoStack = [];
 
-    // 描画更新
-    if (typeof render === 'function') render();
-    if (typeof populateLayerPanel === 'function') populateLayerPanel();
-    if (typeof updateUcsSelectBoxes === 'function') updateUcsSelectBoxes();
     // BBox再計算（HATCHは対象外: render側の遅延計算と同じ条件）
     entities.forEach(e => {
+        delete e.bbox;
         if (typeof calcBBox === 'function' && e.type !== 'HATCH') e.bbox = calcBBox(e);
     });
 
+    // UI更新（画層ドロップダウン・画層パネル・UCSリスト・UCSラベル）
+    if (typeof initLayers === 'function') initLayers();
+    if (typeof updateLayerPanel === 'function') updateLayerPanel();
+    if (typeof updateUCSDropdowns === 'function') updateUCSDropdowns();
+    _syncUcsLabels();
+
+    // 描画更新
+    if (typeof render === 'function') render();
+
     return true;
+}
+
+// 復元したUCS状態をステータスバーのラベル表示に反映する
+function _syncUcsLabels() {
+    const isWcs = ucs.originX === 0 && ucs.originY === 0 && ucs.angle === 0;
+    const text = isWcs ? 'WCS' : 'UCS';
+    const color = isWcs ? 'var(--highlight-color)' : 'var(--ucs-color)';
+    const disp = document.getElementById('ucs-status-display');
+    if (disp) { disp.textContent = text; disp.style.color = color; }
+    const label = document.getElementById('ucs-label');
+    if (label) { label.textContent = text; label.style.color = color; }
 }
 
 // ===== 自動保存 =====

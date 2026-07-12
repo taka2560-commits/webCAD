@@ -389,11 +389,19 @@ function hexToAci(hex) {
 
 // ===== DXFエクスポート =====
 function exportDxf() {
+    if(typeof window.Drawing !== 'function') {
+        addCommandLog('エラー: DXF書き出しライブラリが未ロードです。ネット接続を確認してページを再読み込みしてください。');
+        return;
+    }
     try {
         const d = new window.Drawing();
         d.setUnits('Millimeters');
         // 画層登録（カラー対応）
         layers.forEach(l => { try { d.addLayer(l.name, hexToAci(l.color), 'CONTINUOUS'); } catch(e){} });
+        // 寸法出力用の画層を事前登録（未定義のままsetActiveLayerするとエクスポート全体が失敗する）
+        if(!layers.find(l => l.name === '寸法')) {
+            try { d.addLayer('寸法', 4, 'CONTINUOUS'); } catch(e){}
+        }
         // エンティティ出力
         entities.forEach(e => {
             const layerName = layers[e.layer]?.name || '0';
@@ -402,7 +410,12 @@ function exportDxf() {
 
             if(e.type === 'LINE') { d.drawLine(e.x1, e.y1, e.x2, e.y2, opts); }
             else if(e.type === 'CIRCLE') { d.drawCircle(e.cx, e.cy, e.radius, opts); }
-            else if(e.type === 'ARC') { d.drawArc(e.cx, e.cy, e.radius, e.startAngle*180/Math.PI, e.endAngle*180/Math.PI, opts); }
+            else if(e.type === 'ARC') {
+                // DXFのARCは常に反時計回り。時計回りの弧は開始/終了角を入れ替えて出力する
+                let sa = e.startAngle*180/Math.PI, ea = e.endAngle*180/Math.PI;
+                if(e.counterclockwise === false) { const t = sa; sa = ea; ea = t; }
+                d.drawArc(e.cx, e.cy, e.radius, sa, ea, opts);
+            }
             else if(e.type === 'RECTANG') {
                 d.drawLine(e.x1,e.y1,e.x2,e.y1, opts); d.drawLine(e.x2,e.y1,e.x2,e.y2, opts);
                 d.drawLine(e.x2,e.y2,e.x1,e.y2, opts); d.drawLine(e.x1,e.y2,e.x1,e.y1, opts);
@@ -443,8 +456,16 @@ function exportDimAsDxf(d, e) {
     }
     else if(e.subType === 'ORDINATE') {
         const u = wcsToUcs(e.point.x, e.point.y);
-        const val = e.isX ? u.x : u.y;
-        d.drawText(e.leader.x, e.leader.y, 3, 0, e.textOverride || val.toFixed(2));
+        if(e.leaderCoord) {
+            // 新形式: 引出線でXY両方を表示するタイプ
+            d.drawLine(e.point.x, e.point.y, e.leaderCoord.x, e.leaderCoord.y);
+            const label = e.textOverride || `X:${dimFormat(u.y)} Y:${dimFormat(u.x)}`;
+            d.drawText(e.leaderCoord.x, e.leaderCoord.y, 3, 0, label);
+        } else if(e.leader) {
+            // 旧形式: X/Y片側のみのタイプ
+            const val = e.isX ? u.x : u.y;
+            d.drawText(e.leader.x, e.leader.y, 3, 0, e.textOverride || val.toFixed(2));
+        }
     }
 }
 

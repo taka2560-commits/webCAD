@@ -287,12 +287,18 @@ function initLayers() {
         if(s) { const o = document.createElement('option'); o.value=i; o.textContent=l.name; s.appendChild(o); }
         if(fsS) { const o2 = document.createElement('option'); o2.value=i; o2.textContent=l.name; fsS.appendChild(o2); }
     });
-    
+
+    // 現在の画層を選択状態に反映
+    if(!layers[currentLayerIndex]) currentLayerIndex = 0;
+    if(s) s.value = currentLayerIndex;
+    if(fsS) fsS.value = currentLayerIndex;
+
     updateLayerColorDisplay();
-    
+
+    // onchange代入にすることで、initLayersが複数回呼ばれてもリスナーが多重登録されない
     const handleChange = (e) => { window.changeCurrentLayer(e.target.value); };
-    if(s) s.addEventListener('change', handleChange);
-    if(fsS) fsS.addEventListener('change', handleChange);
+    if(s) s.onchange = handleChange;
+    if(fsS) fsS.onchange = handleChange;
 }
 window.changeCurrentLayer = function(val) {
     const idx = parseInt(val);
@@ -459,15 +465,19 @@ function zoomExtents() {
     if(entities.length===0){zoomToOrigin();return;}
     let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
+    const growPt = (x, y) => { if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; };
+    const growBox = (b) => { if(b) { growPt(b.minX, b.minY); growPt(b.maxX, b.maxY); } };
     entities.forEach(e=>{
         if(!isVisible(e)) return;
-        if(e.type==='LINE'){minX=Math.min(minX,e.x1,e.x2);minY=Math.min(minY,e.y1,e.y2);maxX=Math.max(maxX,e.x1,e.x2);maxY=Math.max(maxY,e.y1,e.y2);}
-        else if(e.type==='CIRCLE'){minX=Math.min(minX,e.cx-e.radius);minY=Math.min(minY,e.cy-e.radius);maxX=Math.max(maxX,e.cx+e.radius);maxY=Math.max(maxY,e.cy+e.radius);}
-        else if(e.type==='ARC'){minX=Math.min(minX,e.cx-e.radius);minY=Math.min(minY,e.cy-e.radius);maxX=Math.max(maxX,e.cx+e.radius);maxY=Math.max(maxY,e.cy+e.radius);}
-        else if(e.type==='RECTANG'){minX=Math.min(minX,e.x1,e.y1,e.x2,e.y2);minY=Math.min(minY,e.y1,e.y2);maxX=Math.max(maxX,e.x1,e.x2);maxY=Math.max(maxY,e.y1,e.y2);}
-        else if(e.type==='PLINE'){e.points.forEach(p=>{minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);});}
-        else if(e.type==='POINT'){minX=Math.min(minX,e.x);minY=Math.min(minY,e.y);maxX=Math.max(maxX,e.x);maxY=Math.max(maxY,e.y);}
-        else if(e.type==='DIMENSION'){if(e.p1){minX=Math.min(minX,e.p1.x,e.p2.x);minY=Math.min(minY,e.p1.y,e.p2.y);maxX=Math.max(maxX,e.p1.x,e.p2.x);maxY=Math.max(maxY,e.p1.y,e.p2.y);}}
+        if(e.type==='DIMENSION'){
+            if(e.p1){growPt(e.p1.x,e.p1.y);growPt(e.p2.x,e.p2.y);}
+            if(e.center){growPt(e.center.x-(e.radius||0),e.center.y-(e.radius||0));growPt(e.center.x+(e.radius||0),e.center.y+(e.radius||0));}
+            if(e.vertex){growPt(e.vertex.x,e.vertex.y);growPt(e.arm1.x,e.arm1.y);growPt(e.arm2.x,e.arm2.y);}
+            if(e.point){growPt(e.point.x,e.point.y);}
+            if(e.leaderCoord){growPt(e.leaderCoord.x,e.leaderCoord.y);}
+        }
+        else if(e.type==='HATCH'){ if(e.target) growBox(calcBBox(e.target)); }
+        else { growBox(e.bbox || (e.bbox = calcBBox(e))); }
     });
     if(!isFinite(minX)){zoomToOrigin();return;}
     const pad=50, w=maxX-minX||1, h=maxY-minY||1;
@@ -479,15 +489,33 @@ function zoomExtents() {
 }
 
 // ===== Undo/Redo =====
+// 画層の表示/非表示・色などもUndo対象にするため、entitiesとlayersをセットで記録する
+function _undoSnapshot() {
+    return {
+        entities: JSON.parse(JSON.stringify(entities)),
+        layers: JSON.parse(JSON.stringify(layers))
+    };
+}
+function _applyUndoSnapshot(s) {
+    if(Array.isArray(s)) { entities = s; } // 旧形式（entities配列のみ）との互換
+    else { entities = s.entities; layers = s.layers; }
+    // 選択中インデックスが範囲外になった場合をクリア
+    if(cmdState.highlightIdx >= entities.length) cmdState.highlightIdx = -1;
+    if(cmdState.selectedIndices) cmdState.selectedIndices = cmdState.selectedIndices.filter(i => i < entities.length);
+    // 画層UIを同期
+    initLayers();
+    if(typeof window.updateLayerPanel === 'function') window.updateLayerPanel();
+    updatePropertiesPanel();
+}
 function saveUndo() {
-    undoStack.push(JSON.parse(JSON.stringify(entities)));
+    undoStack.push(_undoSnapshot());
     if(undoStack.length>50) undoStack.shift();
     redoStack=[];
     // 自動保存トリガー
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
-function undo() { if(!undoStack.length){addCommandLog('元に戻す操作がありません');return;} redoStack.push(JSON.parse(JSON.stringify(entities))); entities=undoStack.pop(); render(); addCommandLog('-> 元に戻す'); }
-function redo() { if(!redoStack.length){addCommandLog('やり直す操作がありません');return;} undoStack.push(JSON.parse(JSON.stringify(entities))); entities=redoStack.pop(); render(); addCommandLog('-> やり直し'); }
+function undo() { if(!undoStack.length){addCommandLog('元に戻す操作がありません');return;} redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); }
+function redo() { if(!redoStack.length){addCommandLog('やり直す操作がありません');return;} undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); }
 
 // ===== 数学ユーティリティ =====
 function dist(x1,y1,x2,y2) { return Math.sqrt((x2-x1)**2+(y2-y1)**2); }
@@ -848,6 +876,9 @@ function drawOneEntity(e, color) {
         ctx.save();
         ctx.translate(p.x, p.y);
         if(view.rotation !== 0) ctx.rotate(-view.rotation);
+        // DXF/DWGインポート時の文字整列を反映（未指定なら従来通り左・ベースライン基準）
+        ctx.textAlign = (e.halign === 'center' || e.halign === 'right') ? e.halign : 'left';
+        ctx.textBaseline = (e.valign === 'top') ? 'top' : (e.valign === 'middle') ? 'middle' : 'alphabetic';
         // MTEXT由来の改行(\n)を複数行として描画
         String(e.text).split('\n').forEach((line, i) => ctx.fillText(line, 0, i * px * 1.4));
         ctx.restore();
@@ -1385,13 +1416,16 @@ function rotateEntity(e, cx, cy, angle) {
             delete e.x1; delete e.y1; delete e.x2; delete e.y2;
         } else { e.x1 = nx1; e.y1 = ny1; e.x2 = nx2; e.y2 = ny2; }
     } else if(e.type === 'CIRCLE' || e.type === 'ARC' || e.type === 'ELLIPSE') {
-        e.cx = rx(e.cx, e.cy); e.cy = ry(e.cx, e.cy);
+        // cx更新後の値でcyを計算しないよう、両方を計算してから代入する
+        const ncx = rx(e.cx, e.cy), ncy = ry(e.cx, e.cy);
+        e.cx = ncx; e.cy = ncy;
         if(e.type === 'ARC') { e.startAngle += angle; e.endAngle += angle; }
         if(e.type === 'ELLIPSE') { e.rotation = (e.rotation || 0) + angle; }
     } else if(e.type === 'PLINE') {
         e.points.forEach(p => { const np = {x: Math.round(rx(p.x, p.y)*1000)/1000, y: Math.round(ry(p.x, p.y)*1000)/1000}; p.x = np.x; p.y = np.y; });
     } else if(e.type === 'POINT' || e.type === 'TEXT') {
-        e.x = rx(e.x, e.y); e.y = ry(e.x, e.y);
+        const nx = rx(e.x, e.y), ny = ry(e.x, e.y);
+        e.x = nx; e.y = ny;
     }
 }
 
@@ -1550,6 +1584,7 @@ function processCommand(cmdText) {
         }
     }
     else if(cmd==='WCS') { resetUCS(); }
+    else if(cmd==='SHOWALL') { window.showHiddenEntities(); }
     else if(cmd==='U'||cmd==='UNDO') { undo(); }
     else if(cmd==='REDO') { redo(); }
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
@@ -1828,6 +1863,7 @@ function setupEventListeners() {
                 cmdState.highlightIdx = -1;
             } else if(cmdState.mode === 'WAITING_MOVE_SELECT' || cmdState.mode === 'WAITING_COPY_SELECT') {
                 cmdState.selectedIndices = selected;
+                cmdState.moveTarget = undefined; // 複数選択を優先させる
                 cmdState.highlightIdx = selected[0];
                 addCommandLog(`-> ${selected.length}個のオブジェクトを選択 (${isWindow ? '窓選択' : '交差選択'})。基点を指定`);
                 cmdState.mode = (cmdState.mode === 'WAITING_MOVE_SELECT') ? 'WAITING_MOVE_BASE' : 'WAITING_COPY_BASE';
@@ -2091,6 +2127,17 @@ function setupEventListeners() {
     });
 }
 
+// 非表示フラグ付き図形（インポートされた円弧など）の一括再表示
+window.showHiddenEntities = function() {
+    const hiddenCount = entities.filter(e => e.hidden).length;
+    if(hiddenCount === 0) { addCommandLog('-> 非表示の図形はありません'); return; }
+    saveUndo();
+    entities.forEach(e => { if(e.hidden) e.hidden = false; });
+    addCommandLog(`-> 非表示だった図形 ${hiddenCount}個 を再表示しました（元に戻すにはUndo）`);
+    if (typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
+    render();
+};
+
 // 非表示画層のうっすら表示切り替え
 window.toggleGhostLayerMode = function(enabled) {
     window.ghostLayerMode = !!enabled;
@@ -2190,6 +2237,11 @@ window.updateLayerManagerContent = function() {
                 🔄 表示反転
             </button>
         </div>
+        ${(() => {
+            const hiddenEntCount = entities.filter(en => en.hidden).length;
+            if(hiddenEntCount === 0) return '';
+            return `<button class="prop-btn" style="background:rgba(40,44,52,0.9); color:#61afef; border:1px solid #61afef; font-weight:bold; padding:6px 12px; border-radius:14px; cursor:pointer;" onclick="showHiddenEntities()" title="インポート時に非表示化された円弧などを再表示します">⭕ 隠れ図形を再表示 (${hiddenEntCount}個)</button>`;
+        })()}
         ${isLayoffActive ? '<div style="color:#ffcc00; font-size:10px; text-align:center; margin-top:2px; font-weight:bold;">図面上の図形をタップして画層を消せます (Escで終了)</div>' : ''}
     </div>
     `;
@@ -2401,15 +2453,22 @@ window.changeEntityProp = function(idx, prop, val) {
     else if(prop==='hidden') entities[idx].hidden = (val === 'true' || val === true);
     else {
         const num = parseFloat(val);
-        // UCSで入力された座標を元のWCSに直して格納する
-        if(prop==='x' || prop==='x1' || prop==='x2' || prop==='cx') {
-            entities[idx][prop] = num + ucs.originX;
-        } else if(prop==='y' || prop==='y1' || prop==='y2' || prop==='cy') {
-            entities[idx][prop] = num + ucs.originY;
+        // UCSで入力された座標をWCSに変換して格納する
+        // 回転UCSでは1成分の変更が両WCS成分に影響するため、ペア座標と合わせて変換する
+        const pairMap = { x:['x','y'], y:['x','y'], x1:['x1','y1'], y1:['x1','y1'], x2:['x2','y2'], y2:['x2','y2'], cx:['cx','cy'], cy:['cx','cy'] };
+        const pair = pairMap[prop];
+        if(pair) {
+            const [xk, yk] = pair;
+            const e2 = entities[idx];
+            const u = wcsToUcs(e2[xk], e2[yk]);
+            if(prop === xk) u.x = num; else u.y = num;
+            const w = ucsToWcs(u.x, u.y);
+            e2[xk] = w.x; e2[yk] = w.y;
         } else {
             entities[idx][prop] = num;
         }
     }
+    delete entities[idx].bbox; // 座標・寸法が変わった可能性があるのでbboxを再計算させる
     render();
 };
 

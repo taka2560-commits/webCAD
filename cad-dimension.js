@@ -210,9 +210,13 @@ function drawDimAngular(e, color) {
 }
 
 function drawDimOrdinate(e, color) {
-    _drawDimOrdinateCore(e.point, e.leaderCoord || e.leaderX, color||e.color, e.textOverride, e);
-    // 旧形式互換（leaderX/leaderYがない場合）
-    if(!e.leaderX && !e.leaderY && e.leader) {
+    const leaderCoord = e.leaderCoord || e.leaderX;
+    if(leaderCoord) {
+        _drawDimOrdinateCore(e.point, leaderCoord, color||e.color, e.textOverride, e);
+        return;
+    }
+    // 旧形式互換（leader + isX で保存されたデータ）
+    if(e.leader) {
         if(e) e._hits = [];
         const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
         ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
@@ -378,13 +382,13 @@ function drawDimRubberBand(mode, sw, mp) {
         ctx.beginPath(); ctx.moveTo(pr_sc.x, pr_sc.y); ctx.lineTo(mps.x, mps.y); ctx.stroke();
         ctx.setLineDash([]);
     }
-    else if(mode === 'WAITING_MOVE_DEST' && cmdState.moveTarget !== undefined) {
-        // 移動プレビュー
-        const e = entities[cmdState.moveTarget];
-        if(e) {
-            const dx = mp.x - cmdState.moveBase.x, dy = mp.y - cmdState.moveBase.y;
-            drawMovePreview(e, dx, dy);
-        }
+    else if((mode === 'WAITING_MOVE_DEST' || mode === 'WAITING_COPY_DEST') && cmdState.moveBase) {
+        // 移動・コピーのプレビュー（複数選択対応）
+        const dx = mp.x - cmdState.moveBase.x, dy = mp.y - cmdState.moveBase.y;
+        _getMoveTargets().forEach(i => {
+            const e = entities[i];
+            if(e) drawMovePreview(e, dx, dy);
+        });
     }
 
     ctx.globalAlpha = 1;
@@ -411,6 +415,20 @@ function drawMovePreview(e, dx, dy) {
         const f = wcsToScreen(e.points[0].x+dx, e.points[0].y+dy); ctx.moveTo(f.x,f.y);
         for(let i=1;i<e.points.length;i++){const p=wcsToScreen(e.points[i].x+dx,e.points[i].y+dy);ctx.lineTo(p.x,p.y);}
         if(e.closed) ctx.closePath(); ctx.stroke();
+    } else if(e.type === 'ELLIPSE') {
+        const c = wcsToScreen(e.cx+dx, e.cy+dy);
+        ctx.beginPath(); ctx.ellipse(c.x, c.y, e.rx*view.scale, e.ry*view.scale, -(e.rotation||0), 0, Math.PI*2); ctx.stroke();
+    } else if(e.type === 'TEXT') {
+        const p = wcsToScreen(e.x+dx, e.y+dy);
+        ctx.save();
+        ctx.font = `${(e.height||10)*view.scale}px sans-serif`; ctx.fillStyle = '#ffff00';
+        ctx.fillText(e.text, p.x, p.y);
+        ctx.restore();
+    } else if(e.type === 'POINT') {
+        const p = wcsToScreen(e.x+dx, e.y+dy);
+        ctx.beginPath(); ctx.moveTo(p.x-4,p.y); ctx.lineTo(p.x+4,p.y); ctx.moveTo(p.x,p.y-4); ctx.lineTo(p.x,p.y+4); ctx.stroke();
+    } else if(e.type === 'HATCH' && e.target) {
+        drawMovePreview(e.target, dx, dy);
     } else if(e.type === 'DIMENSION') {
         // 寸法の移動プレビュー
         drawDimMovePreview(e, dx, dy);
@@ -585,6 +603,7 @@ function handleDimPointInput(mode, wcs) {
         const idx = hitTestEntity(mouse.screenX, mouse.screenY);
         if(idx >= 0) {
             cmdState.moveTarget = idx;
+            cmdState.selectedIndices = []; // 単体選択なので複数選択の残留をクリア
             cmdState.mode = 'WAITING_MOVE_BASE'; setPrompt('基点 (移動の基準点):');
             cmdState.highlightIdx = idx;
             addCommandLog('-> エンティティ選択、基準点を指定'); render();
@@ -598,12 +617,15 @@ function handleDimPointInput(mode, wcs) {
         return;
     }
     if(mode === 'WAITING_MOVE_DEST') {
-        const idx = cmdState.moveTarget;
+        const targets = _getMoveTargets();
         const dx = wcs.x - cmdState.moveBase.x, dy = wcs.y - cmdState.moveBase.y;
-        saveUndo();
-        moveEntity(entities[idx], dx, dy);
-        addCommandLog(`-> 移動完了 (${dimFormat(dx)},${dimFormat(dy)})`);
+        if(targets.length > 0) {
+            saveUndo();
+            targets.forEach(i => { if(entities[i]) moveEntity(entities[i], dx, dy); });
+            addCommandLog(`-> ${targets.length}個を移動 (${dimFormat(dx)},${dimFormat(dy)})`);
+        } else { addCommandLog('移動対象がありません'); }
         // 連続移動モード
+        cmdState.selectedIndices = []; cmdState.moveTarget = undefined;
         cmdState.mode = 'WAITING_MOVE_SELECT'; cmdState.highlightIdx = -1; setPrompt('移動対象 (右クリックで終了):');
         render(); return;
     }
@@ -612,6 +634,7 @@ function handleDimPointInput(mode, wcs) {
         const idx = hitTestEntity(mouse.screenX, mouse.screenY);
         if(idx >= 0) {
             cmdState.moveTarget = idx;
+            cmdState.selectedIndices = []; // 単体選択なので複数選択の残留をクリア
             cmdState.mode = 'WAITING_COPY_BASE'; setPrompt('基点 (コピーの基準点):');
             cmdState.highlightIdx = idx;
             addCommandLog('-> エンティティ選択、基準点を指定'); render();
@@ -625,26 +648,42 @@ function handleDimPointInput(mode, wcs) {
         return;
     }
     if(mode === 'WAITING_COPY_DEST') {
-        const idx = cmdState.moveTarget;
+        const targets = _getMoveTargets();
         const dx = wcs.x - cmdState.moveBase.x, dy = wcs.y - cmdState.moveBase.y;
-        saveUndo();
-        const copy = JSON.parse(JSON.stringify(entities[idx]));
-        moveEntity(copy, dx, dy);
-        entities.push(copy);
-        addCommandLog(`-> コピー完了 (${dimFormat(dx)},${dimFormat(dy)})`);
+        if(targets.length > 0) {
+            saveUndo();
+            const copies = [];
+            targets.forEach(i => {
+                if(!entities[i]) return;
+                const copy = JSON.parse(JSON.stringify(entities[i]));
+                moveEntity(copy, dx, dy);
+                copies.push(copy);
+            });
+            copies.forEach(c => entities.push(c));
+            addCommandLog(`-> ${copies.length}個をコピー (${dimFormat(dx)},${dimFormat(dy)})`);
+        } else { addCommandLog('コピー対象がありません'); }
+        cmdState.selectedIndices = []; cmdState.moveTarget = undefined;
         cmdState.mode = 'WAITING_COPY_SELECT'; cmdState.highlightIdx = -1; setPrompt('コピー対象 (右クリックで終了):');
         render(); return;
     }
+}
+
+// 移動・コピーの対象インデックス一覧（範囲選択の複数 or 単体クリックの1個）
+function _getMoveTargets() {
+    if(cmdState.selectedIndices && cmdState.selectedIndices.length > 0) return cmdState.selectedIndices.slice();
+    if(cmdState.moveTarget !== undefined && entities[cmdState.moveTarget]) return [cmdState.moveTarget];
+    return [];
 }
 
 // ===== エンティティ移動ヘルパー =====
 function moveEntity(e, dx, dy) {
     delete e.bbox; // 座標変更後は次回描画時に再計算させる
     if(e.type === 'LINE') { e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; }
-    else if(e.type === 'CIRCLE' || e.type === 'ARC') { e.cx+=dx; e.cy+=dy; }
+    else if(e.type === 'CIRCLE' || e.type === 'ARC' || e.type === 'ELLIPSE') { e.cx+=dx; e.cy+=dy; }
     else if(e.type === 'RECTANG') { e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; }
     else if(e.type === 'PLINE') { e.points.forEach(p => { p.x+=dx; p.y+=dy; }); }
-    else if(e.type === 'POINT') { e.x+=dx; e.y+=dy; }
+    else if(e.type === 'POINT' || e.type === 'TEXT') { e.x+=dx; e.y+=dy; }
+    else if(e.type === 'HATCH') { if(e.target) moveEntity(e.target, dx, dy); }
     else if(e.type === 'DIMENSION') {
         if(e.p1) { e.p1.x+=dx; e.p1.y+=dy; e.p2.x+=dx; e.p2.y+=dy; }
         if(e.center) { e.center.x+=dx; e.center.y+=dy; }
@@ -653,6 +692,7 @@ function moveEntity(e, dx, dy) {
         if(e.leader) { e.leader.x+=dx; e.leader.y+=dy; }
         if(e.leaderX) { e.leaderX.x+=dx; e.leaderX.y+=dy; }
         if(e.leaderY) { e.leaderY.x+=dx; e.leaderY.y+=dy; }
+        if(e.leaderCoord) { e.leaderCoord.x+=dx; e.leaderCoord.y+=dy; }
     }
 }
 
@@ -674,8 +714,26 @@ function processDimCommand(cmd) {
     if(cmd==='DDI'||cmd==='DIMDIAMETER') { cmdState.mode='WAITING_DIMDIA_SELECT'; cmdState.dimTarget=null; setPrompt('円/弧を選択: (☑️確定)'); setActiveTool('DIMDIA'); addCommandLog('-> [直径寸法] 円または弧を選択'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
     if(cmd==='DAN'||cmd==='DIMANGULAR') { cmdState.mode='WAITING_DIMANG_P1'; cmdState.points=[]; setPrompt('頂点: (☑️確定)'); setActiveTool('DIMANG'); addCommandLog('-> [角度寸法] 頂点を指定'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
     if(cmd==='DOR'||cmd==='DIMORDINATE') { cmdState.mode='WAITING_DIMORD_P1'; cmdState.points=[]; setPrompt('測定点: (☑️確定)'); setActiveTool('DIMORD'); addCommandLog('-> [座標寸法] 測定点を指定 (XY一括表示)'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
-    if(cmd==='M'||cmd==='MOVE') { cmdState.mode='WAITING_MOVE_SELECT'; cmdState.moveTarget=undefined; setPrompt('移動対象:'); setActiveTool('MOVE'); addCommandLog('-> [移動] エンティティをクリック'); return true; }
-    if(cmd==='CO'||cmd==='COPY') { cmdState.mode='WAITING_COPY_SELECT'; cmdState.moveTarget=undefined; setPrompt('コピー対象:'); setActiveTool('COPY'); addCommandLog('-> [コピー] エンティティをクリック'); return true; }
+    if(cmd==='M'||cmd==='MOVE') {
+        cmdState.moveTarget = undefined;
+        // IDLE時の複数選択を引き継いで基点指定へ
+        if(cmdState.selectedIndices && cmdState.selectedIndices.length > 0) {
+            cmdState.mode='WAITING_MOVE_BASE'; setPrompt('基点 (移動の基準点):'); setActiveTool('MOVE');
+            addCommandLog(`-> [移動] ${cmdState.selectedIndices.length}個の選択を引き継ぎ。基点を指定`);
+            if(typeof render==='function') render(); return true;
+        }
+        cmdState.mode='WAITING_MOVE_SELECT'; setPrompt('移動対象:'); setActiveTool('MOVE'); addCommandLog('-> [移動] エンティティをクリック'); return true;
+    }
+    if(cmd==='CO'||cmd==='COPY') {
+        cmdState.moveTarget = undefined;
+        // IDLE時の複数選択を引き継いで基点指定へ
+        if(cmdState.selectedIndices && cmdState.selectedIndices.length > 0) {
+            cmdState.mode='WAITING_COPY_BASE'; setPrompt('基点 (コピーの基準点):'); setActiveTool('COPY');
+            addCommandLog(`-> [コピー] ${cmdState.selectedIndices.length}個の選択を引き継ぎ。基点を指定`);
+            if(typeof render==='function') render(); return true;
+        }
+        cmdState.mode='WAITING_COPY_SELECT'; setPrompt('コピー対象:'); setActiveTool('COPY'); addCommandLog('-> [コピー] エンティティをクリック'); return true;
+    }
     // 連続寸法コマンドの処理
     if(cmd === 'DIMCONT' || cmd === 'DIMCONTINUOUS') {
         cmdState.mode = 'WAITING_DIMCONT_P1';
