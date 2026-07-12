@@ -529,6 +529,39 @@ function circumcenter(x1,y1,x2,y2,x3,y3) {
 }
 
 // ===== オブジェクトスナップ =====
+// 交点計算ヘルパー (線分と円)
+function intersectSegCircle(x1,y1,x2,y2, cx,cy,r) {
+    const dx=x2-x1, dy=y2-y1;
+    const fx=x1-cx, fy=y1-cy;
+    const a=dx*dx+dy*dy;
+    if(a===0) return [];
+    const b=2*(fx*dx+fy*dy), c=fx*fx+fy*fy-r*r;
+    let disc=b*b-4*a*c;
+    if(disc<0) return [];
+    disc=Math.sqrt(disc);
+    const out=[];
+    [(-b-disc)/(2*a), (-b+disc)/(2*a)].forEach(t => {
+        if(t>=0 && t<=1) out.push({x:x1+t*dx, y:y1+t*dy});
+    });
+    // 接する場合（判別式0）は同一点が2つ返るので1つに
+    if(out.length===2 && Math.abs(out[0].x-out[1].x)<1e-9 && Math.abs(out[0].y-out[1].y)<1e-9) out.pop();
+    return out;
+}
+// 交点計算ヘルパー (円と円)
+function intersectCircleCircle(c1, c2) {
+    const dx=c2.cx-c1.cx, dy=c2.cy-c1.cy;
+    const d=Math.sqrt(dx*dx+dy*dy);
+    if(d===0 || d>c1.radius+c2.radius || d<Math.abs(c1.radius-c2.radius)) return [];
+    const a=(c1.radius*c1.radius - c2.radius*c2.radius + d*d)/(2*d);
+    const h2=c1.radius*c1.radius - a*a;
+    const h=h2>0?Math.sqrt(h2):0;
+    const mx=c1.cx + a*dx/d, my=c1.cy + a*dy/d;
+    if(h===0) return [{x:mx, y:my}];
+    return [
+        {x:mx + h*dy/d, y:my - h*dx/d},
+        {x:mx - h*dy/d, y:my + h*dx/d}
+    ];
+}
 // 交点計算ヘルパー (線分と線分)
 function intersectLineLine(x1,y1,x2,y2, x3,y3,x4,y4) {
     const denom = (y4-y3)*(x2-x1) - (x4-x3)*(y2-y1);
@@ -665,23 +698,64 @@ function collectSnapPoints(wx, wy, baseWcs) {
         }
         else if(e.type==='POINT') { if(osnapState.end) pts.push({x:e.x,y:e.y,t:'端点'}); }
     });
-    // 交点 (カリング済みLINEのみ)
+    // 交点（線分・ポリライン・長方形・円・円弧に対応。ブロック展開後のPLINE等も対象）
     if(osnapState.int) {
-        const searchRad = (wxMin !== undefined) ? 100 / view.scale : Infinity;
-        const lines = entities.filter(e => {
-            if(e.type!=='LINE' || !isVisible(e)) return false;
+        // カーソル周辺のカリング窓に重なるか
+        const inWin = (minX, minY, maxX, maxY) => {
+            if(wxMin === undefined) return true;
+            return !(maxX < wxMin || minX > wxMax || maxY < wyMin || minY > wyMax);
+        };
+        // 1) 交点計算に使う線分と円・弧を収集（線分は個々の区間単位でカリング）
+        const segs = [], circles = [];
+        const MAX_SEGS = 300, MAX_CIRCLES = 60;
+        const addSeg = (x1,y1,x2,y2) => {
+            if(segs.length >= MAX_SEGS) return;
+            if(!inWin(Math.min(x1,x2), Math.min(y1,y2), Math.max(x1,x2), Math.max(y1,y2))) return;
+            segs.push({x1,y1,x2,y2});
+        };
+        entities.forEach(e => {
+            if(!isVisible(e)) return;
             if(e.bbox && wxMin !== undefined) {
-                if(e.bbox.maxX < wxMin || e.bbox.minX > wxMax || e.bbox.maxY < wyMin || e.bbox.minY > wyMax) return false;
+                if(e.bbox.maxX < wxMin || e.bbox.minX > wxMax || e.bbox.maxY < wyMin || e.bbox.minY > wyMax) return;
             }
-            return true;
+            if(e.type==='LINE') addSeg(e.x1,e.y1,e.x2,e.y2);
+            else if(e.type==='RECTANG') {
+                addSeg(e.x1,e.y1,e.x2,e.y1); addSeg(e.x2,e.y1,e.x2,e.y2);
+                addSeg(e.x2,e.y2,e.x1,e.y2); addSeg(e.x1,e.y2,e.x1,e.y1);
+            }
+            else if(e.type==='PLINE' && e.points && e.points.length>1) {
+                for(let i=1;i<e.points.length;i++) addSeg(e.points[i-1].x,e.points[i-1].y,e.points[i].x,e.points[i].y);
+                if(e.closed && e.points.length>2) addSeg(e.points[e.points.length-1].x,e.points[e.points.length-1].y,e.points[0].x,e.points[0].y);
+            }
+            else if((e.type==='CIRCLE'||e.type==='ARC') && circles.length < MAX_CIRCLES) circles.push(e);
         });
-        // 大量のLINEがある場合は制限
-        const maxLines = Math.min(lines.length, 200);
-        for(let i=0; i<maxLines; i++) {
-            for(let j=i+1; j<maxLines; j++) {
-                const l1=lines[i], l2=lines[j];
-                const pt = intersectLineLine(l1.x1,l1.y1,l1.x2,l1.y2, l2.x1,l2.y1,l2.x2,l2.y2);
+        // 円弧なら角度範囲内かをチェック（円なら常にtrue）
+        const onArc = (e, px, py) => {
+            if(e.type!=='ARC') return true;
+            const a = Math.atan2(py-e.cy, px-e.cx);
+            const ccw = e.counterclockwise;
+            return isAngleBetweenCCW(ccw?a:-a, ccw?e.startAngle:-e.startAngle, ccw?e.endAngle:-e.endAngle);
+        };
+        // 2) 線分×線分
+        for(let i=0; i<segs.length; i++) {
+            for(let j=i+1; j<segs.length; j++) {
+                const a=segs[i], b=segs[j];
+                const pt = intersectLineLine(a.x1,a.y1,a.x2,a.y2, b.x1,b.y1,b.x2,b.y2);
                 if(pt) pts.push({x:pt.x, y:pt.y, t:'交点'});
+            }
+        }
+        // 3) 線分×円/円弧
+        segs.forEach(s => circles.forEach(c => {
+            intersectSegCircle(s.x1,s.y1,s.x2,s.y2, c.cx,c.cy,c.radius).forEach(p => {
+                if(onArc(c, p.x, p.y)) pts.push({x:p.x, y:p.y, t:'交点'});
+            });
+        }));
+        // 4) 円/円弧×円/円弧
+        for(let i=0; i<circles.length; i++) {
+            for(let j=i+1; j<circles.length; j++) {
+                intersectCircleCircle(circles[i], circles[j]).forEach(p => {
+                    if(onArc(circles[i],p.x,p.y) && onArc(circles[j],p.x,p.y)) pts.push({x:p.x, y:p.y, t:'交点'});
+                });
             }
         }
     }
