@@ -230,10 +230,30 @@ function setDrawingName(name) {
 
 
 // ===== 初期化 =====
+function resizeCanvas() {
+    const w = container.clientWidth || window.innerWidth || 800;
+    const h = container.clientHeight || window.innerHeight || 600;
+    if(canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+    }
+    if(view.x === 0 && view.y === 0 && w > 0 && h > 0) {
+        view.x = w / 2;
+        view.y = h / 2;
+    }
+    render();
+}
+
 function init() {
-    resizeCanvas(); window.addEventListener('resize',resizeCanvas);
-    view.x=canvas.width/2; view.y=canvas.height/2;
-    initLayers(); setupEventListeners(); render();
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    if(view.x === 0 && view.y === 0) {
+        view.x = (canvas.width || window.innerWidth) / 2;
+        view.y = (canvas.height || window.innerHeight) / 2;
+    }
+    initLayers();
+    setupEventListeners();
+    render();
 }
 function initLayers() {
     const s = document.getElementById('layer-select'); 
@@ -2781,7 +2801,13 @@ window.changeEntityProp = function(idx, prop, val) {
     render();
 };
 
-init();
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => { init(); setTimeout(resizeCanvas, 100); });
+} else {
+    init();
+    setTimeout(resizeCanvas, 100);
+}
+window.addEventListener('load', () => { resizeCanvas(); });
 
 // 交差・範囲選択モードの切り替え
 window.toggleAreaSelect = function() {
