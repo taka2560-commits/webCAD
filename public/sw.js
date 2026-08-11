@@ -1,6 +1,6 @@
 // ===== Web CAD Service Worker =====
 // 更新時はCACHE_NAMEのバージョンを上げること（旧キャッシュはactivateで削除される）
-const CACHE_NAME = 'webcad-pwa-cache-v12';
+const CACHE_NAME = 'webcad-pwa-cache-v13';
 
 // 必須アセット（1つでも失敗するとインストール失敗＝全て確実にキャッシュ）
 const CORE_ASSETS = [
