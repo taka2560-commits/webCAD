@@ -15,16 +15,8 @@ const CORE_ASSETS = [
   './icon-192.png'
 ];
 
-// 任意アセット（CDN・大容量。失敗してもインストールは続行し、
-// オンライン時の初回利用で実行時キャッシュに載る）
-const OPTIONAL_ASSETS = [
-  'https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.min.js',
-  // dxf-writer は index.html から +esm で読み込む（実行時キャッシュで対応）
-  'https://cdn.jsdelivr.net/npm/dxf-writer@1.18.4/+esm',
-  // DWG読み込み用（オフラインでのDWG利用に必要）
-  'https://cdn.jsdelivr.net/npm/@mlightcad/libredwg-web@0.6.6/dist/libredwg-web.js',
-  'https://cdn.jsdelivr.net/npm/@mlightcad/libredwg-web@0.6.6/wasm/libredwg-web.wasm'
-];
+// 任意アセット（CDN・大容量。PWAキャッシュ起因のCORSエラーを防ぐため事前キャッシュしない）
+const OPTIONAL_ASSETS = [];
 
 self.addEventListener('install', event => {
   event.waitUntil(
