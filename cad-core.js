@@ -166,50 +166,7 @@ function showPropertyPanel(title, htmlContent) {
     p.style.display = 'flex';
 }
 
-// プロパティパネルのドラッグ実装
-let isDraggingPanel = false, panelDragStartX, panelDragStartY, panelStartLeft, panelStartTop;
-document.addEventListener('DOMContentLoaded', () => {
-    const header = document.getElementById('property-panel-header');
-    const panel = document.getElementById('property-panel');
-    if(!header || !panel) return;
-
-    header.addEventListener('mousedown', (e) => {
-        isDraggingPanel = true;
-        panelDragStartX = e.clientX; panelDragStartY = e.clientY;
-        const rect = panel.getBoundingClientRect();
-        panelStartLeft = rect.left; panelStartTop = rect.top;
-        e.preventDefault();
-    });
-    header.addEventListener('touchstart', (e) => {
-        if(e.touches.length !== 1) return;
-        isDraggingPanel = true;
-        panelDragStartX = e.touches[0].clientX; panelDragStartY = e.touches[0].clientY;
-        const rect = panel.getBoundingClientRect();
-        panelStartLeft = rect.left; panelStartTop = rect.top;
-        // preventDefaultはボタン押下などを妨げるので最小限に
-    }, {passive:false});
-
-    document.addEventListener('mousemove', (e) => {
-        if(!isDraggingPanel) return;
-        const dx = e.clientX - panelDragStartX;
-        const dy = e.clientY - panelDragStartY;
-        panel.style.left = (panelStartLeft + dx) + 'px';
-        panel.style.top = (panelStartTop + dy) + 'px';
-        panel.style.right = 'auto'; // override right if set
-    });
-    document.addEventListener('touchmove', (e) => {
-        if(!isDraggingPanel) return;
-        const dx = e.touches[0].clientX - panelDragStartX;
-        const dy = e.touches[0].clientY - panelDragStartY;
-        panel.style.left = (panelStartLeft + dx) + 'px';
-        panel.style.top = (panelStartTop + dy) + 'px';
-        panel.style.right = 'auto';
-        e.preventDefault();
-    }, {passive:false});
-
-    document.addEventListener('mouseup', () => { isDraggingPanel = false; });
-    document.addEventListener('touchend', () => { isDraggingPanel = false; });
-});
+// プロパティパネルは画面中央(モバイル対応)で固定するため、ドラッグ機能は廃止しました。
 
 // テキスト用パネル開始関数
 function startTextPlacement() {
@@ -1889,9 +1846,11 @@ function setupEventListeners() {
         if(e.button===1){mouse.isPanning=true;e.preventDefault();return;} // Middle click for panning
         if(e.button===0) {
             const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
+            const swipeModes = ['WAITING_TRIM', 'WAITING_EXTEND'];
             const isSelectMode = selectModes.includes(cmdState.mode);
+            const isSwipeMode = swipeModes.includes(cmdState.mode);
 
-            if (cmdState.mode!=='IDLE' && !isSelectMode) { // Left click for point input when not in IDLE and not select mode
+            if (cmdState.mode!=='IDLE' && !isSelectMode && !isSwipeMode) { // Left click for point input when not in IDLE and not select/swipe mode
                 const pt=getInputPoint(); handlePointInput(pt, true);
             } else {
                 const idx = hitTestEntity(mouse.screenX, mouse.screenY);
@@ -2199,9 +2158,12 @@ function setupEventListeners() {
                 snapResult = findSnap(tx, ty, mouse.wcsX, mouse.wcsY);
             } else { snapResult = null; }
 
-            // ハイライト更新
+            // ハイライト更新またはスワイプ開始
             if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') {
                 cmdState.highlightIdx = hitTestEntity(tx, ty);
+            } else if(cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
+                touchState.isTrimming = true;
+                cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
             }
 
             // 長押しタイマーの設定 (0.6秒)

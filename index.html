@@ -224,27 +224,30 @@
         .project-delete-btn { background:none; border:none; color:#ff6b6b; font-size:14px; cursor:pointer; padding:2px 6px; }
         .project-delete-btn:hover { color:#ff4444; }
 
-        /* フローティング・プロパティパネル */
+        /* フローティング・プロパティダイアログパネル */
         #property-panel {
             position: fixed;
-            top: 100px;
-            left: 20px;
-            width: 280px;
-            background: rgba(33, 40, 48, 0.95);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            top: 15%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 320px;
+            max-width: 90vw;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--r-card);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.4);
             z-index: 100002;
             display: none;
             flex-direction: column;
             overflow: hidden;
-            backdrop-filter: blur(8px);
-            font-size: 12px;
+            backdrop-filter: blur(12px);
+            font-size: 13px;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
+        @keyframes popIn { from { opacity:0; transform:translate(-50%, -10px); } to { opacity:1; transform:translate(-50%, 0); } }
         #property-panel-header {
             background: rgba(0, 0, 0, 0.4);
-            padding: 8px 12px;
-            cursor: move;
+            padding: 10px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
