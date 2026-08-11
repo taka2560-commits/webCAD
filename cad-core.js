@@ -237,6 +237,7 @@ const CMD_TO_TOOL = {
     'LINE':'LINE','PLINE':'PLINE','RECTANG':'RECT','CIRCLE':'CIRCLE','ARC':'ARC',
     'ELLIPSE':'ELLIP','TEXT':'TEXT','HATCH':'HATCH',
     'ERASE':'ERASE','MOVE':'MOVE','COPY':'COPY','OFFSET':'OFFSET','ROTATE':'ROTATE','RO':'ROTATE',
+    'TRIM':'TRIM','TR':'TRIM',
     'DIMLINEAR':'DIMLIN','DIMALIGNED':'DIMALN','DIMRADIUS':'DIMRAD',
     'DIMDIAMETER':'DIMDIA','DIMANGULAR':'DIMANG','DIMORDINATE':'DIMORD'
 };
@@ -878,6 +879,33 @@ function render() {
         _renderPending = false;
         ctx.fillStyle=canvasBg; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawAxes(); drawEntities(); drawDimensions(); drawRubberBand(); drawSnapMarker(); drawCrosshair();
+        
+        // 範囲選択矩形描画
+        if(mouse.isSelecting) {
+            ctx.fillStyle = window.areaSelectMode === 'CROSSING' ? 'rgba(0, 255, 136, 0.2)' : 'rgba(82, 139, 255, 0.2)';
+            ctx.strokeStyle = window.areaSelectMode === 'CROSSING' ? 'rgba(0, 255, 136, 0.8)' : 'rgba(82, 139, 255, 0.8)';
+            ctx.lineWidth = 1;
+            if (window.areaSelectMode === 'CROSSING') ctx.setLineDash([5, 5]); else ctx.setLineDash([]);
+            ctx.fillRect(mouse.selStartX, mouse.selStartY, mouse.screenX - mouse.selStartX, mouse.screenY - mouse.selStartY);
+            ctx.strokeRect(mouse.selStartX, mouse.selStartY, mouse.screenX - mouse.selStartX, mouse.screenY - mouse.selStartY);
+            ctx.setLineDash([]);
+        }
+
+        // トリムパス描画
+        if(cmdState.mode === 'WAITING_TRIM' && cmdState.trimPath && cmdState.trimPath.length > 0) {
+            ctx.strokeStyle = '#ff6b6b';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            const first = wcsToScreen(cmdState.trimPath[0].x, cmdState.trimPath[0].y);
+            ctx.moveTo(first.x, first.y);
+            for(let i=1; i<cmdState.trimPath.length; i++) {
+                const pt = wcsToScreen(cmdState.trimPath[i].x, cmdState.trimPath[i].y);
+                ctx.lineTo(pt.x, pt.y);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
     });
 }
 // 即時描画版（ルーペ等、rAF待たずに描画したい場合）
@@ -1509,6 +1537,79 @@ function finishPline(close) {
     resetCommand();
 }
 
+// 指定されたパス(線分群)と交差する図形をトリム(カット)する
+window.executeTrim = function(trimPath) {
+    if(!trimPath || trimPath.length < 2) return;
+    saveUndo();
+    let trimmedCount = 0;
+    const swipeSegs = [];
+    for(let i = 0; i < trimPath.length - 1; i++) {
+        swipeSegs.push({x1: trimPath[i].x, y1: trimPath[i].y, x2: trimPath[i+1].x, y2: trimPath[i+1].y});
+    }
+    const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
+    let newEntities = [];
+    let entitiesToRemove = [];
+    entities.forEach((e, i) => {
+        if(!isVisible(e) || (e.type !== 'LINE' && e.type !== 'CIRCLE' && e.type !== 'ARC')) return;
+        let hitPt = null;
+        for(const seg of swipeSegs) {
+            if(e.type === 'LINE') {
+                const pt = intersectLineLine(seg.x1, seg.y1, seg.x2, seg.y2, e.x1, e.y1, e.x2, e.y2);
+                if(pt && isPointOnSegment(pt.x, pt.y, seg.x1, seg.y1, seg.x2, seg.y2) && isPointOnSegment(pt.x, pt.y, e.x1, e.y1, e.x2, e.y2)) {
+                    hitPt = pt; break;
+                }
+            } else if(e.type === 'CIRCLE' || e.type === 'ARC') {
+                const pts = intersectSegCircle(seg.x1, seg.y1, seg.x2, seg.y2, e.cx, e.cy, e.radius);
+                if(pts.length > 0) { hitPt = pts[0]; break; }
+            }
+        }
+        if(!hitPt) return;
+        let allIntersections = [];
+        entities.forEach(other => {
+            if(e === other || !isVisible(other)) return;
+            if(e.type === 'LINE') {
+                if(other.type === 'LINE') {
+                    const pt = intersectLineLine(e.x1, e.y1, e.x2, e.y2, other.x1, other.y1, other.x2, other.y2);
+                    if(pt && isPointOnSegment(pt.x, pt.y, e.x1, e.y1, e.x2, e.y2) && isPointOnSegment(pt.x, pt.y, other.x1, other.y1, other.x2, other.y2)) allIntersections.push(pt);
+                } else if(other.type === 'CIRCLE' || other.type === 'ARC') {
+                    const pts = intersectSegCircle(e.x1, e.y1, e.x2, e.y2, other.cx, other.cy, other.radius);
+                    pts.forEach(pt => allIntersections.push(pt));
+                }
+            }
+        });
+        if(e.type === 'LINE') {
+            const dx = e.x2 - e.x1, dy = e.y2 - e.y1, len2 = dx*dx + dy*dy;
+            const getT = (p) => ((p.x - e.x1)*dx + (p.y - e.y1)*dy) / len2;
+            allIntersections.push({x: e.x1, y: e.y1}, {x: e.x2, y: e.y2});
+            allIntersections.sort((a, b) => getT(a) - getT(b));
+            const uniqueInts = [];
+            for(const pt of allIntersections) {
+                if(uniqueInts.length === 0 || dist(uniqueInts[uniqueInts.length-1].x, uniqueInts[uniqueInts.length-1].y, pt.x, pt.y) > 0.0001) uniqueInts.push(pt);
+            }
+            const hitT = getT(hitPt);
+            let t1Idx = -1, t2Idx = -1;
+            for(let j = 0; j < uniqueInts.length - 1; j++) {
+                if(getT(uniqueInts[j]) <= hitT && hitT <= getT(uniqueInts[j+1])) {
+                    t1Idx = j; t2Idx = j + 1; break;
+                }
+            }
+            if(t1Idx !== -1) {
+                entitiesToRemove.push(i);
+                if(t1Idx > 0) newEntities.push({type:'LINE', layer:e.layer, color:e.color, x1:uniqueInts[0].x, y1:uniqueInts[0].y, x2:uniqueInts[t1Idx].x, y2:uniqueInts[t1Idx].y});
+                if(t2Idx < uniqueInts.length - 1) newEntities.push({type:'LINE', layer:e.layer, color:e.color, x1:uniqueInts[t2Idx].x, y1:uniqueInts[t2Idx].y, x2:uniqueInts[uniqueInts.length-1].x, y2:uniqueInts[uniqueInts.length-1].y});
+                trimmedCount++;
+            }
+        }
+    });
+    if(trimmedCount > 0) {
+        entitiesToRemove.sort((a, b) => b - a).forEach(idx => entities.splice(idx, 1));
+        newEntities.forEach(e => entities.push(e));
+        addCommandLog(`-> ${trimmedCount} 個のセグメントをトリムしました`);
+        render();
+    }
+}
+function isPointOnSegment(px, py, x1, y1, x2, y2, tol = 0.001) { return distPointToSeg(px, py, x1, y1, x2, y2) <= tol; }
+
 function processCommand(cmdText) {
     const cmd = cmdText.toUpperCase().trim();
     const coordMatch = cmd.match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
@@ -1565,7 +1666,13 @@ function processCommand(cmdText) {
     if(typeof processDimCommand==='function' && processDimCommand(cmd)) return;
     // ファイル入出力（cad-io.js から登録）
     if(typeof processIOCommand==='function' && processIOCommand(cmd)) return;
-    if(cmd==='L'||cmd==='LINE') { cmdState.mode='WAITING_LINE_P1'; setPrompt('1点目:'); setActiveTool('LINE'); addCommandLog('-> 1点目を指定'); }
+    if(cmd==='TRIM' || cmd==='TR') {
+        cmdState.mode = 'WAITING_TRIM';
+        setPrompt('トリム: 消したい線をなぞってください');
+        setActiveTool('TRIM');
+        addCommandLog('-> トリム: 線をスワイプ（ドラッグ）して交点間でカットします');
+    }
+    else if(cmd==='L'||cmd==='LINE') { cmdState.mode='WAITING_LINE_P1'; setPrompt('1点目:'); setActiveTool('LINE'); addCommandLog('-> 1点目を指定'); }
     else if(cmd==='C'||cmd==='CIRCLE') {
         cmdState.mode='WAITING_CIRCLE_CENTER'; setPrompt('中心:'); setActiveTool('CIRCLE'); addCommandLog('-> 中心を指定（または半径を入力）');
         showPropertyPanel('円 設定', `
@@ -1669,6 +1776,11 @@ function processCommand(cmdText) {
 
 // ===== イベントリスナー =====
 let lastTouchTime = 0;
+function updateMousePos(e) {
+    const rect=canvas.getBoundingClientRect(); mouse.screenX=e.clientX-rect.left; mouse.screenY=e.clientY-rect.top;
+    const wcs=screenToWcs(mouse.screenX,mouse.screenY); mouse.wcsX=wcs.x; mouse.wcsY=wcs.y;
+    const uc=wcsToUcs(wcs.x,wcs.y); mouse.ucsX=uc.x; mouse.ucsY=uc.y;
+}
 function setupEventListeners() {
     // 全てのボタンに対するグローバルハプティクス（短い振動）
     document.addEventListener('click', (e) => {
@@ -1683,10 +1795,16 @@ function setupEventListeners() {
     });
 
     canvas.addEventListener('mousemove', (e) => {
-        const rect=canvas.getBoundingClientRect(); mouse.screenX=e.clientX-rect.left; mouse.screenY=e.clientY-rect.top;
-        const wcs=screenToWcs(mouse.screenX,mouse.screenY); mouse.wcsX=wcs.x; mouse.wcsY=wcs.y;
-        const uc=wcsToUcs(wcs.x,wcs.y); mouse.ucsX=uc.x; mouse.ucsY=uc.y;
-        if(mouse.isPanning){view.x+=e.movementX;view.y+=e.movementY;}
+        updateMousePos(e);
+        if(mouse.isPanning) {
+            const sx=screenToWcs(mouse.screenX,mouse.screenY), sx0=screenToWcs(mouse.screenX-e.movementX,mouse.screenY-e.movementY);
+            ucs.originX+=sx.x-sx0.x; ucs.originY+=sx.y-sx0.y;
+            render(); return;
+        }
+        if(mouse.isTrimming) {
+            if(cmdState.trimPath) cmdState.trimPath.push({x: mouse.wcsX, y: mouse.wcsY});
+            render(); return;
+        }
         // コマンドモード中のみスナップ計算（IDLE時は軽量化のためスキップ）
         const isSelectMode = ['WAITING_ERASE_SELECT','WAITING_MOVE_SELECT','WAITING_COPY_SELECT','WAITING_OFFSET_SELECT','WAITING_OFFSET_SIDE'].includes(cmdState.mode);
         if(cmdState.mode !== 'IDLE' && !isSelectMode && !mouse.isSelecting) {
@@ -1698,7 +1816,6 @@ function setupEventListeners() {
             if(!mouse.isSelecting) cmdState.highlightIdx=hitTestEntity(mouse.screenX,mouse.screenY);
         }
         render();
-        if(mouse.isSelecting) drawSelectionRect();
     });
     canvas.addEventListener('mousedown', (e) => {
         if(Date.now() - lastTouchTime < 500) return; // タッチイベントに起因する疑似マウスイベントを無視
@@ -1719,7 +1836,10 @@ function setupEventListeners() {
                     }
                 } else {
                     if (cmdState.mode === 'IDLE') cmdState.highlightIdx = -1;
-                    if (window.areaSelectEnabled) {
+                    if (cmdState.mode === 'WAITING_TRIM') {
+                        mouse.isTrimming = true;
+                        cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
+                    } else if (window.areaSelectEnabled) {
                         mouse.isSelecting = true;
                         mouse.selStartX = mouse.screenX;
                         mouse.selStartY = mouse.screenY;
@@ -1727,7 +1847,6 @@ function setupEventListeners() {
                 }
                 updatePropertiesPanel();
                 render();
-                if(mouse.isSelecting) drawSelectionRect();
             }
         }
         if(e.button===2) { // Right click
@@ -1742,11 +1861,18 @@ function setupEventListeners() {
             else if(cmdState.mode==='WAITING_MOVE_SELECT'){resetCommand();addCommandLog('-> MOVE終了');}
             else if(cmdState.mode==='WAITING_COPY_SELECT'){resetCommand();addCommandLog('-> COPY終了');}
             else if(cmdState.mode==='WAITING_OFFSET_SELECT'||cmdState.mode==='WAITING_OFFSET_SIDE'){resetCommand();addCommandLog('-> OFFSET終了');}
+            else if(cmdState.mode==='WAITING_TRIM'){resetCommand(); addCommandLog('-> トリム終了');}
             else if(cmdState.mode!=='IDLE'){resetCommand();addCommandLog('-> コマンド終了');}
         }
     });
     window.addEventListener('mouseup',(e)=>{
         if(e.button===1)mouse.isPanning=false;
+        if(e.button===0 && mouse.isTrimming) {
+            executeTrim(cmdState.trimPath);
+            mouse.isTrimming = false;
+            cmdState.trimPath = [];
+            render();
+        }
         if(e.button===0 && mouse.isSelecting) {
             performSelection(mouse.selStartX, mouse.selStartY, mouse.screenX, mouse.screenY);
             mouse.isSelecting = false;
@@ -2062,14 +2188,24 @@ function setupEventListeners() {
                 // 全画面モード中は範囲選択しない（座標読取専用）
                 const isFullscreen = document.body.classList.contains('fullscreen-mode');
                 if(!isFullscreen) {
-                    // IDLEモードまたは編集コマンドのオブジェクト選択待ちの場合は範囲選択開始
-                    const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
-                    if(selectModes.includes(cmdState.mode) && window.areaSelectEnabled) {
-                        touchState.isSelecting = true;
-                        touchState.selStartX = touchState.startX;
-                        touchState.selStartY = touchState.startY;
+                    if (cmdState.mode === 'WAITING_TRIM') {
+                        touchState.isTrimming = true;
+                        cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
+                    } else {
+                        // IDLEモードまたは編集コマンドのオブジェクト選択待ちの場合は範囲選択開始
+                        const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
+                        if(selectModes.includes(cmdState.mode) && window.areaSelectEnabled) {
+                            touchState.isSelecting = true;
+                            touchState.selStartX = touchState.startX;
+                            touchState.selStartY = touchState.startY;
+                        }
                     }
                 }
+            }
+
+            if(touchState.isTrimming) {
+                if(cmdState.trimPath) cmdState.trimPath.push({x: mouse.wcsX, y: mouse.wcsY});
+                render(); return;
             }
 
             // 座標更新
@@ -2150,7 +2286,11 @@ function setupEventListeners() {
                 if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
             }
 
-            if(touchState.isSelecting) {
+            if(touchState.isTrimming) {
+                executeTrim(cmdState.trimPath);
+                touchState.isTrimming = false;
+                cmdState.trimPath = [];
+            } else if(touchState.isSelecting) {
                 // 範囲選択完了
                 performSelection(touchState.selStartX, touchState.selStartY, mouse.screenX, mouse.screenY);
                 touchState.isSelecting = false;

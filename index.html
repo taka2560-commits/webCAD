@@ -6,98 +6,128 @@
     <title>Web CAD</title>
     <style>
         :root {
-            --bg-color:#212830;--panel-bg:#333842;--panel-2:#2a2e35;--border-color:#181c21;--text-color:#e0e0e0;--highlight-color:#528bff;--ucs-color:#ffcc00;--crosshair-color:#ffffff;--btn-hover:rgba(255,255,255,0.1);
-            /* 新デザイン トークン: border3段階 / 補助色 / 角丸 */
-            --border-1:#181c21;--border-2:#3a4049;--border-3:#4a525e;
+            --bg-color:#111418; /* キャンバスのベース色 */
+            --panel-bg:rgba(40, 45, 52, 0.75); /* Glassmorphism ベース */
+            --panel-2:rgba(50, 55, 62, 0.6);
+            --border-color:rgba(255,255,255,0.1);
+            --text-color:#e0e0e0;
+            --highlight-color:#528bff;
+            --ucs-color:#ffcc00;
+            --crosshair-color:#ffffff;
+            --btn-hover:rgba(255,255,255,0.15);
+            --border-1:rgba(255,255,255,0.15);
+            --border-2:rgba(255,255,255,0.1);
+            --border-3:rgba(255,255,255,0.05);
             --dim:#9aa3ad;--mute:#6b7480;--green:#00ff88;--cyan:#00ffff;--warn:#ff6b6b;
-            --r-card:12px;--r-btn:10px;--r-sub:8px;--r-pill:6px;
+            --r-card:16px;--r-btn:12px;--r-sub:8px;--r-pill:20px;
         }
-        body,html { margin:0;padding:0;height:100%;font-family:'Segoe UI',sans-serif;background-color:var(--bg-color);color:var(--text-color);overflow:hidden;display:flex;flex-direction:column; }
-        #top-bar { min-height:58px;background-color:var(--panel-bg);border-bottom:1px solid var(--border-1);display:flex;flex-wrap:nowrap;align-items:center;padding:8px 10px;gap:8px;overflow-x:auto;overflow-y:hidden; }
-        #top-bar::-webkit-scrollbar { height:0; }
-        .top-btn { flex:0 0 auto;height:42px;padding:0 12px;background-color:transparent;border:1px solid var(--border-3);color:var(--text-color);border-radius:var(--r-btn);cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;white-space:nowrap; }
-        .top-btn:hover { background-color:var(--btn-hover);border-color:#5a6470; }
-        .top-btn.primary { background-color:rgba(0,255,136,0.14);border-color:var(--green);color:var(--green);font-weight:700; }
-        .control-group { flex:0 0 auto;display:flex;flex-direction:column;background-color:var(--panel-2);padding:5px 8px 6px;border-radius:var(--r-card);border:1px solid var(--border-2);gap:4px; }
-        .cg-label { color:var(--mute);font:600 9px/1 'Segoe UI',sans-serif;letter-spacing:.1em;margin-left:2px; }
-        .cg-row { display:flex;gap:5px;align-items:center; }
-        .cg-btn { height:32px;min-width:38px;padding:0 10px;background-color:transparent;border:1px solid var(--border-3);border-radius:var(--r-sub);color:var(--text-color);font:700 12px 'Segoe UI',sans-serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap; }
+        body,html { margin:0;padding:0;height:100%;font-family:'Segoe UI',system-ui,sans-serif;background-color:var(--bg-color);color:var(--text-color);overflow:hidden; }
+        
+        /* キャンバスを全画面配置 */
+        #canvas-container { position:absolute; top:0; left:0; width:100%; height:100%; background-color:#000; overflow:hidden; cursor:none; z-index:0; }
+        canvas { display:block; width:100%; height:100%; }
+
+        /* UI要素の共通スタイル (Glassmorphism) */
+        .glass-panel {
+            background-color:var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            border-radius: var(--r-card);
+            transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        /* トップバー */
+        #top-bar { position:absolute; top:10px; left:10px; right:10px; z-index:10; min-height:50px; display:flex; flex-wrap:nowrap; align-items:center; padding:6px 12px; gap:8px; overflow-x:auto; overflow-y:hidden; border-radius:var(--r-card); }
+        #top-bar::-webkit-scrollbar { display:none; }
+        
+        /* ツールバー (左・またはボトム) */
+        #toolbar { position:absolute; top:70px; left:10px; bottom:120px; z-index:10; width:48px; display:flex; flex-direction:column; align-items:center; gap:6px; padding:10px 0; overflow-y:auto; overflow-x:hidden; border-radius:var(--r-card); }
+        #toolbar::-webkit-scrollbar { display:none; }
+        
+        /* マイクロインタラクション（ボタン） */
+        .top-btn, .cg-btn, .tool-btn { transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1); }
+        .top-btn:active, .cg-btn:active, .tool-btn:active { transform: scale(0.92); }
+        
+        .top-btn { flex:0 0 auto;height:38px;padding:0 14px;background-color:rgba(255,255,255,0.05);border:1px solid var(--border-3);color:var(--text-color);border-radius:var(--r-pill);cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;white-space:nowrap; }
+        .top-btn:hover { background-color:var(--btn-hover); }
+        .top-btn.primary { background-color:rgba(0,255,136,0.15);border-color:var(--green);color:var(--green); }
+        
+        .control-group { flex:0 0 auto;display:flex;flex-direction:column;background-color:transparent;padding:0;border:none;gap:4px; }
+        .cg-label { display:none; } /* モバイルではラベルを隠してスッキリさせる */
+        .cg-row { display:flex;gap:6px;align-items:center; }
+        .cg-btn { height:36px;min-width:40px;padding:0 12px;background-color:rgba(255,255,255,0.05);border:1px solid var(--border-3);border-radius:var(--r-pill);color:var(--text-color);font:700 13px 'Segoe UI',sans-serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px; }
         .cg-btn:hover { background-color:var(--btn-hover); }
-        .cg-btn.primary { background-color:rgba(0,255,136,0.12);border-color:var(--green);color:var(--green); }
-        /* 上部バー右端のスクロール示唆フェード */
-        #top-fade { position:fixed;top:0;right:0;width:42px;height:58px;background:linear-gradient(90deg,rgba(51,56,66,0) 0%,rgba(51,56,66,.85) 55%,var(--panel-bg) 100%);pointer-events:none;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;z-index:5; }
-        #top-fade span { color:var(--text-color);font:800 16px/1 'Segoe UI',sans-serif;opacity:.65; }
-        body.fullscreen-mode #top-fade { display:none; }
-        select { background-color:#1e2227;color:white;border:1px solid var(--border-3);padding:4px 6px;outline:none;max-width:90px;border-radius:var(--r-sub);font-size:11px; }
-        #middle-area { flex:1;display:flex;position:relative;overflow:hidden; }
-        /* === 左ツールバー: 44pxレール ⇔ 148pxオーバーレイ展開 === */
-        #toolbar { width:44px;flex-shrink:0;background-color:var(--panel-bg);border-right:1px solid var(--border-1);display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 0 8px;overflow-y:auto;overflow-x:hidden; }
-        #toolbar::-webkit-scrollbar { width:0; }
-        .tool-btn { width:36px;height:36px;background-color:transparent;border:1px solid transparent;color:var(--text-color);border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+        
+        .tool-btn { width:40px;height:40px;background-color:transparent;border:1px solid transparent;color:var(--text-color);border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
         .tool-btn:hover { background-color:var(--btn-hover); }
-        .tool-btn.active { background-color:rgba(82,139,255,0.18);border-color:var(--highlight-color); }
+        .tool-btn.active { background-color:rgba(82,139,255,0.25);border-color:var(--highlight-color); box-shadow:0 0 10px rgba(82,139,255,0.2); }
         .tool-btn.active .tool-icon, .tool-btn.active .tool-cmd { color:var(--highlight-color); }
-        .tool-icon { font-size:16px;font-weight:700;margin:0; }
-        .tool-cmd { display:none;font-size:12px;font-weight:600;color:var(--text-color); }
-        .tool-sep { height:1px;width:24px;background-color:#1c2026;margin:5px 0 3px;flex-shrink:0; }
-        .tool-grp-label { color:var(--mute);font:700 7.5px/1 'Segoe UI',sans-serif;letter-spacing:.14em;margin:2px 0 3px;flex-shrink:0;text-align:center; }
-        .tool-toggle { width:36px;height:36px;background:rgba(255,255,255,.04);border:1px solid var(--border-3);border-radius:9px;color:var(--text-color);font:700 14px/1 'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-bottom:4px;cursor:pointer; }
-        #tool-header { display:none;align-items:center;justify-content:space-between;padding:0 2px 6px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:6px;flex-shrink:0; }
-        #tool-header span { color:var(--text-color);font:700 12px 'Segoe UI',sans-serif;letter-spacing:.04em; }
-        #tool-header button { width:30px;height:30px;background:rgba(255,255,255,.04);border:1px solid var(--border-3);border-radius:8px;color:var(--text-color);font:700 13px/1 'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;cursor:pointer; }
-        /* 展開オーバーレイ */
-        #toolbar.expanded { position:absolute;left:0;top:0;height:100%;width:148px;z-index:50;align-items:stretch;padding:8px 8px 12px;gap:2px;background:rgba(33,40,48,.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:6px 0 16px rgba(0,0,0,.5);border-right:1px solid rgba(255,255,255,.10); }
-        #toolbar.expanded .tool-toggle { display:none; }
-        #toolbar.expanded #tool-header { display:flex; }
-        #toolbar.expanded .tool-btn { width:100%;height:38px;justify-content:flex-start;padding:0 10px;gap:10px;border-radius:9px; }
-        #toolbar.expanded .tool-icon { width:18px;text-align:center;font-size:15px; }
-        #toolbar.expanded .tool-cmd { display:inline; }
-        #toolbar.expanded .tool-sep { width:auto;margin:8px 4px 4px;background:rgba(255,255,255,.06); }
-        #toolbar.expanded .tool-grp-label { font-size:8.5px;letter-spacing:.16em;text-align:left;margin:6px 0 4px 4px; }
-        #canvas-container { flex:1;position:relative;background-color:#000;overflow:hidden;cursor:none; }
-        canvas { display:block; }
-        #properties-panel, #layer-panel { width:250px; background-color:var(--panel-bg); border-left:1px solid var(--border-color); display:flex; flex-direction:column; overflow-y:auto; transition:width 0.2s; }
-        #properties-panel.collapsed, #layer-panel.collapsed { width:0; overflow:hidden; border-left:none; }
-        .props-header { background-color:#2a2e35; padding:5px 10px; font-weight:bold; font-size:12px; border-bottom:1px solid #111; display:flex; justify-content:space-between; align-items:center; }
-        .props-content { padding:10px; font-size:11px; }
-        .prop-row { display:flex; margin-bottom:5px; align-items:center; }
-        .prop-label { width:80px; color:#aaa; }
-        .prop-val { flex:1; background-color:#1e2227; color:#fff; border:1px solid #444; padding:2px 5px; outline:none; }
-        /* === コマンド欄: 32pxピル ⇔ 展開 === */
-        #command-line-area { background-color:var(--bg-color);border-top:1px solid var(--border-1);display:flex;flex-direction:column;font-family:'Consolas',monospace;font-size:13px;flex:0 0 auto; }
-        #command-line-area.collapsed { height:32px; }
-        #command-line-area:not(.collapsed) { height:140px; }
-        #command-pill { display:none;height:32px;width:100%;background:var(--bg-color);border:none;align-items:center;gap:8px;padding:0 12px;cursor:pointer;font-family:'Consolas',monospace; }
+        .tool-icon { font-size:18px;font-weight:700;margin:0; }
+        .tool-cmd { display:none; }
+        .tool-sep { height:1px;width:28px;background-color:var(--border-color);margin:4px 0;flex-shrink:0; }
+        .tool-grp-label { display:none; }
+        .tool-toggle { display:none; } /* モバイル展開ボタンは今回は省略し、スクロールで対応 */
+        
+        #tool-header { display:none; }
+        
+        /* プロパティ・画層パネル (ボトムシート風) */
+        #properties-panel, #layer-panel { position:absolute; bottom:10px; right:10px; z-index:20; width:280px; max-height:40vh; display:flex; flex-direction:column; overflow-y:auto; transform: translateY(0); opacity:1; }
+        #properties-panel.collapsed, #layer-panel.collapsed { transform: translateY(120%); opacity:0; pointer-events:none; }
+        
+        .props-header { background-color:rgba(0,0,0,0.2); padding:10px 14px; font-weight:bold; font-size:14px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; border-radius:var(--r-card) var(--r-card) 0 0; }
+        .props-content { padding:12px; font-size:13px; }
+        .prop-row { display:flex; margin-bottom:10px; align-items:center; }
+        .prop-label { width:90px; color:var(--dim); font-weight:600; }
+        /* インスペクタ入力欄のモダン化 */
+        .prop-val { flex:1; background-color:rgba(0,0,0,0.3); color:#fff; border:1px solid var(--border-color); padding:6px 10px; border-radius:var(--r-sub); outline:none; transition:border 0.2s; font-family:inherit; }
+        .prop-val:focus { border-color:var(--highlight-color); }
+        
+        /* コマンドラインエリア (フローティングピル) */
+        #command-line-area { position:absolute; bottom:55px; left:10px; right:10px; z-index:30; display:flex; flex-direction:column; font-family:'Consolas',monospace; font-size:13px; border-radius:var(--r-card); overflow:hidden; }
+        #command-line-area.collapsed { height:44px; }
+        #command-line-area:not(.collapsed) { height:180px; }
+        #command-pill { display:flex; height:44px; width:100%; background:transparent; border:none; align-items:center; gap:10px; padding:0 16px; cursor:pointer; }
         #command-line-area.collapsed #command-pill { display:flex; }
         #command-line-area.collapsed #command-log, #command-line-area.collapsed #command-input-wrapper { display:none; }
-        #cmd-pill-dot { width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px rgba(0,255,136,.6);flex-shrink:0; }
-        #cmd-pill-name { color:var(--green);font:700 11px 'Consolas',monospace;letter-spacing:.04em;flex-shrink:0; }
-        #cmd-pill-sep { color:var(--border-2);font-size:11px;flex-shrink:0; }
-        #cmd-pill-prompt { color:var(--text-color);font:600 11px 'Consolas',monospace;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-        #cmd-pill-hint { color:var(--mute);font:700 10px 'Segoe UI',sans-serif;white-space:nowrap;flex-shrink:0; }
-        #command-log { flex:1;padding:5px 10px;overflow-y:auto;color:#aaa;display:flex;flex-direction:column;justify-content:flex-end; }
-        #command-input-wrapper { display:flex;padding:5px 10px;background-color:#fff;color:#000; }
-        #command-prompt { margin-right:5px;font-weight:bold;color:#333; }
-        #command-input { flex:1;border:none;outline:none;background:transparent;font-family:inherit;font-size:inherit;font-weight:bold; }
-        #cmd-collapse { flex:0 0 auto;width:28px;height:24px;margin-left:6px;background:#2a2e35;color:#e0e0e0;border:1px solid var(--border-3);border-radius:var(--r-sub);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
-        #cmd-collapse:hover { background:#3a4049; }
-        #status-bar { height:36px;background-color:var(--panel-2);border-bottom:1px solid var(--border-1);display:flex;align-items:center;padding:0 12px;font-size:12px;justify-content:space-between;gap:8px; }
-        .status-btn { background:transparent;border:1px solid transparent;color:var(--dim);cursor:pointer;padding:0 8px;height:24px;font:600 11px 'Segoe UI',sans-serif;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:3px; }
-        .status-btn:hover { color:#fff;background:var(--btn-hover); }
-        .status-btn.active { color:var(--highlight-color);background:rgba(82,139,255,0.12);border-color:var(--highlight-color);font-weight:700; }
-        #btn-osnap.active { color:var(--green);background:rgba(0,255,136,0.12);border-color:var(--green); }
-        #osnap-panel { display:none; position:fixed; background:var(--panel-bg); border:1px solid var(--border-color); padding:10px; z-index:999999 !important; box-shadow:0 5px 25px rgba(0,0,0,0.8); pointer-events: auto; }
-        #osnap-panel label { display:block; margin-bottom:12px; font-size:14px; cursor:pointer; min-width:120px; padding:4px 0; color: #fff; }
-        #osnap-panel input { transform: scale(1.3); margin-right: 12px; cursor: pointer; }
-        #ucs-label { margin-right:5px; font-weight:bold; }
-        #coords-display { font-family: 'Consolas', monospace; min-width: 130px; text-align: right; }
         
-        /* 全画面モード時のUI非表示設定 */
+        #cmd-pill-dot { width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px rgba(0,255,136,.8);flex-shrink:0; }
+        #cmd-pill-name { color:var(--green);font:700 13px 'Consolas',monospace;letter-spacing:.05em;flex-shrink:0; }
+        #cmd-pill-sep { color:var(--border-2);font-size:13px;flex-shrink:0; }
+        #cmd-pill-prompt { color:var(--text-color);font:600 13px 'Consolas',monospace;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+        #cmd-pill-hint { color:var(--mute);font:700 11px 'Segoe UI',sans-serif;white-space:nowrap;flex-shrink:0; }
+        
+        #command-log { flex:1;padding:8px 12px;overflow-y:auto;color:#ccc;display:flex;flex-direction:column;justify-content:flex-end; background:rgba(0,0,0,0.2); }
+        #command-input-wrapper { display:flex;padding:8px 12px;background-color:rgba(255,255,255,0.9);color:#000; align-items:center; }
+        #command-prompt { margin-right:8px;font-weight:bold;color:#333; }
+        #command-input { flex:1;border:none;outline:none;background:transparent;font-family:inherit;font-size:14px;font-weight:bold; }
+        #cmd-collapse { width:32px;height:32px;margin-left:8px;background:#ddd;color:#333;border:none;border-radius:var(--r-sub);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center; transition:all 0.2s; }
+        #cmd-collapse:active { transform:scale(0.9); }
+        
+        /* ステータスバー (最下部フローティング) */
+        #status-bar { position:absolute; bottom:10px; left:10px; right:10px; z-index:10; height:40px; display:flex; align-items:center; padding:0 12px; font-size:12px; justify-content:space-between; gap:8px; border-radius:var(--r-pill); }
+        
+        .status-btn { background:rgba(255,255,255,0.05);border:1px solid transparent;color:var(--dim);cursor:pointer;padding:0 12px;height:28px;font:600 12px 'Segoe UI',sans-serif;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:4px; transition:all 0.2s cubic-bezier(0.25,1,0.5,1); }
+        .status-btn:active { transform:scale(0.9); }
+        .status-btn.active { color:var(--highlight-color);background:rgba(82,139,255,0.2);border-color:var(--highlight-color);font-weight:700; box-shadow:0 0 10px rgba(82,139,255,0.2); }
+        #btn-osnap.active { color:var(--green);background:rgba(0,255,136,0.15);border-color:var(--green); box-shadow:0 0 10px rgba(0,255,136,0.2); }
+        
+        #osnap-panel { display:none; position:fixed; bottom:60px; right:10px; background:var(--panel-bg); backdrop-filter:blur(12px); border:1px solid var(--border-color); padding:16px; border-radius:var(--r-card); z-index:999999 !important; box-shadow:0 10px 40px rgba(0,0,0,0.5); pointer-events:auto; }
+        #osnap-panel label { display:flex; align-items:center; margin-bottom:14px; font-size:15px; cursor:pointer; min-width:140px; color:#fff; }
+        #osnap-panel input { transform:scale(1.4); margin-right:14px; cursor:pointer; }
+        
+        #coords-display { font-family:'Consolas',monospace; min-width:130px; text-align:right; font-size:13px; font-weight:600; }
+        
+        /* 非表示クラス */
         body.fullscreen-mode #top-bar,
         body.fullscreen-mode #toolbar,
-        body.fullscreen-mode #command-line-area { display: none !important; }
+        body.fullscreen-mode #command-line-area,
+        body.fullscreen-mode #status-bar { display: none !important; }
+        
         #btn-exit-fullscreen { display: none; }
-        body.fullscreen-mode #btn-exit-fullscreen { display: inline-block; background-color: transparent; color: #ff6b6b; font-size: 11px; border: 1px solid #ff6b6b; border-radius: 3px; cursor: pointer; padding: 1px 6px; margin-right: 5px; white-space: nowrap; }
+        body.fullscreen-mode #btn-exit-fullscreen { display: inline-block; background-color: rgba(255,107,107,0.2); color: #ff6b6b; font-size: 13px; font-weight:bold; border: 1px solid #ff6b6b; border-radius: 8px; cursor: pointer; padding: 6px 12px; position:absolute; top:10px; right:10px; z-index:9999; }
+
         body.fullscreen-mode #btn-exit-fullscreen:hover { background-color: rgba(255, 107, 107, 0.2); }
 
         /* === 全画面 座標読取モード UI === */
@@ -267,7 +297,8 @@
 </head>
 <body>
     <input type="file" id="dxf-file-input" accept=".dxf,.dwg" style="display:none;">
-    <div id="top-bar">
+    <div id="canvas-container"><canvas id="cad-canvas"></canvas></div>
+    <div id="top-bar" class="glass-panel">
         <button class="top-btn" id="btn-load-dxf" title="ファイルを開く (DXF/DWG)">📁 開く</button>
         <button class="top-btn" onclick="closeDrawing()" title="図面を閉じて新規作成"><span style="color:var(--warn);">✕</span> 閉じる</button>
         <button class="top-btn" onclick="togglePropertiesPanel()" title="プロパティパネル表示切替">📋 プロパティ</button>
@@ -334,60 +365,53 @@
             <span id="coords-display" style="width:120px;text-align:right;">0.0000, 0.0000</span>
         </div>
     </div>
-    <div id="middle-area">
-        <div id="toolbar">
-            <!-- レール展開トグル / 展開時ヘッダー -->
-            <button class="tool-toggle" onclick="toggleToolbar()" title="ツールを展開">☰</button>
-            <div id="tool-header"><span>ツール</span><button onclick="toggleToolbar()" title="折りたたむ">◀</button></div>
-            <!-- 作図コマンド -->
-            <span class="tool-grp-label">作図</span>
-            <button class="tool-btn" onclick="toggleCommand('LINE')" title="線分 (L)"><div class="tool-icon">／</div><div class="tool-cmd">LINE</div></button>
-            <button class="tool-btn" onclick="toggleCommand('PLINE')" title="ポリライン (PL)"><div class="tool-icon">∧</div><div class="tool-cmd">PLINE</div></button>
-            <button class="tool-btn" onclick="toggleCommand('RECTANG')" title="長方形 (REC)"><div class="tool-icon">□</div><div class="tool-cmd">RECT</div></button>
-            <button class="tool-btn" onclick="toggleCommand('CIRCLE')" title="円 (C)"><div class="tool-icon">◯</div><div class="tool-cmd">CIRCLE</div></button>
-            <button class="tool-btn" onclick="toggleCommand('ARC')" title="円弧 (A)"><div class="tool-icon">⌒</div><div class="tool-cmd">ARC</div></button>
-            <button class="tool-btn" onclick="toggleCommand('ELLIPSE')" title="楕円 (EL)"><div class="tool-icon">⬭</div><div class="tool-cmd">ELLIP</div></button>
-            <button class="tool-btn" onclick="toggleCommand('TEXT')" title="文字 (T)"><div class="tool-icon">A</div><div class="tool-cmd">TEXT</div></button>
-            <button class="tool-btn" onclick="toggleCommand('HATCH')" title="ハッチング (H)"><div class="tool-icon" style="background:repeating-linear-gradient(45deg, transparent, transparent 2px, #fff 2px, #fff 3px); width:16px; height:16px; margin-bottom:2px;"></div><div class="tool-cmd">HATCH</div></button>
-            <div class="tool-sep"></div>
-            <!-- 編集 -->
-            <span class="tool-grp-label">編集</span>
-            <button class="tool-btn" onclick="toggleCommand('ERASE')" title="削除 (E)"><div class="tool-icon" style="color:#ff6b6b;">✖</div><div class="tool-cmd">ERASE</div></button>
-            <button class="tool-btn" onclick="toggleCommand('MOVE')" title="移動 (M)"><div class="tool-icon" style="color:#ffff00;">✥</div><div class="tool-cmd">MOVE</div></button>
-            <button class="tool-btn" onclick="toggleCommand('COPY')" title="コピー (CO)"><div class="tool-icon" style="color:#ffff00;">⊞</div><div class="tool-cmd">COPY</div></button>
-            <button class="tool-btn" onclick="toggleCommand('OFFSET')" title="オフセット (O)"><div class="tool-icon" style="color:#ffff00;">◱</div><div class="tool-cmd">OFFSET</div></button>
-            <button class="tool-btn" onclick="toggleCommand('ROTATE')" title="回転 (RO)"><div class="tool-icon" style="color:#ffff00;">↻</div><div class="tool-cmd">ROTATE</div></button>
-            <div class="tool-sep"></div>
-            <!-- 寸法コマンド -->
-            <span class="tool-grp-label">寸法</span>
-            <button class="tool-btn" onclick="toggleCommand('DIMLINEAR')" title="平行寸法 (DLI)"><div class="tool-icon" style="color:#00ffff;">↔</div><div class="tool-cmd">DIMLIN</div></button>
-            <button class="tool-btn" onclick="toggleCommand('DIMALIGNED')" title="整列寸法 (DAL)"><div class="tool-icon" style="color:#00ffff;">⤢</div><div class="tool-cmd">DIMALN</div></button>
-            <button class="tool-btn" onclick="toggleCommand('DIMRADIUS')" title="半径寸法 (DRA)"><div class="tool-icon" style="color:#00ffff;">R</div><div class="tool-cmd">DIMRAD</div></button>
-            <button class="tool-btn" onclick="toggleCommand('DIMDIAMETER')" title="直径寸法 (DDI)"><div class="tool-icon" style="color:#00ffff;">⌀</div><div class="tool-cmd">DIMDIA</div></button>
-            <button class="tool-btn" onclick="toggleCommand('DIMANGULAR')" title="角度寸法 (DAN)"><div class="tool-icon" style="color:#00ffff;">∠</div><div class="tool-cmd">DIMANG</div></button>
-            <button class="tool-btn" onclick="toggleCommand('DIMORDINATE')" title="座標寸法 (DOR)"><div class="tool-icon" style="color:#00ffff;">XY</div><div class="tool-cmd">DIMORD</div></button>
+    <div id="toolbar" class="glass-panel">
+        <div id="tool-header"><span>TOOLS</span><button onclick="toggleToolbar()">✕</button></div>
+        <button class="tool-toggle" onclick="toggleToolbar()" title="ツールを展開">☰</button>
+        <span class="tool-grp-label">作図</span>
+        <button class="tool-btn" onclick="toggleCommand('LINE')" title="線分 (L)"><div class="tool-icon">／</div><div class="tool-cmd">LINE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('PLINE')" title="ポリライン (PL)"><div class="tool-icon">∧</div><div class="tool-cmd">PLINE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('RECTANG')" title="長方形 (REC)"><div class="tool-icon">□</div><div class="tool-cmd">RECT</div></button>
+        <button class="tool-btn" onclick="toggleCommand('CIRCLE')" title="円 (C)"><div class="tool-icon">◯</div><div class="tool-cmd">CIRCLE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('ARC')" title="円弧 (A)"><div class="tool-icon">⌒</div><div class="tool-cmd">ARC</div></button>
+        <button class="tool-btn" onclick="toggleCommand('ELLIPSE')" title="楕円 (EL)"><div class="tool-icon">⬭</div><div class="tool-cmd">ELLIP</div></button>
+        <button class="tool-btn" onclick="toggleCommand('TEXT')" title="文字 (T)"><div class="tool-icon">A</div><div class="tool-cmd">TEXT</div></button>
+        <button class="tool-btn" onclick="toggleCommand('HATCH')" title="ハッチング (H)"><div class="tool-icon" style="background:repeating-linear-gradient(45deg, transparent, transparent 2px, #fff 2px, #fff 3px); width:16px; height:16px; margin-bottom:2px;"></div><div class="tool-cmd">HATCH</div></button>
+        <div class="tool-sep"></div>
+        <span class="tool-grp-label">編集</span>
+        <button class="tool-btn" onclick="toggleCommand('TRIM')" title="トリム (TR)"><div class="tool-icon" style="color:#ff6b6b;">✂</div><div class="tool-cmd">TRIM</div></button>
+        <button class="tool-btn" onclick="toggleCommand('ERASE')" title="削除 (E)"><div class="tool-icon" style="color:#ff6b6b;">✖</div><div class="tool-cmd">ERASE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('MOVE')" title="移動 (M)"><div class="tool-icon" style="color:#ffff00;">✥</div><div class="tool-cmd">MOVE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('COPY')" title="コピー (CO)"><div class="tool-icon" style="color:#ffff00;">⊞</div><div class="tool-cmd">COPY</div></button>
+        <button class="tool-btn" onclick="toggleCommand('OFFSET')" title="オフセット (O)"><div class="tool-icon" style="color:#ffff00;">◱</div><div class="tool-cmd">OFFSET</div></button>
+        <button class="tool-btn" onclick="toggleCommand('ROTATE')" title="回転 (RO)"><div class="tool-icon" style="color:#ffff00;">↻</div><div class="tool-cmd">ROTATE</div></button>
+        <div class="tool-sep"></div>
+        <span class="tool-grp-label">寸法</span>
+        <button class="tool-btn" onclick="toggleCommand('DIMLINEAR')" title="平行寸法 (DLI)"><div class="tool-icon" style="color:#00ffff;">↔</div><div class="tool-cmd">DIMLIN</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMALIGNED')" title="整列寸法 (DAL)"><div class="tool-icon" style="color:#00ffff;">⤢</div><div class="tool-cmd">DIMALN</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMRADIUS')" title="半径寸法 (DRA)"><div class="tool-icon" style="color:#00ffff;">R</div><div class="tool-cmd">DIMRAD</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMDIAMETER')" title="直径寸法 (DDI)"><div class="tool-icon" style="color:#00ffff;">⌀</div><div class="tool-cmd">DIMDIA</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMANGULAR')" title="角度寸法 (DAN)"><div class="tool-icon" style="color:#00ffff;">∠</div><div class="tool-cmd">DIMANG</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMORDINATE')" title="座標寸法 (DOR)"><div class="tool-icon" style="color:#00ffff;">XY</div><div class="tool-cmd">DIMORD</div></button>
+    </div>
+    <div id="properties-panel" class="collapsed glass-panel">
+        <div class="props-header">
+            <span>プロパティ</span>
+            <button class="status-btn" onclick="togglePropertiesPanel()" style="padding:0;">✖</button>
         </div>
-        <div id="canvas-container"><canvas id="cad-canvas"></canvas></div>
-        <div id="properties-panel" class="collapsed">
-            <div class="props-header">
-                <span>プロパティ</span>
-                <button class="status-btn" onclick="togglePropertiesPanel()" style="padding:0;">✖</button>
-            </div>
-            <div class="props-content" id="props-content">
-                <div style="color:#888; text-align:center; padding:20px 0;">図形が選択されていません</div>
-            </div>
-        </div>
-        <div id="layer-panel" class="collapsed">
-            <div class="props-header">
-                <span>画層プロパティ</span>
-                <button class="status-btn" onclick="toggleLayerPanel()" style="padding:0;">✖</button>
-            </div>
-            <div class="props-content" id="layer-list" style="padding:0;">
-                <!-- Layers will be generated here -->
-            </div>
+        <div class="props-content" id="props-content">
+            <div style="color:#888; text-align:center; padding:20px 0;">図形が選択されていません</div>
         </div>
     </div>
-    <div id="command-line-area" class="collapsed">
+    <div id="layer-panel" class="collapsed glass-panel">
+        <div class="props-header">
+            <span>画層プロパティ</span>
+            <button class="status-btn" onclick="toggleLayerPanel()" style="padding:0;">✖</button>
+        </div>
+        <div class="props-content" id="layer-list" style="padding:0;"></div>
+        <button class="prop-btn" style="margin-top:15px; width:100%;" onclick="invertLayersVisibility()">全画層の表示反転</button>
+    </div>
+    <div id="command-line-area" class="collapsed glass-panel">
         <button id="command-pill" onclick="toggleCommandLine()" title="コマンドラインを開閉">
             <span id="cmd-pill-dot"></span>
             <span id="cmd-pill-name">READY</span>
