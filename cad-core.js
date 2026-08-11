@@ -296,7 +296,7 @@ window.changeCurrentLayer = function(val) {
     commandInput.focus();
 };
 function updateLayerColorDisplay() { document.getElementById('current-layer-color').style.backgroundColor=layers[currentLayerIndex].color; }
-function resizeCanvas() { canvas.width=container.clientWidth; canvas.height=container.clientHeight; render(); }
+
 
 // ===== 座標変換 =====
 function screenToWcs(sx, sy) {
@@ -1515,7 +1515,7 @@ function finishPline(close) {
 }
 
 // 指定されたパス(線分群)と交差する図形をトリム(カット/単体削除)する
-window.executeTrim = function(trimPath) {
+function executeTrim(trimPath) {
     if(!trimPath || trimPath.length === 0) return;
     
     // 点が1つしかない場合（タップだけの場合）も考慮して疑似パスを作成
@@ -1643,7 +1643,7 @@ window.executeTrim = function(trimPath) {
 }
 
 // なぞって延長する (EXTEND)
-window.executeExtend = function(extendPath) {
+function executeExtend(extendPath) {
     if(!extendPath || extendPath.length === 0) return;
     if(extendPath.length === 1) {
         extendPath = [extendPath[0], {x: extendPath[0].x + 0.001, y: extendPath[0].y + 0.001}];
@@ -1711,6 +1711,8 @@ window.executeExtend = function(extendPath) {
         render();
     }
 }
+window.executeTrim = executeTrim;
+window.executeExtend = executeExtend;
 
 function isPointOnSegment(px, py, x1, y1, x2, y2, tol = 0.001) { return distPointToSeg(px, py, x1, y1, x2, y2) <= tol; }
 
