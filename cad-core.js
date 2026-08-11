@@ -1494,9 +1494,15 @@ function finishPline(close) {
     resetCommand();
 }
 
-// 指定されたパス(線分群)と交差する図形をトリム(カット)する
+// 指定されたパス(線分群)と交差する図形をトリム(カット/単体削除)する
 window.executeTrim = function(trimPath) {
-    if(!trimPath || trimPath.length < 2) return;
+    if(!trimPath || trimPath.length === 0) return;
+    
+    // 点が1つしかない場合（タップだけの場合）も考慮して疑似パスを作成
+    if(trimPath.length === 1) {
+        trimPath = [trimPath[0], {x: trimPath[0].x + 0.001, y: trimPath[0].y + 0.001}];
+    }
+
     saveUndo();
     let trimmedCount = 0;
     const swipeSegs = [];
@@ -1504,27 +1510,60 @@ window.executeTrim = function(trimPath) {
         swipeSegs.push({x1: trimPath[i].x, y1: trimPath[i].y, x2: trimPath[i+1].x, y2: trimPath[i+1].y});
     }
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
+    
     let newEntities = [];
     let entitiesToRemove = [];
+
+    // 画面スケールに合わせた判定許容距離 (WCS単位)
+    const tolWcs = 15 / (view.scale || 1.0);
+
     entities.forEach((e, i) => {
-        if(!isVisible(e) || (e.type !== 'LINE' && e.type !== 'CIRCLE' && e.type !== 'ARC')) return;
+        if(!isVisible(e)) return;
         let hitPt = null;
+
+        // 各スワイプセグメントとのヒット判定
         for(const seg of swipeSegs) {
             if(e.type === 'LINE') {
                 const pt = intersectLineLine(seg.x1, seg.y1, seg.x2, seg.y2, e.x1, e.y1, e.x2, e.y2);
                 if(pt && isPointOnSegment(pt.x, pt.y, seg.x1, seg.y1, seg.x2, seg.y2) && isPointOnSegment(pt.x, pt.y, e.x1, e.y1, e.x2, e.y2)) {
                     hitPt = pt; break;
                 }
+                // 厳密な交差がない場合も、スワイプ点が線の近くを通ったかチェック
+                const d1 = distPointToSeg(seg.x1, seg.y1, e.x1, e.y1, e.x2, e.y2);
+                const d2 = distPointToSeg(seg.x2, seg.y2, e.x1, e.y1, e.x2, e.y2);
+                if(d1 <= tolWcs || d2 <= tolWcs) {
+                    hitPt = {x: (seg.x1 + seg.x2)/2, y: (seg.y1 + seg.y2)/2}; break;
+                }
             } else if(e.type === 'CIRCLE' || e.type === 'ARC') {
                 const pts = intersectSegCircle(seg.x1, seg.y1, seg.x2, seg.y2, e.cx, e.cy, e.radius);
                 if(pts.length > 0) { hitPt = pts[0]; break; }
+                const d1 = Math.abs(dist(seg.x1, seg.y1, e.cx, e.cy) - e.radius);
+                if(d1 <= tolWcs) { hitPt = {x: seg.x1, y: seg.y1}; break; }
+            } else if(e.type === 'PLINE' || e.type === 'RECTANG') {
+                // ポリライン・長方形
+                const pts = (e.type === 'RECTANG') ? [
+                    {x:e.x1, y:e.y1}, {x:e.x2, y:e.y1}, {x:e.x2, y:e.y2}, {x:e.x1, y:e.y2}
+                ] : e.points;
+                if(pts && pts.length > 1) {
+                    for(let k = 0; k < pts.length; k++) {
+                        const pNext = pts[(k + 1) % pts.length];
+                        if(!e.closed && k === pts.length - 1) break;
+                        const pt = intersectLineLine(seg.x1, seg.y1, seg.x2, seg.y2, pts[k].x, pts[k].y, pNext.x, pNext.y);
+                        if(pt && isPointOnSegment(pt.x, pt.y, seg.x1, seg.y1, seg.x2, seg.y2) && isPointOnSegment(pt.x, pt.y, pts[k].x, pts[k].y, pNext.x, pNext.y)) {
+                            hitPt = pt; break;
+                        }
+                    }
+                }
             }
         }
+
         if(!hitPt) return;
-        let allIntersections = [];
-        entities.forEach(other => {
-            if(e === other || !isVisible(other)) return;
-            if(e.type === 'LINE') {
+
+        // LINEのトリム処理
+        if(e.type === 'LINE') {
+            let allIntersections = [];
+            entities.forEach(other => {
+                if(e === other || !isVisible(other)) return;
                 if(other.type === 'LINE') {
                     const pt = intersectLineLine(e.x1, e.y1, e.x2, e.y2, other.x1, other.y1, other.x2, other.y2);
                     if(pt && isPointOnSegment(pt.x, pt.y, e.x1, e.y1, e.x2, e.y2) && isPointOnSegment(pt.x, pt.y, other.x1, other.y1, other.x2, other.y2)) allIntersections.push(pt);
@@ -1532,43 +1571,64 @@ window.executeTrim = function(trimPath) {
                     const pts = intersectSegCircle(e.x1, e.y1, e.x2, e.y2, other.cx, other.cy, other.radius);
                     pts.forEach(pt => allIntersections.push(pt));
                 }
-            }
-        });
-        if(e.type === 'LINE') {
+            });
+
             const dx = e.x2 - e.x1, dy = e.y2 - e.y1, len2 = dx*dx + dy*dy;
-            const getT = (p) => ((p.x - e.x1)*dx + (p.y - e.y1)*dy) / len2;
+            const getT = (p) => len2 > 0 ? ((p.x - e.x1)*dx + (p.y - e.y1)*dy) / len2 : 0;
+
             allIntersections.push({x: e.x1, y: e.y1}, {x: e.x2, y: e.y2});
             allIntersections.sort((a, b) => getT(a) - getT(b));
+
             const uniqueInts = [];
             for(const pt of allIntersections) {
                 if(uniqueInts.length === 0 || dist(uniqueInts[uniqueInts.length-1].x, uniqueInts[uniqueInts.length-1].y, pt.x, pt.y) > 0.0001) uniqueInts.push(pt);
             }
-            const hitT = getT(hitPt);
-            let t1Idx = -1, t2Idx = -1;
-            for(let j = 0; j < uniqueInts.length - 1; j++) {
-                if(getT(uniqueInts[j]) <= hitT && hitT <= getT(uniqueInts[j+1])) {
-                    t1Idx = j; t2Idx = j + 1; break;
+
+            // 他の線との交点が端点以外にない場合 -> 単体削除（消しゴム動作）
+            if(uniqueInts.length <= 2) {
+                entitiesToRemove.push(i);
+                trimmedCount++;
+            } else {
+                const hitT = getT(hitPt);
+                let t1Idx = -1, t2Idx = -1;
+                for(let j = 0; j < uniqueInts.length - 1; j++) {
+                    if(getT(uniqueInts[j]) - 0.001 <= hitT && hitT <= getT(uniqueInts[j+1]) + 0.001) {
+                        t1Idx = j; t2Idx = j + 1; break;
+                    }
+                }
+                if(t1Idx !== -1) {
+                    entitiesToRemove.push(i);
+                    if(t1Idx > 0) newEntities.push({type:'LINE', layer:e.layer, color:e.color, x1:uniqueInts[0].x, y1:uniqueInts[0].y, x2:uniqueInts[t1Idx].x, y2:uniqueInts[t1Idx].y});
+                    if(t2Idx < uniqueInts.length - 1) newEntities.push({type:'LINE', layer:e.layer, color:e.color, x1:uniqueInts[t2Idx].x, y1:uniqueInts[t2Idx].y, x2:uniqueInts[uniqueInts.length-1].x, y2:uniqueInts[uniqueInts.length-1].y});
+                    trimmedCount++;
+                } else {
+                    // 万が一ヒット位置が特定できなければ単体削除
+                    entitiesToRemove.push(i);
+                    trimmedCount++;
                 }
             }
-            if(t1Idx !== -1) {
-                entitiesToRemove.push(i);
-                if(t1Idx > 0) newEntities.push({type:'LINE', layer:e.layer, color:e.color, x1:uniqueInts[0].x, y1:uniqueInts[0].y, x2:uniqueInts[t1Idx].x, y2:uniqueInts[t1Idx].y});
-                if(t2Idx < uniqueInts.length - 1) newEntities.push({type:'LINE', layer:e.layer, color:e.color, x1:uniqueInts[t2Idx].x, y1:uniqueInts[t2Idx].y, x2:uniqueInts[uniqueInts.length-1].x, y2:uniqueInts[uniqueInts.length-1].y});
-                trimmedCount++;
-            }
+        } else {
+            // LINE以外（円やポリラインなど）でスワイプヒットした場合はそのまま削除
+            entitiesToRemove.push(i);
+            trimmedCount++;
         }
     });
+
     if(trimmedCount > 0) {
         entitiesToRemove.sort((a, b) => b - a).forEach(idx => entities.splice(idx, 1));
         newEntities.forEach(e => entities.push(e));
-        addCommandLog(`-> ${trimmedCount} 個のセグメントをトリムしました`);
+        addCommandLog(`-> ${trimmedCount} 個のオブジェクト/セグメントをトリム(消去)しました`);
         render();
     }
 }
 
 // なぞって延長する (EXTEND)
 window.executeExtend = function(extendPath) {
-    if(!extendPath || extendPath.length < 2) return;
+    if(!extendPath || extendPath.length === 0) return;
+    if(extendPath.length === 1) {
+        extendPath = [extendPath[0], {x: extendPath[0].x + 0.001, y: extendPath[0].y + 0.001}];
+    }
+
     saveUndo();
     let extendedCount = 0;
     const swipeSegs = [];
@@ -1576,15 +1636,18 @@ window.executeExtend = function(extendPath) {
         swipeSegs.push({x1: extendPath[i].x, y1: extendPath[i].y, x2: extendPath[i+1].x, y2: extendPath[i+1].y});
     }
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
+    const tolWcs = 20 / (view.scale || 1.0);
 
     entities.forEach((e) => {
-        if(!isVisible(e) || e.type !== 'LINE') return; // 今回はLINEのみ延長対応
+        if(!isVisible(e) || e.type !== 'LINE') return; // LINE延長対応
         let hitPt = null;
         for(const seg of swipeSegs) {
             const pt = intersectLineLine(seg.x1, seg.y1, seg.x2, seg.y2, e.x1, e.y1, e.x2, e.y2);
             if(pt && isPointOnSegment(pt.x, pt.y, seg.x1, seg.y1, seg.x2, seg.y2) && isPointOnSegment(pt.x, pt.y, e.x1, e.y1, e.x2, e.y2)) {
                 hitPt = pt; break;
             }
+            const d1 = distPointToSeg(seg.x1, seg.y1, e.x1, e.y1, e.x2, e.y2);
+            if(d1 <= tolWcs) { hitPt = {x: seg.x1, y: seg.y1}; break; }
         }
         if(!hitPt) return;
 
@@ -1596,7 +1659,6 @@ window.executeExtend = function(extendPath) {
         const dx = e.x2 - e.x1; const dy = e.y2 - e.y1;
         const dir = isP1 ? -1 : 1; // 延長方向の係数
 
-        // 無限に伸ばした直線と、他のすべての図形との交点を探す
         let closestPt = null;
         let minT = Infinity;
 
@@ -1605,12 +1667,16 @@ window.executeExtend = function(extendPath) {
             if(other.type === 'LINE') {
                 const pt = intersectLineLine(e.x1, e.y1, e.x1 + dx * 10000 * dir, e.y1 + dy * 10000 * dir, other.x1, other.y1, other.x2, other.y2);
                 if(pt && isPointOnSegment(pt.x, pt.y, other.x1, other.y1, other.x2, other.y2)) {
-                    // ptが延長方向にあるか (t > 0)
                     const t = dx !== 0 ? (pt.x - targetPt.x) / (dx * dir) : (pt.y - targetPt.y) / (dy * dir);
                     if(t > 0.001 && t < minT) { minT = t; closestPt = pt; }
                 }
+            } else if(other.type === 'CIRCLE' || other.type === 'ARC') {
+                const pts = intersectSegCircle(e.x1, e.y1, e.x1 + dx * 10000 * dir, e.y1 + dy * 10000 * dir, other.cx, other.cy, other.radius);
+                pts.forEach(pt => {
+                    const t = dx !== 0 ? (pt.x - targetPt.x) / (dx * dir) : (pt.y - targetPt.y) / (dy * dir);
+                    if(t > 0.001 && t < minT) { minT = t; closestPt = pt; }
+                });
             }
-            // (円等の交点は割愛・LINE優先)
         });
 
         if(closestPt) {
@@ -1845,12 +1911,17 @@ function setupEventListeners() {
         if(Date.now() - lastTouchTime < 500) return; // タッチイベントに起因する疑似マウスイベントを無視
         if(e.button===1){mouse.isPanning=true;e.preventDefault();return;} // Middle click for panning
         if(e.button===0) {
-            const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
-            const swipeModes = ['WAITING_TRIM', 'WAITING_EXTEND'];
-            const isSelectMode = selectModes.includes(cmdState.mode);
-            const isSwipeMode = swipeModes.includes(cmdState.mode);
+            if (cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
+                mouse.isTrimming = true;
+                cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
+                render();
+                return;
+            }
 
-            if (cmdState.mode!=='IDLE' && !isSelectMode && !isSwipeMode) { // Left click for point input when not in IDLE and not select/swipe mode
+            const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
+            const isSelectMode = selectModes.includes(cmdState.mode);
+
+            if (cmdState.mode!=='IDLE' && !isSelectMode) { // Left click for point input when not in IDLE and not select mode
                 const pt=getInputPoint(); handlePointInput(pt, true);
             } else {
                 const idx = hitTestEntity(mouse.screenX, mouse.screenY);
@@ -1862,10 +1933,7 @@ function setupEventListeners() {
                     }
                 } else {
                     if (cmdState.mode === 'IDLE') cmdState.highlightIdx = -1;
-                    if (cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
-                        mouse.isTrimming = true;
-                        cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
-                    } else if (window.areaSelectEnabled) {
+                    if (window.areaSelectEnabled) {
                         mouse.isSelecting = true;
                         mouse.selStartX = mouse.screenX;
                         mouse.selStartY = mouse.screenY;
@@ -2152,18 +2220,12 @@ function setupEventListeners() {
             const uc = wcsToUcs(wcs.x, wcs.y);
             mouse.ucsX = uc.x; mouse.ucsY = uc.y;
 
-            // スナップ
-            const isSelectMode2 = ['WAITING_ERASE_SELECT','WAITING_MOVE_SELECT','WAITING_COPY_SELECT','WAITING_OFFSET_SELECT','WAITING_OFFSET_SIDE'].includes(cmdState.mode);
-            if(!isSelectMode2) {
-                snapResult = findSnap(tx, ty, mouse.wcsX, mouse.wcsY);
-            } else { snapResult = null; }
-
-            // ハイライト更新またはスワイプ開始
-            if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') {
-                cmdState.highlightIdx = hitTestEntity(tx, ty);
-            } else if(cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
+            // スワイプモード優先
+            if(cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
                 touchState.isTrimming = true;
                 cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
+            } else if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') {
+                cmdState.highlightIdx = hitTestEntity(tx, ty);
             }
 
             // 長押しタイマーの設定 (0.6秒)
@@ -2211,6 +2273,13 @@ function setupEventListeners() {
             const dx = tx - touchState.startX, dy = ty - touchState.startY;
             const moved = Math.hypot(dx, dy);
 
+            // 座標更新
+            mouse.screenX = tx; mouse.screenY = ty;
+            const wcs = screenToWcs(tx, ty);
+            mouse.wcsX = wcs.x; mouse.wcsY = wcs.y;
+            const uc = wcsToUcs(wcs.x, wcs.y);
+            mouse.ucsX = uc.x; mouse.ucsY = uc.y;
+
             // ドラッグ判定
             if(!touchState.hasMoved && moved > DRAG_THRESHOLD) {
                 touchState.hasMoved = true;
@@ -2220,7 +2289,9 @@ function setupEventListeners() {
                 if(!isFullscreen) {
                     if (cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
                         touchState.isTrimming = true;
-                        cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
+                        if(!cmdState.trimPath || cmdState.trimPath.length === 0) {
+                            cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
+                        }
                     } else {
                         // IDLEモードまたは編集コマンドのオブジェクト選択待ちの場合は範囲選択開始
                         const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
@@ -2237,13 +2308,6 @@ function setupEventListeners() {
                 if(cmdState.trimPath) cmdState.trimPath.push({x: mouse.wcsX, y: mouse.wcsY});
                 render(); return;
             }
-
-            // 座標更新
-            mouse.screenX = tx; mouse.screenY = ty;
-            const wcs = screenToWcs(tx, ty);
-            mouse.wcsX = wcs.x; mouse.wcsY = wcs.y;
-            const uc = wcsToUcs(wcs.x, wcs.y);
-            mouse.ucsX = uc.x; mouse.ucsY = uc.y;
 
             if(touchState.isDragging) {
                 // ルーペ表示
