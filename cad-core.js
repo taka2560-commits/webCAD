@@ -237,7 +237,7 @@ const CMD_TO_TOOL = {
     'LINE':'LINE','PLINE':'PLINE','RECTANG':'RECT','CIRCLE':'CIRCLE','ARC':'ARC',
     'ELLIPSE':'ELLIP','TEXT':'TEXT','HATCH':'HATCH',
     'ERASE':'ERASE','MOVE':'MOVE','COPY':'COPY','OFFSET':'OFFSET','ROTATE':'ROTATE','RO':'ROTATE',
-    'TRIM':'TRIM','TR':'TRIM',
+    'TRIM':'TRIM','TR':'TRIM','EXTEND':'EXTEND','EX':'EXTEND',
     'DIMLINEAR':'DIMLIN','DIMALIGNED':'DIMALN','DIMRADIUS':'DIMRAD',
     'DIMDIAMETER':'DIMDIA','DIMANGULAR':'DIMANG','DIMORDINATE':'DIMORD'
 };
@@ -891,9 +891,9 @@ function render() {
             ctx.setLineDash([]);
         }
 
-        // トリムパス描画
-        if(cmdState.mode === 'WAITING_TRIM' && cmdState.trimPath && cmdState.trimPath.length > 0) {
-            ctx.strokeStyle = '#ff6b6b';
+        // トリム・延長パス描画
+        if((cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') && cmdState.trimPath && cmdState.trimPath.length > 0) {
+            ctx.strokeStyle = cmdState.mode === 'WAITING_EXTEND' ? '#33ff99' : '#ff6b6b';
             ctx.lineWidth = 2;
             ctx.setLineDash([5, 5]);
             ctx.beginPath();
@@ -1608,6 +1608,67 @@ window.executeTrim = function(trimPath) {
         render();
     }
 }
+
+// なぞって延長する (EXTEND)
+window.executeExtend = function(extendPath) {
+    if(!extendPath || extendPath.length < 2) return;
+    saveUndo();
+    let extendedCount = 0;
+    const swipeSegs = [];
+    for(let i = 0; i < extendPath.length - 1; i++) {
+        swipeSegs.push({x1: extendPath[i].x, y1: extendPath[i].y, x2: extendPath[i+1].x, y2: extendPath[i+1].y});
+    }
+    const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
+
+    entities.forEach((e) => {
+        if(!isVisible(e) || e.type !== 'LINE') return; // 今回はLINEのみ延長対応
+        let hitPt = null;
+        for(const seg of swipeSegs) {
+            const pt = intersectLineLine(seg.x1, seg.y1, seg.x2, seg.y2, e.x1, e.y1, e.x2, e.y2);
+            if(pt && isPointOnSegment(pt.x, pt.y, seg.x1, seg.y1, seg.x2, seg.y2) && isPointOnSegment(pt.x, pt.y, e.x1, e.y1, e.x2, e.y2)) {
+                hitPt = pt; break;
+            }
+        }
+        if(!hitPt) return;
+
+        // hitPt が始点(p1)と終点(p2)のどちらに近いかで延長方向を決定
+        const dist1 = dist(hitPt.x, hitPt.y, e.x1, e.y1);
+        const dist2 = dist(hitPt.x, hitPt.y, e.x2, e.y2);
+        const isP1 = dist1 < dist2;
+        const targetPt = isP1 ? {x: e.x1, y: e.y1} : {x: e.x2, y: e.y2};
+        const dx = e.x2 - e.x1; const dy = e.y2 - e.y1;
+        const dir = isP1 ? -1 : 1; // 延長方向の係数
+
+        // 無限に伸ばした直線と、他のすべての図形との交点を探す
+        let closestPt = null;
+        let minT = Infinity;
+
+        entities.forEach(other => {
+            if(e === other || !isVisible(other)) return;
+            if(other.type === 'LINE') {
+                const pt = intersectLineLine(e.x1, e.y1, e.x1 + dx * 10000 * dir, e.y1 + dy * 10000 * dir, other.x1, other.y1, other.x2, other.y2);
+                if(pt && isPointOnSegment(pt.x, pt.y, other.x1, other.y1, other.x2, other.y2)) {
+                    // ptが延長方向にあるか (t > 0)
+                    const t = dx !== 0 ? (pt.x - targetPt.x) / (dx * dir) : (pt.y - targetPt.y) / (dy * dir);
+                    if(t > 0.001 && t < minT) { minT = t; closestPt = pt; }
+                }
+            }
+            // (円等の交点は割愛・LINE優先)
+        });
+
+        if(closestPt) {
+            if(isP1) { e.x1 = closestPt.x; e.y1 = closestPt.y; }
+            else { e.x2 = closestPt.x; e.y2 = closestPt.y; }
+            extendedCount++;
+        }
+    });
+
+    if(extendedCount > 0) {
+        addCommandLog(`-> ${extendedCount} 本の線を延長しました`);
+        render();
+    }
+}
+
 function isPointOnSegment(px, py, x1, y1, x2, y2, tol = 0.001) { return distPointToSeg(px, py, x1, y1, x2, y2) <= tol; }
 
 function processCommand(cmdText) {
@@ -1671,6 +1732,12 @@ function processCommand(cmdText) {
         setPrompt('トリム: 消したい線をなぞってください');
         setActiveTool('TRIM');
         addCommandLog('-> トリム: 線をスワイプ（ドラッグ）して交点間でカットします');
+    }
+    else if(cmd==='EXTEND' || cmd==='EX') {
+        cmdState.mode = 'WAITING_EXTEND';
+        setPrompt('延長: 延長したい線をなぞってください');
+        setActiveTool('EXTEND');
+        addCommandLog('-> 延長: 線をスワイプ（ドラッグ）して一番近い交点まで延長します');
     }
     else if(cmd==='L'||cmd==='LINE') { cmdState.mode='WAITING_LINE_P1'; setPrompt('1点目:'); setActiveTool('LINE'); addCommandLog('-> 1点目を指定'); }
     else if(cmd==='C'||cmd==='CIRCLE') {
@@ -1836,7 +1903,7 @@ function setupEventListeners() {
                     }
                 } else {
                     if (cmdState.mode === 'IDLE') cmdState.highlightIdx = -1;
-                    if (cmdState.mode === 'WAITING_TRIM') {
+                    if (cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
                         mouse.isTrimming = true;
                         cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
                     } else if (window.areaSelectEnabled) {
@@ -1868,7 +1935,8 @@ function setupEventListeners() {
     window.addEventListener('mouseup',(e)=>{
         if(e.button===1)mouse.isPanning=false;
         if(e.button===0 && mouse.isTrimming) {
-            executeTrim(cmdState.trimPath);
+            if(cmdState.mode === 'WAITING_EXTEND') executeExtend(cmdState.trimPath);
+            else executeTrim(cmdState.trimPath);
             mouse.isTrimming = false;
             cmdState.trimPath = [];
             render();
@@ -2188,7 +2256,7 @@ function setupEventListeners() {
                 // 全画面モード中は範囲選択しない（座標読取専用）
                 const isFullscreen = document.body.classList.contains('fullscreen-mode');
                 if(!isFullscreen) {
-                    if (cmdState.mode === 'WAITING_TRIM') {
+                    if (cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
                         touchState.isTrimming = true;
                         cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
                     } else {
@@ -2287,7 +2355,8 @@ function setupEventListeners() {
             }
 
             if(touchState.isTrimming) {
-                executeTrim(cmdState.trimPath);
+                if(cmdState.mode === 'WAITING_EXTEND') executeExtend(cmdState.trimPath);
+                else executeTrim(cmdState.trimPath);
                 touchState.isTrimming = false;
                 cmdState.trimPath = [];
             } else if(touchState.isSelecting) {

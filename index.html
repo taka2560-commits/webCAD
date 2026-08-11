@@ -85,18 +85,28 @@
         .prop-val:focus { border-color:var(--highlight-color); }
         
         /* コマンドラインエリア (フローティングピル) */
-        #command-line-area { position:absolute; bottom:55px; left:10px; right:10px; z-index:30; display:flex; flex-direction:column; font-family:'Consolas',monospace; font-size:13px; border-radius:var(--r-card); overflow:hidden; }
-        #command-line-area.collapsed { height:44px; }
-        #command-line-area:not(.collapsed) { height:180px; }
-        #command-pill { display:flex; height:44px; width:100%; background:transparent; border:none; align-items:center; gap:10px; padding:0 16px; cursor:pointer; }
+        #command-line-area { position:absolute; bottom:55px; right:10px; z-index:30; display:flex; flex-direction:column; font-family:'Consolas',monospace; font-size:13px; border-radius:var(--r-card); overflow:hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        
+        /* 閉じた状態は画面右下に小さな丸いトグルボタンとして配置 */
+        #command-line-area.collapsed { width: 44px; height: 44px; border-radius: 22px; padding: 0; left: auto; background: var(--panel-bg); backdrop-filter: blur(12px); border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        #command-line-area:not(.collapsed) { height: 180px; left: 10px; width: auto; }
+        
+        #command-pill { display:flex; height:100%; width:100%; background:transparent; border:none; align-items:center; justify-content:center; padding:0; cursor:pointer; }
         #command-line-area.collapsed #command-pill { display:flex; }
         #command-line-area.collapsed #command-log, #command-line-area.collapsed #command-input-wrapper { display:none; }
+        
+        /* 展開時のピルのスタイルは一部隠す */
+        #command-line-area:not(.collapsed) #command-pill { padding: 0 16px; justify-content: flex-start; height: 44px; gap: 10px; }
         
         #cmd-pill-dot { width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px rgba(0,255,136,.8);flex-shrink:0; }
         #cmd-pill-name { color:var(--green);font:700 13px 'Consolas',monospace;letter-spacing:.05em;flex-shrink:0; }
         #cmd-pill-sep { color:var(--border-2);font-size:13px;flex-shrink:0; }
         #cmd-pill-prompt { color:var(--text-color);font:600 13px 'Consolas',monospace;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-        #cmd-pill-hint { color:var(--mute);font:700 11px 'Segoe UI',sans-serif;white-space:nowrap;flex-shrink:0; }
+        #cmd-pill-hint { color:var(--mute);font:700 11px 'Segoe UI',sans-serif;white-space:nowrap;flex-shrink:0; font-size: 16px; }
+        
+        /* 閉じた状態ではヒント(▲)だけ表示 */
+        #command-line-area.collapsed #cmd-pill-dot, #command-line-area.collapsed #cmd-pill-name, #command-line-area.collapsed #cmd-pill-sep, #command-line-area.collapsed #cmd-pill-prompt { display:none; }
+        #command-line-area.collapsed #cmd-pill-hint { display:block; font-size:16px; color:var(--text-color); }
         
         #command-log { flex:1;padding:8px 12px;overflow-y:auto;color:#ccc;display:flex;flex-direction:column;justify-content:flex-end; background:rgba(0,0,0,0.2); }
         #command-input-wrapper { display:flex;padding:8px 12px;background-color:rgba(255,255,255,0.9);color:#000; align-items:center; }
@@ -380,6 +390,7 @@
         <div class="tool-sep"></div>
         <span class="tool-grp-label">編集</span>
         <button class="tool-btn" onclick="toggleCommand('TRIM')" title="トリム (TR)"><div class="tool-icon" style="color:#ff6b6b;">✂</div><div class="tool-cmd">TRIM</div></button>
+        <button class="tool-btn" onclick="toggleCommand('EXTEND')" title="延長 (EX)"><div class="tool-icon" style="color:#33ff99;">↗</div><div class="tool-cmd">EXTEND</div></button>
         <button class="tool-btn" onclick="toggleCommand('ERASE')" title="削除 (E)"><div class="tool-icon" style="color:#ff6b6b;">✖</div><div class="tool-cmd">ERASE</div></button>
         <button class="tool-btn" onclick="toggleCommand('MOVE')" title="移動 (M)"><div class="tool-icon" style="color:#ffff00;">✥</div><div class="tool-cmd">MOVE</div></button>
         <button class="tool-btn" onclick="toggleCommand('COPY')" title="コピー (CO)"><div class="tool-icon" style="color:#ffff00;">⊞</div><div class="tool-cmd">COPY</div></button>
