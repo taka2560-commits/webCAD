@@ -21,11 +21,18 @@
             --dim:#9aa3ad;--mute:#6b7480;--green:#00ff88;--cyan:#00ffff;--warn:#ff6b6b;
             --r-card:16px;--r-btn:12px;--r-sub:8px;--r-pill:20px;
         }
-        body,html { margin:0;padding:0;height:100%;font-family:'Segoe UI',system-ui,sans-serif;background-color:var(--bg-color);color:var(--text-color);overflow:hidden; touch-action:none; overscroll-behavior:none; -webkit-user-select:none; user-select:none; position:fixed; width:100%; left:0; top:0; }
+        body,html { margin:0;padding:0;height:100%;font-family:'Segoe UI',system-ui,sans-serif;background-color:var(--bg-color);color:var(--text-color);overflow:hidden; overscroll-behavior:none; -webkit-user-select:none; user-select:none; position:fixed; width:100%; left:0; top:0; }
         
-        /* キャンバスを全画面配置 */
-        #canvas-container { position:absolute; top:0; left:0; width:100%; height:100%; background-color:#000; overflow:hidden; cursor:none; z-index:0; }
-        canvas { display:block; width:100%; height:100%; }
+        /* ボタンや入力欄などのUI要素は確実にタッチ・クリックを受け付ける */
+        button, input, select, .glass-panel, .top-btn, .cg-btn, .tool-btn, #top-bar, #toolbar, #command-line-area, #properties-panel, #layer-panel, #property-panel {
+            touch-action: manipulation;
+            pointer-events: auto;
+            -webkit-tap-highlight-color: rgba(255,255,255,0.2);
+        }
+        
+        /* キャンバスを全画面配置（スワイプ・描画領域のみタッチ操作を完全にコントロール） */
+        #canvas-container { position:absolute; top:0; left:0; width:100%; height:100%; background-color:#000; overflow:hidden; cursor:none; z-index:0; touch-action:none; }
+        canvas { display:block; width:100%; height:100%; touch-action:none; }
 
         /* UI要素の共通スタイル (Glassmorphism) */
         .glass-panel {
