@@ -162,8 +162,8 @@
         /* フローティング座標ツールチップ */
         #fs-coord-tooltip {
             position: fixed; display: none; pointer-events: none; z-index: 100000;
-            background: rgba(0,0,0,0.86); border: 1.5px solid rgba(0,255,136,0.65); border-radius: 10px;
-            padding: 10px 14px; font-family: 'Consolas', monospace; font-size: 17px; font-weight: 700; line-height: 1.3;
+            background: rgba(0,0,0,0.86); border: 1.5px solid rgba(0,255,136,0.65); border-radius: 12px;
+            padding: 12px 18px; font-family: 'Consolas', monospace; font-size: 24px; font-weight: 700; line-height: 1.3;
             color: #00ff88; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,0.7), 0 0 24px rgba(0,255,136,0.15);
             -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
         }
@@ -546,7 +546,10 @@
             </div>
         </div>
         <div id="fs-controls">
-            <button id="fs-btn-osnap" class="fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
+            <div style="position:relative; display:flex; flex-direction:column; align-items:center;">
+                <button id="fs-btn-osnap" class="fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
+                <button onclick="toggleOsnapPanel(event)" style="width:28px; height:24px; margin-top:-6px; font-size:10px; background:rgba(30,34,40,0.9); border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:12px; z-index:100001;" title="OSNAP設定">▼</button>
+            </div>
             <button id="fs-btn-coord" class="fs-active" onclick="toggleFsCoordAlways()" title="座標表示 ON/OFF（OFFで座標ツールチップを非表示）">XY</button>
             <button id="fs-btn-extents" onclick="zoomExtents()" title="全体表示">⛶</button>
             <button id="fs-btn-exit" onclick="toggleFullscreen()" title="全画面解除" style="border-color:#ff6b6b;color:#ff6b6b;">✕</button>
