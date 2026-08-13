@@ -2,8 +2,8 @@
 // cad-dimension.js - 6種類の寸法コマンドと描画 + 寸法編集
 
 const DIM_COLOR = '#00FFFF';
-const DIM_TEXT_SIZE = 12;   // スクリーンピクセル
-const DIM_ARROW_SIZE = 8;   // スクリーンピクセル
+const DIM_TEXT_SIZE = 16;   // スクリーンピクセル
+const DIM_ARROW_SIZE = 10;   // スクリーンピクセル
 const DIM_EXT_OVERSHOOT = 5; // 補助線のオーバーシュート(px)
 const DIM_EXT_GAP = 3;      // 補助線の測定点からの隙間(px)
 
@@ -164,7 +164,8 @@ function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
 
     // もし view.rotation がかかっていれば、文字自体は画面に対して水平になるよう逆回転させるか？
     // wcsToScreenで既に回転したスクリーン座標が出ているので、このままで文字は画面水平に描画される
-    ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.save();
+    ctx.font = DIM_TEXT_SIZE + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     
     // 現場で読みやすいように色分け
     ctx.fillStyle = '#00ff88'; ctx.fillText(txtX, 0, -14); // 上段 (X)
@@ -317,7 +318,7 @@ function drawDimRubberBand(mode, sw, mp) {
             ctx.beginPath(); ctx.arc(sm.x, sm.y, 7, 0, Math.PI*2); ctx.fill();
             // 数字
             ctx.fillStyle = '#fff';
-            ctx.font = 'bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.font = 'bold 12px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
             ctx.fillText(idx+1, sm.x, sm.y);
         });
     }
