@@ -2849,13 +2849,19 @@ window.toggleOsnapPanel = function(e) {
         p.style.display = 'block';
         if(e && e.target) {
             const rect = e.target.getBoundingClientRect();
-            p.style.top = (rect.bottom + 5) + 'px';
+            // ボタンの上側に展開するよう、bottom基準で位置を設定
+            const bottomPos = window.innerHeight - rect.top + 5;
+            p.style.bottom = bottomPos + 'px';
+            p.style.top = 'auto';
             let leftPos = rect.left - 60; // ボタンより少し左側を基準
             if(leftPos < 5) leftPos = 5;  // 画面左端にはみ出さないよう調整
             p.style.left = leftPos + 'px';
+            p.style.right = 'auto';
         } else {
-            p.style.top = '60px';
+            p.style.bottom = '60px';
+            p.style.top = 'auto';
             p.style.left = '10px';
+            p.style.right = 'auto';
         }
     }
 };
