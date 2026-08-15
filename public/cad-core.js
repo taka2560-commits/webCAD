@@ -93,6 +93,14 @@ const SNAP_R = 10, ERASE_R = 5;
 // スナップ・直交状態
 let osnapState = { main: true, end: true, mid: true, cen: true, int: true, near: true, perp: true };
 let orthoMode = false;
+let touchState = {
+    lastDist: 0, lastMid: null, isPinch: false,
+    startX: 0, startY: 0, isDragging: false, hasMoved: false,
+    pressTimer: null,
+    selStartX: 0, selStartY: 0, isSelecting: false,
+    showLoupe: false, loupeX: 0, loupeY: 0
+};
+const DRAG_THRESHOLD = 8;
 
 // ===== ユーティリティ =====
 function isMobile() { return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window); }
@@ -854,15 +862,7 @@ function render() {
         drawAxes(); drawEntities(); drawDimensions(); drawRubberBand(); drawSnapMarker(); drawCrosshair();
         
         // 範囲選択矩形描画
-        if(mouse.isSelecting) {
-            ctx.fillStyle = window.areaSelectMode === 'CROSSING' ? 'rgba(0, 255, 136, 0.2)' : 'rgba(82, 139, 255, 0.2)';
-            ctx.strokeStyle = window.areaSelectMode === 'CROSSING' ? 'rgba(0, 255, 136, 0.8)' : 'rgba(82, 139, 255, 0.8)';
-            ctx.lineWidth = 1;
-            if (window.areaSelectMode === 'CROSSING') ctx.setLineDash([5, 5]); else ctx.setLineDash([]);
-            ctx.fillRect(mouse.selStartX, mouse.selStartY, mouse.screenX - mouse.selStartX, mouse.screenY - mouse.selStartY);
-            ctx.strokeRect(mouse.selStartX, mouse.selStartY, mouse.screenX - mouse.selStartX, mouse.screenY - mouse.selStartY);
-            ctx.setLineDash([]);
-        }
+        drawSelectionRect();
 
         // トリム・延長パス描画
         if((cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') && cmdState.trimPath && cmdState.trimPath.length > 0) {
@@ -879,13 +879,115 @@ function render() {
             ctx.stroke();
             ctx.setLineDash([]);
         }
+
+        // ルーペ（拡大鏡）描画
+        drawLoupe();
     });
 }
-// 即時描画版（ルーペ等、rAF待たずに描画したい場合）
 function renderImmediate() {
-    _renderPending = false;
-    ctx.fillStyle=canvasBg; ctx.fillRect(0,0,canvas.width,canvas.height);
-    drawAxes(); drawEntities(); drawDimensions(); drawRubberBand(); drawSnapMarker(); drawCrosshair();
+    render();
+}
+
+// ルーペ（拡大鏡）描画
+function drawLoupe() {
+    if(!touchState.showLoupe) return;
+    const lx = touchState.loupeX, ly = touchState.loupeY;
+    const loupeR = 70; // ルーペの半径
+    const loupeY = ly - 140; // 指の140px上に表示
+    const loupeX = Math.max(loupeR + 5, Math.min(canvas.width - loupeR - 5, lx));
+    const finalY = Math.max(loupeR + 5, loupeY);
+    const zoom = 3; // 拡大倍率
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(loupeX - loupeR, finalY - loupeR, loupeR * 2, loupeR * 2);
+    ctx.clip();
+
+    ctx.fillStyle = '#111';
+    ctx.fillRect(loupeX - loupeR, finalY - loupeR, loupeR * 2, loupeR * 2);
+
+    ctx.translate(loupeX, finalY);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-lx, -ly);
+
+    const ws = wcsToScreen(0, 0);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(0, ws.y); ctx.lineTo(canvas.width, ws.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ws.x, 0); ctx.lineTo(ws.x, canvas.height); ctx.stroke();
+
+    ctx.lineWidth = 0.5;
+    const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
+    entities.forEach((e, i) => { if(!isVisible(e)) return; if(e.type !== 'DIMENSION') drawOneEntity(e, i === cmdState.highlightIdx ? '#ff6b6b' : null); });
+
+    if(snapResult && osnapState.main) {
+        const s = wcsToScreen(snapResult.wcsX, snapResult.wcsY);
+        const mk = 6;
+        ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 1.5;
+        if(snapResult.type === '端点') {
+            ctx.beginPath(); ctx.moveTo(s.x, s.y-mk); ctx.lineTo(s.x+mk, s.y+mk*0.7); ctx.lineTo(s.x-mk, s.y+mk*0.7); ctx.closePath(); ctx.stroke();
+        } else if(snapResult.type === '中点') {
+            ctx.strokeRect(s.x-mk, s.y-mk, mk*2, mk*2);
+            ctx.beginPath(); ctx.moveTo(s.x-mk, s.y+mk); ctx.lineTo(s.x, s.y-mk); ctx.lineTo(s.x+mk, s.y+mk); ctx.stroke();
+        } else if(snapResult.type === '中心') {
+            ctx.beginPath(); ctx.arc(s.x, s.y, mk, 0, Math.PI*2); ctx.stroke();
+        } else if(snapResult.type === '交点') {
+            ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.moveTo(s.x+mk,s.y-mk); ctx.lineTo(s.x-mk,s.y+mk); ctx.stroke();
+        } else if(snapResult.type === '近接点') {
+            ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.moveTo(s.x-mk,s.y+mk); ctx.lineTo(s.x+mk,s.y-mk); ctx.strokeRect(s.x-mk,s.y-mk,mk*2,mk*2);
+        } else if(snapResult.type === '垂線') {
+            ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x-mk,s.y+mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(s.x-mk,s.y); ctx.lineTo(s.x-mk+mk*0.5,s.y); ctx.moveTo(s.x,s.y+mk); ctx.lineTo(s.x,s.y+mk-mk*0.5); ctx.stroke();
+        }
+    }
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    ctx.strokeStyle = 'rgba(255,255,0,0.8)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(loupeX - loupeR, finalY); ctx.lineTo(loupeX + loupeR, finalY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(loupeX, finalY - loupeR); ctx.lineTo(loupeX, finalY + loupeR); ctx.stroke();
+
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.strokeRect(loupeX - loupeR, finalY - loupeR, loupeR * 2, loupeR * 2);
+
+    const ucsCoord = wcsToUcs(mouse.wcsX, mouse.wcsY);
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(loupeX - loupeR, finalY + loupeR + 2, loupeR * 2, snapResult && osnapState.main ? 32 : 18);
+    ctx.fillStyle = '#00ff88'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(`X:${ucsCoord.y.toFixed(2)}  Y:${ucsCoord.x.toFixed(2)}`, loupeX, finalY + loupeR + 14);
+    if(snapResult && osnapState.main) {
+        ctx.fillStyle = '#ffff00'; ctx.font = 'bold 11px monospace';
+        ctx.fillText(`SNAP: ${snapResult.type}`, loupeX, finalY + loupeR + 28);
+    }
+    ctx.restore();
+}
+
+// 範囲選択矩形の描画
+function drawSelectionRect() {
+    if(!touchState.isSelecting && !mouse.isSelecting) return;
+    const isTouch = touchState.isSelecting;
+    const sx = isTouch ? touchState.selStartX : mouse.selStartX;
+    const sy = isTouch ? touchState.selStartY : mouse.selStartY;
+    const ex = mouse.screenX, ey = mouse.screenY;
+    const isWindow = ex >= sx;
+
+    ctx.save();
+    if(isWindow) {
+        ctx.strokeStyle = '#3399ff'; ctx.fillStyle = 'rgba(51,153,255,0.15)';
+        ctx.setLineDash([]);
+    } else {
+        ctx.strokeStyle = '#33ff99'; ctx.fillStyle = 'rgba(51,255,153,0.15)';
+        ctx.setLineDash([6, 3]);
+    }
+    ctx.lineWidth = 2;
+    const x = Math.min(sx, ex), y = Math.min(sy, ey);
+    const w = Math.abs(ex - sx), h = Math.abs(ey - sy);
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+    ctx.restore();
 }
 
 function drawAxes() {
@@ -2011,134 +2113,6 @@ function setupEventListeners() {
 
     // ===== タッチイベント（スマホ対応 - AutoCADライクUX） =====
     canvas.style.touchAction = 'none';
-    let touchState = {
-        lastDist: 0, lastMid: null, isPinch: false,
-        // ルーペ・長押し描画用
-        startX: 0, startY: 0, isDragging: false, hasMoved: false,
-        pressTimer: null,
-        // 範囲選択用
-        selStartX: 0, selStartY: 0, isSelecting: false,
-        // ルーペ表示フラグ
-        showLoupe: false, loupeX: 0, loupeY: 0
-    };
-    const DRAG_THRESHOLD = 8; // ドラッグ判定の閾値(px)
-
-    // ルーペ（拡大鏡）描画
-    function drawLoupe() {
-        if(!touchState.showLoupe) return;
-        const lx = touchState.loupeX, ly = touchState.loupeY;
-        const loupeR = 70; // ルーペの半径（半分の幅）
-        const loupeY = ly - 140; // 指の140px上に表示して隠れにくくする
-        const loupeX = Math.max(loupeR + 5, Math.min(canvas.width - loupeR - 5, lx));
-        const finalY = Math.max(loupeR + 5, loupeY);
-        const zoom = 3; // 拡大倍率
-
-        ctx.save();
-        // 四角いクリッピング
-        ctx.beginPath();
-        ctx.rect(loupeX - loupeR, finalY - loupeR, loupeR * 2, loupeR * 2);
-        ctx.clip();
-
-        // ルーペ内の背景描画（拡大表示）
-        ctx.fillStyle = '#111';
-        ctx.fillRect(loupeX - loupeR, finalY - loupeR, loupeR * 2, loupeR * 2);
-
-        // 拡大表示: 元のビューに対してzoom倍の描画を行う
-        ctx.translate(loupeX, finalY);
-        ctx.scale(zoom, zoom);
-        ctx.translate(-lx, -ly);
-
-        // 軸線（簡易描画）
-        const ws = wcsToScreen(0, 0);
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 0.5;
-        ctx.beginPath(); ctx.moveTo(0, ws.y); ctx.lineTo(canvas.width, ws.y); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(ws.x, 0); ctx.lineTo(ws.x, canvas.height); ctx.stroke();
-
-        // エンティティ描画
-        ctx.lineWidth = 0.5;
-        const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
-        entities.forEach((e, i) => { if(!isVisible(e)) return; if(e.type !== 'DIMENSION') drawOneEntity(e, i === cmdState.highlightIdx ? '#ff6b6b' : null); });
-
-        // スナップマーカー（ルーペ内で大きく表示）
-        if(snapResult && osnapState.main) {
-            const s = wcsToScreen(snapResult.wcsX, snapResult.wcsY);
-            const mk = 6; // マーカーサイズ（zoom倍されるので実質18px相当）
-            ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 1.5;
-            if(snapResult.type === '端点') {
-                ctx.beginPath(); ctx.moveTo(s.x, s.y-mk); ctx.lineTo(s.x+mk, s.y+mk*0.7); ctx.lineTo(s.x-mk, s.y+mk*0.7); ctx.closePath(); ctx.stroke();
-            } else if(snapResult.type === '中点') {
-                ctx.strokeRect(s.x-mk, s.y-mk, mk*2, mk*2);
-                ctx.beginPath(); ctx.moveTo(s.x-mk, s.y+mk); ctx.lineTo(s.x, s.y-mk); ctx.lineTo(s.x+mk, s.y+mk); ctx.stroke();
-            } else if(snapResult.type === '中心') {
-                ctx.beginPath(); ctx.arc(s.x, s.y, mk, 0, Math.PI*2); ctx.stroke();
-            } else if(snapResult.type === '交点') {
-                ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.moveTo(s.x+mk,s.y-mk); ctx.lineTo(s.x-mk,s.y+mk); ctx.stroke();
-            } else if(snapResult.type === '近接点') {
-                ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.moveTo(s.x-mk,s.y+mk); ctx.lineTo(s.x+mk,s.y-mk); ctx.strokeRect(s.x-mk,s.y-mk,mk*2,mk*2);
-            } else if(snapResult.type === '垂線') {
-                ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x-mk,s.y+mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(s.x-mk,s.y); ctx.lineTo(s.x-mk+mk*0.5,s.y); ctx.moveTo(s.x,s.y+mk); ctx.lineTo(s.x,s.y+mk-mk*0.5); ctx.stroke();
-            }
-        }
-
-        ctx.setTransform(1, 0, 0, 1, 0, 0); // リセット
-
-        // ルーペ内のクロスヘア
-        ctx.strokeStyle = 'rgba(255,255,0,0.8)'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(loupeX - loupeR, finalY); ctx.lineTo(loupeX + loupeR, finalY); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(loupeX, finalY - loupeR); ctx.lineTo(loupeX, finalY + loupeR); ctx.stroke();
-
-        ctx.restore();
-
-        // ルーペ外枠 (四角形)
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.strokeRect(loupeX - loupeR, finalY - loupeR, loupeR * 2, loupeR * 2);
-
-        // 座標テキスト + スナップ種別
-        const ucsCoord = wcsToUcs(mouse.wcsX, mouse.wcsY);
-        const snapLabelText = snapResult && osnapState.main ? ` [${snapResult.type}]` : '';
-        // 背景
-        ctx.fillStyle = 'rgba(0,0,0,0.8)';
-        ctx.fillRect(loupeX - loupeR, finalY + loupeR + 2, loupeR * 2, snapResult && osnapState.main ? 32 : 18);
-        // 座標値
-        ctx.fillStyle = '#00ff88'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
-        ctx.fillText(`X:${ucsCoord.y.toFixed(2)}  Y:${ucsCoord.x.toFixed(2)}`, loupeX, finalY + loupeR + 14);
-        // スナップ種別（2行目）
-        if(snapResult && osnapState.main) {
-            ctx.fillStyle = '#ffff00'; ctx.font = 'bold 11px monospace';
-            ctx.fillText(`SNAP: ${snapResult.type}`, loupeX, finalY + loupeR + 28);
-        }
-        ctx.restore();
-    }
-
-    // 範囲選択矩形の描画
-    function drawSelectionRect() {
-        if(!touchState.isSelecting && !mouse.isSelecting) return;
-        const isTouch = touchState.isSelecting;
-        const sx = isTouch ? touchState.selStartX : mouse.selStartX;
-        const sy = isTouch ? touchState.selStartY : mouse.selStartY;
-        const ex = mouse.screenX, ey = mouse.screenY;
-        const isWindow = ex >= sx; // 左→右 = 窓選択、右→左 = 交差選択
-
-        ctx.save();
-        if(isWindow) {
-            // 窓選択: 青枠・実線・薄い青塗り
-            ctx.strokeStyle = '#3399ff'; ctx.fillStyle = 'rgba(51,153,255,0.15)';
-            ctx.setLineDash([]);
-        } else {
-            // 交差選択: 緑枠・破線・薄い緑塗り
-            ctx.strokeStyle = '#33ff99'; ctx.fillStyle = 'rgba(51,255,153,0.15)';
-            ctx.setLineDash([6, 3]);
-        }
-        ctx.lineWidth = 2;
-        const x = Math.min(sx, ex), y = Math.min(sy, ey);
-        const w = Math.abs(ex - sx), h = Math.abs(ey - sy);
-        ctx.fillRect(x, y, w, h);
-        ctx.strokeRect(x, y, w, h);
-        ctx.setLineDash([]);
-        ctx.restore();
-    }
 
     // 範囲選択の実行
     function performSelection(sx, sy, ex, ey) {
@@ -2353,11 +2327,7 @@ function setupEventListeners() {
                 if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, mouse.ucsX, mouse.ucsY, null);
             }
 
-            renderImmediate();
-            // ルーペと範囲選択は render() 後に上書き描画
-            drawLoupe();
-            drawSelectionRect();
-
+            render();
         } else if(e.touches.length === 2) {
             touchState.showLoupe = false;
             const t1 = e.touches[0], t2 = e.touches[1];
