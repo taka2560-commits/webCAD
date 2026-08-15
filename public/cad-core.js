@@ -344,10 +344,8 @@ function screenToUcs(sx,sy) { const w=screenToWcs(sx,sy); return wcsToUcs(w.x,w.
 // ===== UCS管理 =====
 function setUCS(wx, wy, angle) {
     ucs.originX = wx; ucs.originY = wy; ucs.angle = angle || 0;
-    ucsStatusDisplay.textContent = 'UCS';
-    ucsStatusDisplay.style.color = 'var(--ucs-color)';
-    ucsLabel.textContent = 'UCS';
-    ucsLabel.style.color = 'var(--ucs-color)';
+    if(ucsStatusDisplay) { ucsStatusDisplay.textContent = 'UCS'; ucsStatusDisplay.style.color = 'var(--ucs-color)'; }
+    if(ucsLabel) { ucsLabel.textContent = 'UCS'; ucsLabel.style.color = 'var(--ucs-color)'; }
     const degStr = ucs.angle !== 0 ? ` ∠${(ucs.angle * 180 / Math.PI).toFixed(1)}°` : '';
     addCommandLog(`-> 原点設定: WCS(${wx.toFixed(2)},${wy.toFixed(2)})${degStr}`);
     resetCommand();
@@ -355,10 +353,8 @@ function setUCS(wx, wy, angle) {
 }
 function resetUCS() {
     ucs.originX = 0; ucs.originY = 0; ucs.angle = 0;
-    ucsStatusDisplay.textContent = 'WCS';
-    ucsStatusDisplay.style.color = 'var(--highlight-color)';
-    ucsLabel.textContent = 'WCS';
-    ucsLabel.style.color = 'var(--highlight-color)';
+    if(ucsStatusDisplay) { ucsStatusDisplay.textContent = 'WCS'; ucsStatusDisplay.style.color = 'var(--highlight-color)'; }
+    if(ucsLabel) { ucsLabel.textContent = 'WCS'; ucsLabel.style.color = 'var(--highlight-color)'; }
     resetCommand();
     addCommandLog('-> WCSにリセット');
     render();

@@ -48,101 +48,88 @@
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid var(--border-color);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.35);
             border-radius: var(--r-card);
             transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
         }
 
-        /* トップバー */
-        #top-bar { position:absolute; top:10px; left:10px; right:10px; z-index:10; min-height:50px; display:flex; flex-wrap:nowrap; align-items:center; padding:6px 12px; gap:8px; overflow-x:auto; overflow-y:hidden; border-radius:var(--r-card); }
+        /* トップバー (案B: 主要ボタン厳選・横スクロール最小化) */
+        #top-bar { position:absolute; top:8px; left:8px; right:8px; z-index:10; min-height:44px; display:flex; flex-wrap:nowrap; align-items:center; padding:4px 8px; gap:6px; overflow-x:auto; overflow-y:hidden; border-radius:var(--r-pill); }
         #top-bar::-webkit-scrollbar { display:none; }
         
-        /* ツールバー (左・またはボトム) */
-        #toolbar { position:absolute; top:70px; left:10px; bottom:120px; z-index:10; width:48px; display:flex; flex-direction:column; align-items:center; gap:6px; padding:10px 0; overflow-y:auto; overflow-x:hidden; border-radius:var(--r-card); }
+        /* ツールバー (案B: 44pxタッチ最適化) */
+        #toolbar { position:absolute; top:62px; left:8px; bottom:60px; z-index:10; width:52px; display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px 0; overflow-y:auto; overflow-x:hidden; border-radius:var(--r-card); }
         #toolbar::-webkit-scrollbar { display:none; }
         
         /* マイクロインタラクション（ボタン） */
         .top-btn, .cg-btn, .tool-btn { transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1); }
         .top-btn:active, .cg-btn:active, .tool-btn:active { transform: scale(0.92); }
         
-        .top-btn { flex:0 0 auto;height:38px;padding:0 14px;background-color:rgba(255,255,255,0.05);border:1px solid var(--border-3);color:var(--text-color);border-radius:var(--r-pill);cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;white-space:nowrap; }
+        .top-btn { flex:0 0 auto;height:34px;padding:0 10px;background-color:rgba(255,255,255,0.06);border:1px solid var(--border-3);color:var(--text-color);border-radius:var(--r-pill);cursor:pointer;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:5px;white-space:nowrap; }
         .top-btn:hover { background-color:var(--btn-hover); }
-        .top-btn.primary { background-color:rgba(0,255,136,0.15);border-color:var(--green);color:var(--green); }
+        .top-btn.primary { background-color:rgba(0,255,136,0.18);border-color:var(--green);color:var(--green);font-weight:700; }
+        .top-btn.icon-only { width:34px;padding:0;justify-content:center;font-size:14px; }
         
-        .control-group { flex:0 0 auto;display:flex;flex-direction:column;background-color:transparent;padding:0;border:none;gap:4px; }
-        .cg-label { display:none; } /* モバイルではラベルを隠してスッキリさせる */
-        .cg-row { display:flex;gap:6px;align-items:center; }
-        .cg-btn { height:36px;min-width:40px;padding:0 12px;background-color:rgba(255,255,255,0.05);border:1px solid var(--border-3);border-radius:var(--r-pill);color:var(--text-color);font:700 13px 'Segoe UI',sans-serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px; }
-        .cg-btn:hover { background-color:var(--btn-hover); }
-        
-        .tool-btn { width:40px;height:40px;background-color:transparent;border:1px solid transparent;color:var(--text-color);border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+        .tool-btn { width:44px;height:44px;background-color:transparent;border:1px solid transparent;color:var(--text-color);border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
         .tool-btn:hover { background-color:var(--btn-hover); }
-        .tool-btn.active { background-color:rgba(82,139,255,0.25);border-color:var(--highlight-color); box-shadow:0 0 10px rgba(82,139,255,0.2); }
+        .tool-btn:active { transform:scale(0.90); }
+        .tool-btn.active { background-color:rgba(82,139,255,0.25);border-color:var(--highlight-color); box-shadow:0 0 12px rgba(82,139,255,0.3); }
         .tool-btn.active .tool-icon, .tool-btn.active .tool-cmd { color:var(--highlight-color); }
-        .tool-icon { font-size:18px;font-weight:700;margin:0; }
+        .tool-icon { font-size:20px;font-weight:700;margin:0;line-height:1; }
         .tool-cmd { display:none; }
-        .tool-sep { height:1px;width:28px;background-color:var(--border-color);margin:4px 0;flex-shrink:0; }
+        .tool-sep { height:1px;width:32px;background-color:var(--border-color);margin:3px 0;flex-shrink:0; }
         .tool-grp-label { display:none; }
-        .tool-toggle { display:none; } /* モバイル展開ボタンは今回は省略し、スクロールで対応 */
-        
+        .tool-toggle { display:none; }
         #tool-header { display:none; }
         
-        /* プロパティ・画層パネル (ボトムシート風) */
-        #properties-panel, #layer-panel { position:absolute; top:60px; right:10px; z-index:20; width:280px; max-height:40vh; display:flex; flex-direction:column; overflow-y:auto; transform: translateY(0); opacity:1; }
+        /* プロパティ・画層パネル */
+        #properties-panel, #layer-panel { position:absolute; top:60px; right:10px; z-index:20; width:280px; max-height:45vh; display:flex; flex-direction:column; overflow-y:auto; transform: translateY(0); opacity:1; }
         #properties-panel.collapsed, #layer-panel.collapsed { transform: translateX(120%); opacity:0; pointer-events:none; }
         
-        .props-header { background-color:rgba(0,0,0,0.2); padding:10px 14px; font-weight:bold; font-size:14px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; border-radius:var(--r-card) var(--r-card) 0 0; }
+        .props-header { background-color:rgba(0,0,0,0.3); padding:10px 14px; font-weight:bold; font-size:14px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; border-radius:var(--r-card) var(--r-card) 0 0; }
         .props-content { padding:12px; font-size:13px; }
         .prop-row { display:flex; margin-bottom:10px; align-items:center; }
         .prop-label { width:90px; color:var(--dim); font-weight:600; }
-        /* インスペクタ入力欄のモダン化 */
         .prop-val { flex:1; background-color:rgba(0,0,0,0.3); color:#fff; border:1px solid var(--border-color); padding:6px 10px; border-radius:var(--r-sub); outline:none; transition:border 0.2s; font-family:inherit; }
         .prop-val:focus { border-color:var(--highlight-color); }
         
         /* コマンドラインエリア (フローティングピル) */
-        #command-line-area { position:absolute; bottom:55px; right:10px; z-index:30; display:flex; flex-direction:column; font-family:'Consolas',monospace; font-size:13px; border-radius:var(--r-card); overflow:hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        
-        /* 閉じた状態は画面右下に小さな丸いトグルボタンとして配置 */
-        #command-line-area.collapsed { width: 44px; height: 44px; border-radius: 22px; padding: 0; left: auto; background: var(--panel-bg); backdrop-filter: blur(12px); border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-        #command-line-area:not(.collapsed) { height: 180px; left: 10px; width: auto; }
+        #command-line-area { position:absolute; bottom:52px; right:10px; z-index:30; display:flex; flex-direction:column; font-family:'Consolas',monospace; font-size:13px; border-radius:var(--r-card); overflow:hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        #command-line-area.collapsed { width: 40px; height: 40px; border-radius: 20px; padding: 0; left: auto; background: var(--panel-bg); backdrop-filter: blur(12px); border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        #command-line-area:not(.collapsed) { height: 160px; left: 68px; right: 10px; width: auto; }
         
         #command-pill { display:flex; height:100%; width:100%; background:transparent; border:none; align-items:center; justify-content:center; padding:0; cursor:pointer; }
         #command-line-area.collapsed #command-pill { display:flex; }
         #command-line-area.collapsed #command-log, #command-line-area.collapsed #command-input-wrapper { display:none; }
-        
-        /* 展開時のピルのスタイルは一部隠す */
-        #command-line-area:not(.collapsed) #command-pill { padding: 0 16px; justify-content: flex-start; height: 44px; gap: 10px; }
+        #command-line-area:not(.collapsed) #command-pill { padding: 0 14px; justify-content: flex-start; height: 38px; gap: 8px; }
         
         #cmd-pill-dot { width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px rgba(0,255,136,.8);flex-shrink:0; }
-        #cmd-pill-name { color:var(--green);font:700 13px 'Consolas',monospace;letter-spacing:.05em;flex-shrink:0; }
-        #cmd-pill-sep { color:var(--border-2);font-size:13px;flex-shrink:0; }
-        #cmd-pill-prompt { color:var(--text-color);font:600 13px 'Consolas',monospace;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-        #cmd-pill-hint { color:var(--mute);font:700 11px 'Segoe UI',sans-serif;white-space:nowrap;flex-shrink:0; font-size: 16px; }
-        
-        /* 閉じた状態ではヒント(▲)だけ表示 */
+        #cmd-pill-name { color:var(--green);font:700 12px 'Consolas',monospace;letter-spacing:.05em;flex-shrink:0; }
+        #cmd-pill-sep { color:var(--border-2);font-size:12px;flex-shrink:0; }
+        #cmd-pill-prompt { color:var(--text-color);font:600 12px 'Consolas',monospace;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+        #cmd-pill-hint { color:var(--mute);font:700 11px 'Segoe UI',sans-serif;white-space:nowrap;flex-shrink:0; font-size: 14px; }
         #command-line-area.collapsed #cmd-pill-dot, #command-line-area.collapsed #cmd-pill-name, #command-line-area.collapsed #cmd-pill-sep, #command-line-area.collapsed #cmd-pill-prompt { display:none; }
-        #command-line-area.collapsed #cmd-pill-hint { display:block; font-size:16px; color:var(--text-color); }
+        #command-line-area.collapsed #cmd-pill-hint { display:block; font-size:14px; color:var(--text-color); }
         
-        #command-log { flex:1;padding:8px 12px;overflow-y:auto;color:#ccc;display:flex;flex-direction:column;justify-content:flex-end; background:rgba(0,0,0,0.2); }
-        #command-input-wrapper { display:flex;padding:8px 12px;background-color:rgba(255,255,255,0.9);color:#000; align-items:center; }
-        #command-prompt { margin-right:8px;font-weight:bold;color:#333; }
-        #command-input { flex:1;border:none;outline:none;background:transparent;font-family:inherit;font-size:14px;font-weight:bold; }
-        #cmd-collapse { width:32px;height:32px;margin-left:8px;background:#ddd;color:#333;border:none;border-radius:var(--r-sub);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center; transition:all 0.2s; }
-        #cmd-collapse:active { transform:scale(0.9); }
+        #command-log { flex:1;padding:6px 10px;overflow-y:auto;color:#ccc;display:flex;flex-direction:column;justify-content:flex-end; background:rgba(0,0,0,0.25); font-size:12px; }
+        #command-input-wrapper { display:flex;padding:6px 10px;background-color:rgba(255,255,255,0.92);color:#000; align-items:center; }
+        #command-prompt { margin-right:6px;font-weight:bold;color:#333;font-size:12px; }
+        #command-input { flex:1;border:none;outline:none;background:transparent;font-family:inherit;font-size:13px;font-weight:bold; }
+        #cmd-collapse { width:28px;height:28px;margin-left:6px;background:#ddd;color:#333;border:none;border-radius:var(--r-sub);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
         
-        /* ステータスバー (最下部フローティング) */
-        #status-bar { position:absolute; bottom:10px; left:10px; right:10px; z-index:10; height:40px; display:flex; align-items:center; padding:0 12px; font-size:12px; justify-content:space-between; gap:8px; border-radius:var(--r-pill); }
+        /* ステータスバー (案B: 整理＆座標大型化) */
+        #status-bar { position:absolute; bottom:8px; left:8px; right:8px; z-index:10; height:38px; display:flex; align-items:center; padding:0 10px; font-size:12px; justify-content:space-between; gap:6px; border-radius:var(--r-pill); }
         
-        .status-btn { background:rgba(255,255,255,0.05);border:1px solid transparent;color:var(--dim);cursor:pointer;padding:0 12px;height:28px;font:600 12px 'Segoe UI',sans-serif;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:4px; transition:all 0.2s cubic-bezier(0.25,1,0.5,1); }
+        .status-btn { background:rgba(255,255,255,0.06);border:1px solid transparent;color:var(--dim);cursor:pointer;padding:0 10px;height:26px;font:600 11px 'Segoe UI',sans-serif;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:4px; transition:all 0.2s cubic-bezier(0.25,1,0.5,1); white-space:nowrap; }
         .status-btn:active { transform:scale(0.9); }
-        .status-btn.active { color:var(--highlight-color);background:rgba(82,139,255,0.2);border-color:var(--highlight-color);font-weight:700; box-shadow:0 0 10px rgba(82,139,255,0.2); }
-        #btn-osnap.active { color:var(--green);background:rgba(0,255,136,0.15);border-color:var(--green); box-shadow:0 0 10px rgba(0,255,136,0.2); }
+        .status-btn.active { color:var(--highlight-color);background:rgba(82,139,255,0.2);border-color:var(--highlight-color);font-weight:700; box-shadow:0 0 8px rgba(82,139,255,0.2); }
+        #btn-osnap.active { color:var(--green);background:rgba(0,255,136,0.15);border-color:var(--green); box-shadow:0 0 8px rgba(0,255,136,0.2); }
         
-        #osnap-panel { display:none; position:fixed; bottom:60px; right:10px; background:var(--panel-bg); backdrop-filter:blur(12px); border:1px solid var(--border-color); padding:16px; border-radius:var(--r-card); z-index:999999 !important; box-shadow:0 10px 40px rgba(0,0,0,0.5); pointer-events:auto; }
-        #osnap-panel label { display:flex; align-items:center; margin-bottom:14px; font-size:15px; cursor:pointer; min-width:140px; color:#fff; }
-        #osnap-panel input { transform:scale(1.4); margin-right:14px; cursor:pointer; }
+        #osnap-panel { display:none; position:fixed; bottom:55px; right:10px; background:var(--panel-bg); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border:1px solid var(--border-color); padding:14px; border-radius:var(--r-card); z-index:999999 !important; box-shadow:0 10px 40px rgba(0,0,0,0.5); pointer-events:auto; }
+        #osnap-panel label { display:flex; align-items:center; margin-bottom:12px; font-size:14px; cursor:pointer; min-width:130px; color:#fff; }
+        #osnap-panel input { transform:scale(1.3); margin-right:12px; cursor:pointer; }
         
-        #coords-display { font-family:'Consolas',monospace; min-width:130px; text-align:right; font-size:13px; font-weight:600; }
+        #coords-display { font-family:'Consolas',monospace; min-width:110px; text-align:right; font-size:12px; font-weight:700; color:#00ff88; }
         
         /* 非表示クラス */
         body.fullscreen-mode #top-bar,
@@ -153,82 +140,101 @@
         #btn-exit-fullscreen { display: none; }
         body.fullscreen-mode #btn-exit-fullscreen { display: inline-block; background-color: rgba(255,107,107,0.2); color: #ff6b6b; font-size: 13px; font-weight:bold; border: 1px solid #ff6b6b; border-radius: 8px; cursor: pointer; padding: 6px 12px; position:absolute; top:10px; right:10px; z-index:9999; }
 
-        body.fullscreen-mode #btn-exit-fullscreen:hover { background-color: rgba(255, 107, 107, 0.2); }
-
-        /* === 全画面 座標読取モード UI === */
+        /* === 全画面 座標読取モード UI (案C) === */
         #fs-overlay { display: none; }
         body.fullscreen-mode #fs-overlay { display: block; }
 
-        /* フローティング座標ツールチップ */
+        /* 案C: 画面上部固定 HUD 座標表示バー */
+        #fs-hud-coords {
+            position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+            z-index: 100000; pointer-events: none;
+            background: rgba(18, 22, 28, 0.88); border: 1.5px solid rgba(0, 255, 136, 0.6);
+            border-radius: 20px; padding: 6px 18px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6), 0 0 20px rgba(0,255,136,0.15);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            display: flex; align-items: center; gap: 14px; font-family: 'Consolas', monospace;
+            white-space: nowrap;
+        }
+        #fs-hud-coords .hud-label { color: #888; font-size: 11px; font-weight: 700; margin-right: 2px; }
+        #fs-hud-coords .hud-val { color: #00ff88; font-size: 17px; font-weight: 700; letter-spacing: 0.02em; }
+        #fs-hud-coords .hud-snap { color: #ffcc00; font-size: 11px; font-weight: 600; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.2); }
+
+        /* フローティング座標ツールチップ (指追従) */
         #fs-coord-tooltip {
             position: fixed; display: none; pointer-events: none; z-index: 100000;
-            background: rgba(0,0,0,0.86); border: 1.5px solid rgba(0,255,136,0.65); border-radius: 12px;
-            padding: 12px 18px; font-family: 'Consolas', monospace; font-size: 24px; font-weight: 700; line-height: 1.3;
+            background: rgba(0,0,0,0.88); border: 1.5px solid rgba(0,255,136,0.65); border-radius: 12px;
+            padding: 10px 16px; font-family: 'Consolas', monospace; font-size: 22px; font-weight: 700; line-height: 1.3;
             color: #00ff88; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,0.7), 0 0 24px rgba(0,255,136,0.15);
-            -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
         }
-        #fs-coord-tooltip .snap-label { color: #ffcc00; font-size: 11px; font-weight: 600; display: block; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.12); }
+        #fs-coord-tooltip .snap-label { color: #ffcc00; font-size: 11px; font-weight: 600; display: block; margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.12); }
 
-        /* 全画面コントロールパネル（右下固定） */
+        /* 全画面コントロールパネル（案C: 右下固定・間隔拡大） */
         #fs-controls {
-            position: fixed; bottom: 18px; right: 14px; z-index: 100001;
-            display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+            position: fixed; bottom: 20px; right: 14px; z-index: 100001;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
         }
         #fs-controls button {
-            width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.3);
-            background: rgba(30,34,40,0.85); color: #e0e0e0; font-size: 17px;
+            width: 46px; height: 46px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.25);
+            background: rgba(28,32,38,0.88); color: #e0e0e0; font-size: 18px;
             cursor: pointer; display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.55); backdrop-filter: blur(10px);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.55); backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px); transition: all 0.15s;
         }
-        #fs-controls button:active { transform: scale(0.92); }
-        #fs-controls button.fs-active { border-color: #00ff88; color: #00ff88; }
+        #fs-controls button:active { transform: scale(0.90); }
+        #fs-controls button.fs-active { border-color: #00ff88; color: #00ff88; box-shadow: 0 0 12px rgba(0,255,136,0.25); }
 
-        /* ズームスライダー（左下固定） */
+        /* ズームスライダー（案C: 左下固定・幅広操作性向上） */
         #fs-zoom-panel {
-            position: fixed; bottom: 18px; left: 14px; z-index: 100001;
-            display: flex; flex-direction: column; align-items: center; gap: 6px;
-            background: rgba(30,34,40,0.78); border: 1px solid rgba(255,255,255,0.16);
-            border-radius: 26px; padding: 8px 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.55);
+            position: fixed; bottom: 20px; left: 14px; z-index: 100001;
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            background: rgba(28,32,38,0.85); border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 28px; padding: 10px 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.55);
             backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
         }
         #fs-zoom-panel button {
-            width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.18);
-            background: rgba(255,255,255,0.04); color: #e0e0e0; font-size: 19px; font-weight: bold;
+            width: 42px; height: 42px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.06); color: #e0e0e0; font-size: 20px; font-weight: bold;
             cursor: pointer; display: flex; align-items: center; justify-content: center;
         }
-        #fs-zoom-panel button:active { background: rgba(255,255,255,0.15); }
+        #fs-zoom-panel button:active { background: rgba(255,255,255,0.2); transform: scale(0.92); }
         #fs-zoom-slider {
             -webkit-appearance: none; appearance: none;
-            width: 28px; height: 130px; background: rgba(255,255,255,0.1);
-            border-radius: 14px; outline: none; writing-mode: bt-lr;
+            width: 30px; height: 130px; background: rgba(255,255,255,0.12);
+            border-radius: 15px; outline: none; writing-mode: bt-lr;
             -webkit-writing-mode: vertical-lr;
         }
         #fs-zoom-slider::-webkit-slider-thumb {
             -webkit-appearance: none; appearance: none;
-            width: 18px; height: 18px; border-radius: 50%;
-            background: #528bff; cursor: pointer; border: 2px solid #fff;
+            width: 22px; height: 22px; border-radius: 50%;
+            background: #528bff; cursor: pointer; border: 2.5px solid #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
         }
 
-        /* レスポンシブ調整 (iPhone15基準: 393px) */
-        @media screen and (max-width: 430px) {
-            /* 横1行スクロール前提なのでグループは隠さず温存。図面名のみ省略 */
-            #drawing-name { display: none; }
-            #status-bar { padding: 0 8px; font-size: 11px; height: 34px; flex-wrap: nowrap; gap: 6px; }
-            .status-btn { padding: 0 6px; font-size: 10px; }
-            #ucs-label { margin-right: 2px; }
-            #coords-display { min-width: 96px; font-size: 10px; }
-            #snap-indicator { width: 26px !important; font-size: 9px; }
-            #status-bar > div { flex-shrink: 0; }
-            #command-line-area:not(.collapsed) { height: 120px; }
-            select { max-width: 64px; font-size: 10px; }
+        /* トップメニューモーダル（案B） */
+        #top-menu-modal {
+            display: none; position: fixed; top: 58px; right: 12px; z-index: 100005;
+            width: 280px; max-width: 90vw; background: var(--panel-bg);
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color); border-radius: var(--r-card);
+            box-shadow: 0 12px 36px rgba(0,0,0,0.5); padding: 12px;
+            flex-direction: column; gap: 10px; font-size: 13px;
+            animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
-        @media screen and (min-width: 431px) and (max-width: 600px) {
-            #status-bar { padding: 0 8px; font-size: 11px; height: 34px; flex-wrap: nowrap; gap: 6px; }
+        .menu-section-title { font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: 0.1em; margin-bottom: 4px; }
+        .menu-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+        .menu-item-btn { min-height: 36px; padding: 0 8px; border-radius: var(--r-sub); background: rgba(255,255,255,0.05); border: 1px solid var(--border-3); color: var(--text-color); font: 600 12px 'Segoe UI', sans-serif; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
+        .menu-item-btn:hover { background: var(--btn-hover); }
+        .menu-item-btn:active { transform: scale(0.94); }
+        .menu-item-btn.danger { color: var(--warn); border-color: rgba(255,107,107,0.3); }
+
+        /* レスポンシブ調整 */
+        @media screen and (max-width: 430px) {
+            #status-bar { padding: 0 6px; font-size: 11px; height: 34px; gap: 4px; }
             .status-btn { padding: 0 6px; font-size: 10px; }
-            #coords-display { min-width: 110px; font-size: 10px; }
-            #snap-indicator { width: 30px !important; font-size: 10px; }
-            #status-bar > div { flex-shrink: 0; }
+            #coords-display { min-width: 90px; font-size: 10px; }
+            #snap-indicator { width: 24px !important; font-size: 9px; }
+            #command-line-area:not(.collapsed) { left: 62px; height: 120px; }
         }
         /* プロジェクト一覧のスタイル */
         .project-item { display:flex; align-items:center; padding:10px 12px; border-bottom:1px solid #333; cursor:pointer; transition:background 0.2s; gap:8px; }
@@ -322,77 +328,68 @@
 <body>
     <input type="file" id="dxf-file-input" accept=".dxf,.dwg" style="display:none;">
     <div id="canvas-container"><canvas id="cad-canvas"></canvas></div>
+    
+    <!-- トップバー (案B: 最適化レイアウト) -->
     <div id="top-bar" class="glass-panel">
         <button class="top-btn" id="btn-load-dxf" title="ファイルを開く (DXF/DWG)">📁 開く</button>
-        <button class="top-btn" onclick="closeDrawing()" title="図面を閉じて新規作成"><span style="color:var(--warn);">✕</span> 閉じる</button>
-        <button class="top-btn" onclick="togglePropertiesPanel()" title="プロパティパネル表示切替">📋 プロパティ</button>
-        <button class="top-btn primary" onclick="toggleFullscreen()" title="全画面表示で座標読取に特化">🎯 座標読取</button>
-        <div class="control-group">
-            <span class="cg-label">保存</span>
-            <div class="cg-row">
-                <button class="cg-btn primary" onclick="saveProject()" title="プロジェクト保存">💾</button>
-                <button class="cg-btn" onclick="showProjectList()" title="保存済みプロジェクトを復元">📂</button>
-                <button class="cg-btn" onclick="exportDxf()" title="DXF形式でエクスポート">DXF</button>
-                <button class="cg-btn" onclick="exportDwg()" title="DWG形式でエクスポート">DWG</button>
-            </div>
+        <button class="top-btn primary" onclick="saveProject()" title="プロジェクト保存">💾 保存</button>
+        <button class="top-btn icon-only" onclick="undo()" title="元に戻す (Ctrl+Z)">↩</button>
+        <button class="top-btn icon-only" onclick="redo()" title="やり直し (Ctrl+Y)">↪</button>
+        
+        <div style="display:flex; align-items:center; gap:4px; margin:0 2px;">
+            <div id="current-layer-color" style="width:14px;height:14px;background-color:white;border-radius:3px;border:1px solid #5a5a5a;flex-shrink:0;"></div>
+            <select id="layer-select" style="max-width:75px;font-size:11px;padding:3px;border-radius:var(--r-sub);background:rgba(0,0,0,0.3);color:#fff;border:1px solid var(--border-3);"></select>
+            <button class="top-btn icon-only" onclick="toggleLayerPanel()" style="color:var(--green);" title="画層一括管理">👁</button>
         </div>
-        <div class="control-group">
-            <span class="cg-label">編集</span>
-            <div class="cg-row">
-                <button class="cg-btn" style="font-size:16px;" onclick="undo()" title="元に戻す (Ctrl+Z)">↩</button>
-                <button class="cg-btn" style="font-size:16px;" onclick="redo()" title="やり直し (Ctrl+Y)">↪</button>
-            </div>
-        </div>
-        <div class="control-group" id="ucs-control-group">
-            <span class="cg-label">座標系</span>
-            <div class="cg-row">
-                <span id="ucs-status-display" style="height:32px;padding:0 10px;display:inline-flex;align-items:center;background:rgba(82,139,255,.16);border:1px solid var(--highlight-color);border-radius:var(--r-sub);color:var(--highlight-color);font-weight:700;font-size:12px;letter-spacing:.04em;">WCS</span>
-                <select id="ucs-select" style="max-width:90px;font-size:11px;" onchange="loadUCS(this.value)"><option value="">--</option></select>
-                <button class="cg-btn" onclick="saveUCS()" title="現在のUCSを保存">💾</button>
-                <button class="cg-btn" onclick="togglePlanView()" title="画面をUCSに平行・直角に合わせる">🧭 PLAN</button>
-                <button class="cg-btn" onclick="issueCommand('WCS')" title="ワールド座標系に戻す">リセット</button>
-                <button class="cg-btn" onclick="issueCommand('UCS')" title="新しい原点を指定">原点移動</button>
-                <button class="cg-btn" onclick="issueCommand('UCS2P')" title="基点+方向で座標系を設定">2点</button>
-            </div>
-        </div>
-        <div class="control-group">
-            <span class="cg-label">画層</span>
-            <div class="cg-row">
-                <div id="current-layer-color" style="width:18px;height:18px;background-color:white;border-radius:4px;border:1px solid #5a5a5a;flex-shrink:0;"></div>
-                <select id="layer-select"></select>
-                <button class="cg-btn" onclick="toggleLayerPanel()" style="color:var(--green);" title="画層一括管理">👁</button>
-                <button class="cg-btn" onclick="issueCommand('LAYOFF')" style="color:var(--ucs-color);" title="図形をタッチして画層を非表示にする (LAYOFF)">🚫</button>
-            </div>
-        </div>
-        <button class="top-btn" onclick="zoomToOrigin()" title="原点へズーム">🔍 原点</button>
+
         <button class="top-btn" onclick="zoomExtents()" title="全体表示">🔍 全体</button>
-        <button class="top-btn" onclick="showOptionsPanel()" title="オプション（背景色など）">⚙ オプション</button>
-        <span id="drawing-name" style="color:var(--dim);font-size:11px;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;flex:0 0 auto;" title="">新規図面</span>
-        <div style="flex:0 0 auto;width:36px;"></div>
+        <button class="top-btn primary" onclick="toggleFullscreen()" title="全画面表示で座標読取に特化">🎯 座標読取</button>
+        <button class="top-btn" onclick="togglePropertiesPanel()" title="プロパティパネル表示切替">📋</button>
+        <button class="top-btn" onclick="toggleTopMenu()" title="その他のメニュー (エクスポート・UCS・設定)">⋯</button>
     </div>
-    <div id="top-fade"><span>›</span></div>
-    <div id="status-bar">
-        <div style="display:flex;align-items:center;flex-shrink:0;">
-            <button id="btn-exit-fullscreen" onclick="toggleFullscreen()">✖ 解除</button>
-            <span id="ucs-label" style="color:var(--highlight-color);">WCS</span>
-            <span class="paper-space-label" style="opacity:0.6;font-size:0.9em;">モデル</span>
+
+    <!-- トップメニューモーダル (案B: その他機能集約) -->
+    <div id="top-menu-modal">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:6px;">
+            <span style="font-weight:bold; color:var(--highlight-color);">メニュー</span>
+            <button onclick="toggleTopMenu()" style="background:none; border:none; color:#aaa; font-size:16px; cursor:pointer;">✕</button>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-            <button id="btn-area-select" class="status-btn" title="ドラッグによる交差選択（範囲選択）の有効/無効切り替え" onclick="toggleAreaSelect()">範囲選択: OFF</button>
-            <button id="btn-ortho" class="status-btn" title="直交モード (F8)" onclick="toggleOrtho()">ORTHO</button>
-            <div style="position:relative;">
-                <button id="btn-osnap" class="status-btn active" title="オブジェクトスナップ (F3)" onclick="toggleOsnapMain()">OSNAP</button>
-                <button class="status-btn" style="padding:0 2px" onclick="toggleOsnapPanel(event)">▼</button>
+        
+        <div>
+            <div class="menu-section-title">図面と保存</div>
+            <div class="menu-btn-grid">
+                <button class="menu-item-btn" onclick="showProjectList(); toggleTopMenu();">📂 保存一覧</button>
+                <button class="menu-item-btn" onclick="exportDxf(); toggleTopMenu();">DXF 出力</button>
+                <button class="menu-item-btn" onclick="exportDwg(); toggleTopMenu();">DWG 出力</button>
+                <button class="menu-item-btn danger" onclick="closeDrawing(); toggleTopMenu();">✕ 図面を閉じる</button>
             </div>
-            <span id="snap-indicator" style="color:#00ff00;width:40px;"></span>
-            <span id="autosave-status" style="color:#666;font-size:10px;min-width:100px;"></span>
-            <span id="coords-display" style="width:120px;text-align:right;">0.0000, 0.0000</span>
+        </div>
+
+        <div>
+            <div class="menu-section-title">座標系 (UCS)</div>
+            <div class="menu-btn-grid">
+                <button class="menu-item-btn" onclick="issueCommand('UCS'); toggleTopMenu();">🎯 原点移動</button>
+                <button class="menu-item-btn" onclick="issueCommand('UCS2P'); toggleTopMenu();">📈 2点UCS</button>
+                <button class="menu-item-btn" onclick="togglePlanView(); toggleTopMenu();">🧭 PLAN表示</button>
+                <button class="menu-item-btn" onclick="issueCommand('WCS'); toggleTopMenu();">↩ WCSリセット</button>
+            </div>
+            <div style="display:flex; gap:6px; margin-top:4px;">
+                <select id="ucs-select" style="flex:1;font-size:11px;padding:4px;border-radius:var(--r-sub);background:rgba(0,0,0,0.3);color:#fff;border:1px solid var(--border-3);" onchange="loadUCS(this.value); toggleTopMenu();"><option value="">-- UCS読込 --</option></select>
+                <button class="menu-item-btn" onclick="saveUCS(); toggleTopMenu();">💾 UCS保存</button>
+            </div>
+        </div>
+
+        <div>
+            <div class="menu-section-title">表示と設定</div>
+            <div class="menu-btn-grid">
+                <button class="menu-item-btn" onclick="zoomToOrigin(); toggleTopMenu();">🔍 原点へズーム</button>
+                <button class="menu-item-btn" onclick="showOptionsPanel(); toggleTopMenu();">⚙ オプション</button>
+            </div>
         </div>
     </div>
+
+    <!-- ツールバー (案B: 44pxタッチボタン) -->
     <div id="toolbar" class="glass-panel">
-        <div id="tool-header"><span>TOOLS</span><button onclick="toggleToolbar()">✕</button></div>
-        <button class="tool-toggle" onclick="toggleToolbar()" title="ツールを展開">☰</button>
-        <span class="tool-grp-label">作図</span>
         <button class="tool-btn" onclick="toggleCommand('LINE')" title="線分 (L)"><div class="tool-icon">／</div><div class="tool-cmd">LINE</div></button>
         <button class="tool-btn" onclick="toggleCommand('PLINE')" title="ポリライン (PL)"><div class="tool-icon">∧</div><div class="tool-cmd">PLINE</div></button>
         <button class="tool-btn" onclick="toggleCommand('RECTANG')" title="長方形 (REC)"><div class="tool-icon">□</div><div class="tool-cmd">RECT</div></button>
@@ -400,9 +397,10 @@
         <button class="tool-btn" onclick="toggleCommand('ARC')" title="円弧 (A)"><div class="tool-icon">⌒</div><div class="tool-cmd">ARC</div></button>
         <button class="tool-btn" onclick="toggleCommand('ELLIPSE')" title="楕円 (EL)"><div class="tool-icon">⬭</div><div class="tool-cmd">ELLIP</div></button>
         <button class="tool-btn" onclick="toggleCommand('TEXT')" title="文字 (T)"><div class="tool-icon">A</div><div class="tool-cmd">TEXT</div></button>
-        <button class="tool-btn" onclick="toggleCommand('HATCH')" title="ハッチング (H)"><div class="tool-icon" style="background:repeating-linear-gradient(45deg, transparent, transparent 2px, #fff 2px, #fff 3px); width:16px; height:16px; margin-bottom:2px;"></div><div class="tool-cmd">HATCH</div></button>
+        <button class="tool-btn" onclick="toggleCommand('HATCH')" title="ハッチング (H)"><div class="tool-icon" style="background:repeating-linear-gradient(45deg, transparent, transparent 2px, #fff 2px, #fff 3px); width:18px; height:18px; margin-bottom:2px;"></div><div class="tool-cmd">HATCH</div></button>
+        
         <div class="tool-sep"></div>
-        <span class="tool-grp-label">編集</span>
+        
         <button class="tool-btn" onclick="toggleCommand('TRIM')" title="トリム (TR)"><div class="tool-icon" style="color:#ff6b6b;">✂</div><div class="tool-cmd">TRIM</div></button>
         <button class="tool-btn" onclick="toggleCommand('EXTEND')" title="延長 (EX)"><div class="tool-icon" style="color:#33ff99;">↗</div><div class="tool-cmd">EXTEND</div></button>
         <button class="tool-btn" onclick="toggleCommand('ERASE')" title="削除 (E)"><div class="tool-icon" style="color:#ff6b6b;">✖</div><div class="tool-cmd">ERASE</div></button>
@@ -410,8 +408,9 @@
         <button class="tool-btn" onclick="toggleCommand('COPY')" title="コピー (CO)"><div class="tool-icon" style="color:#ffff00;">⊞</div><div class="tool-cmd">COPY</div></button>
         <button class="tool-btn" onclick="toggleCommand('OFFSET')" title="オフセット (O)"><div class="tool-icon" style="color:#ffff00;">◱</div><div class="tool-cmd">OFFSET</div></button>
         <button class="tool-btn" onclick="toggleCommand('ROTATE')" title="回転 (RO)"><div class="tool-icon" style="color:#ffff00;">↻</div><div class="tool-cmd">ROTATE</div></button>
+        
         <div class="tool-sep"></div>
-        <span class="tool-grp-label">寸法</span>
+        
         <button class="tool-btn" onclick="toggleCommand('DIMLINEAR')" title="平行寸法 (DLI)"><div class="tool-icon" style="color:#00ffff;">↔</div><div class="tool-cmd">DIMLIN</div></button>
         <button class="tool-btn" onclick="toggleCommand('DIMALIGNED')" title="整列寸法 (DAL)"><div class="tool-icon" style="color:#00ffff;">⤢</div><div class="tool-cmd">DIMALN</div></button>
         <button class="tool-btn" onclick="toggleCommand('DIMRADIUS')" title="半径寸法 (DRA)"><div class="tool-icon" style="color:#00ffff;">R</div><div class="tool-cmd">DIMRAD</div></button>
@@ -419,6 +418,26 @@
         <button class="tool-btn" onclick="toggleCommand('DIMANGULAR')" title="角度寸法 (DAN)"><div class="tool-icon" style="color:#00ffff;">∠</div><div class="tool-cmd">DIMANG</div></button>
         <button class="tool-btn" onclick="toggleCommand('DIMORDINATE')" title="座標寸法 (DOR)"><div class="tool-icon" style="color:#00ffff;">XY</div><div class="tool-cmd">DIMORD</div></button>
     </div>
+
+    <!-- ステータスバー (案B: 整理＆座標表示) -->
+    <div id="status-bar" class="glass-panel">
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <button id="btn-exit-fullscreen" onclick="toggleFullscreen()">✖ 解除</button>
+            <span id="ucs-label" style="color:var(--highlight-color);font-weight:bold;">WCS</span>
+            <span class="paper-space-label" style="opacity:0.6;font-size:0.85em;">モデル</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <button id="btn-area-select" class="status-btn" title="範囲選択 ON/OFF" onclick="toggleAreaSelect()">範囲: OFF</button>
+            <button id="btn-ortho" class="status-btn" title="直交モード (F8)" onclick="toggleOrtho()">ORTHO</button>
+            <div style="position:relative;display:inline-flex;">
+                <button id="btn-osnap" class="status-btn active" title="オブジェクトスナップ (F3)" onclick="toggleOsnapMain()">OSNAP</button>
+                <button class="status-btn" style="padding:0 3px;margin-left:-4px;" onclick="toggleOsnapPanel(event)">▼</button>
+            </div>
+            <span id="snap-indicator" style="color:#00ff00;width:30px;font-size:10px;"></span>
+            <span id="coords-display">0.000, 0.000</span>
+        </div>
+    </div>
+
     <div id="properties-panel" class="collapsed glass-panel">
         <div class="props-header">
             <span>プロパティ</span>
@@ -474,13 +493,21 @@
         </div>
     </div>
 
-    <!-- 全画面座標読取モード用オーバーレイ -->
+    <!-- 全画面座標読取モード用オーバーレイ (案C: 上部HUDバー + 右下間隔拡大 + ズーム改善) -->
     <div id="fs-overlay">
+        <!-- 案C: 上部固定HUDバー -->
+        <div id="fs-hud-coords">
+            <span class="hud-label">X</span><span id="fs-hud-x" class="hud-val">0.000</span>
+            <span class="hud-label">Y</span><span id="fs-hud-y" class="hud-val">0.000</span>
+            <span id="fs-hud-snap" class="hud-snap" style="display:none;"></span>
+        </div>
+
         <div id="fs-coord-tooltip">
             <span id="fs-coord-x">X: 0.000</span><br>
             <span id="fs-coord-y">Y: 0.000</span>
             <span id="fs-snap-label" class="snap-label"></span>
         </div>
+
         <style>
             #fs-tools-drawer { transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1); }
             .fs-drawer-closed { transform: translateX(calc(100% - 32px)); }
@@ -545,16 +572,19 @@
                 </div>
             </div>
         </div>
+        
+        <!-- 案C: 右下コントロール群 (誤タップ防止の間隔) -->
         <div id="fs-controls">
             <div style="position:relative; display:flex; flex-direction:column; align-items:center;">
                 <button id="fs-btn-osnap" class="fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
-                <button onclick="toggleOsnapPanel(event)" style="width:28px; height:24px; margin-top:-6px; font-size:10px; background:rgba(30,34,40,0.9); border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:12px; z-index:100001;" title="OSNAP設定">▼</button>
+                <button onclick="toggleOsnapPanel(event)" style="width:28px; height:22px; margin-top:-6px; font-size:10px; background:rgba(30,34,40,0.9); border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:10px; z-index:100001;" title="OSNAP設定">▼</button>
             </div>
-            <button id="fs-btn-coord" class="fs-active" onclick="toggleFsCoordAlways()" title="座標表示 ON/OFF（OFFで座標ツールチップを非表示）">XY</button>
+            <button id="fs-btn-coord" class="fs-active" onclick="toggleFsCoordAlways()" title="座標表示 ON/OFF">XY</button>
             <button id="fs-btn-extents" onclick="zoomExtents()" title="全体表示">⛶</button>
             <button id="fs-btn-exit" onclick="toggleFullscreen()" title="全画面解除" style="border-color:#ff6b6b;color:#ff6b6b;">✕</button>
         </div>
         
+        <!-- 案C: ズームパネル (幅広スライダー) -->
         <div id="fs-zoom-panel">
             <button onclick="fsZoomIn()" title="ズームイン">＋</button>
             <input type="range" id="fs-zoom-slider" min="-30" max="30" value="0" orient="vertical" oninput="fsZoomSlider(this.value)">
@@ -794,13 +824,48 @@
             }
         }
 
-        // フローティング座標ツールチップの更新（cad-core.jsから呼ばれる）
+        // トップメニューモーダルの開閉
+        function toggleTopMenu() {
+            const m = document.getElementById('top-menu-modal');
+            if(!m) return;
+            m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
+        }
+
+        // メニュー外タップで閉じる
+        document.addEventListener('pointerdown', function(e) {
+            const m = document.getElementById('top-menu-modal');
+            if(m && m.style.display === 'flex') {
+                if(!m.contains(e.target) && !e.target.closest('button[onclick*="toggleTopMenu"]')) {
+                    m.style.display = 'none';
+                }
+            }
+        });
+
+        // フローティング座標ツールチップ ＆ 上部HUDバーの更新（cad-core.jsから呼ばれる）
         window.updateFsCoordTooltip = function(screenX, screenY, ucsX, ucsY, snapType) {
             if(!document.body.classList.contains('fullscreen-mode')) return;
+            
+            // 案C: 上部固定HUDバーの更新
+            const hudX = document.getElementById('fs-hud-x');
+            const hudY = document.getElementById('fs-hud-y');
+            const hudSnap = document.getElementById('fs-hud-snap');
+            if(hudX && hudY) {
+                hudX.textContent = ucsY.toFixed(0);
+                hudY.textContent = ucsX.toFixed(0);
+                if(hudSnap) {
+                    if(snapType) {
+                        hudSnap.textContent = '[' + snapType + ']';
+                        hudSnap.style.display = 'inline';
+                    } else {
+                        hudSnap.style.display = 'none';
+                    }
+                }
+            }
+
             const tt = document.getElementById('fs-coord-tooltip');
             if(!tt) return;
 
-            // XYトグルOFF時は座標ツールチップ自体を表示しない（寸法計測時に邪魔になるため）
+            // XYトグルOFF時は指追従ツールチップ自体を表示しない（寸法計測時に邪魔になるため）
             if(!fsCoordAlways) { tt.style.display = 'none'; return; }
 
             // 最新の座標を保存（常時表示用）
