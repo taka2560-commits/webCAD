@@ -57,8 +57,8 @@
         #top-bar { position:absolute; top:8px; left:8px; right:8px; z-index:10; min-height:44px; display:flex; flex-wrap:nowrap; align-items:center; padding:4px 8px; gap:6px; overflow-x:auto; overflow-y:hidden; border-radius:var(--r-pill); }
         #top-bar::-webkit-scrollbar { display:none; }
         
-        /* ツールバー (案B: 44pxタッチ最適化) */
-        #toolbar { position:absolute; top:62px; left:8px; bottom:60px; z-index:10; width:52px; display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px 0; overflow-y:auto; overflow-x:hidden; border-radius:var(--r-card); }
+        /* ツールバー (案B: 46pxタッチボタン ＆ ミニツール名表示) */
+        #toolbar { position:absolute; top:60px; left:8px; bottom:55px; z-index:10; width:52px; display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 0; overflow-y:auto; overflow-x:hidden; border-radius:var(--r-card); }
         #toolbar::-webkit-scrollbar { display:none; }
         
         /* マイクロインタラクション（ボタン） */
@@ -70,14 +70,16 @@
         .top-btn.primary { background-color:rgba(0,255,136,0.18);border-color:var(--green);color:var(--green);font-weight:700; }
         .top-btn.icon-only { width:34px;padding:0;justify-content:center;font-size:14px; }
         
-        .tool-btn { width:44px;height:44px;background-color:transparent;border:1px solid transparent;color:var(--text-color);border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+        .tool-btn { width:46px;height:44px;background-color:transparent;border:1px solid transparent;color:var(--text-color);border-radius:10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:2px 0;gap:2px; }
         .tool-btn:hover { background-color:var(--btn-hover); }
         .tool-btn:active { transform:scale(0.90); }
         .tool-btn.active { background-color:rgba(82,139,255,0.25);border-color:var(--highlight-color); box-shadow:0 0 12px rgba(82,139,255,0.3); }
         .tool-btn.active .tool-icon, .tool-btn.active .tool-cmd { color:var(--highlight-color); }
-        .tool-icon { font-size:20px;font-weight:700;margin:0;line-height:1; }
+        .tool-btn.active .tool-lbl { color:var(--highlight-color); font-weight:700; }
+        .tool-icon { font-size:16px;font-weight:700;margin:0;line-height:1; }
+        .tool-lbl { font-size:9px;font-weight:600;line-height:1;color:var(--dim);letter-spacing:-0.02em; }
         .tool-cmd { display:none; }
-        .tool-sep { height:1px;width:32px;background-color:var(--border-color);margin:3px 0;flex-shrink:0; }
+        .tool-sep { height:1px;width:32px;background-color:var(--border-color);margin:2px 0;flex-shrink:0; }
         .tool-grp-label { display:none; }
         .tool-toggle { display:none; }
         #tool-header { display:none; }
@@ -388,35 +390,35 @@
         </div>
     </div>
 
-    <!-- ツールバー (案B: 44pxタッチボタン) -->
+    <!-- ツールバー (46pxタッチボタン ＆ ミニツール名表示) -->
     <div id="toolbar" class="glass-panel">
-        <button class="tool-btn" onclick="toggleCommand('LINE')" title="線分 (L)"><div class="tool-icon">／</div><div class="tool-cmd">LINE</div></button>
-        <button class="tool-btn" onclick="toggleCommand('PLINE')" title="ポリライン (PL)"><div class="tool-icon">∧</div><div class="tool-cmd">PLINE</div></button>
-        <button class="tool-btn" onclick="toggleCommand('RECTANG')" title="長方形 (REC)"><div class="tool-icon">□</div><div class="tool-cmd">RECT</div></button>
-        <button class="tool-btn" onclick="toggleCommand('CIRCLE')" title="円 (C)"><div class="tool-icon">◯</div><div class="tool-cmd">CIRCLE</div></button>
-        <button class="tool-btn" onclick="toggleCommand('ARC')" title="円弧 (A)"><div class="tool-icon">⌒</div><div class="tool-cmd">ARC</div></button>
-        <button class="tool-btn" onclick="toggleCommand('ELLIPSE')" title="楕円 (EL)"><div class="tool-icon">⬭</div><div class="tool-cmd">ELLIP</div></button>
-        <button class="tool-btn" onclick="toggleCommand('TEXT')" title="文字 (T)"><div class="tool-icon">A</div><div class="tool-cmd">TEXT</div></button>
-        <button class="tool-btn" onclick="toggleCommand('HATCH')" title="ハッチング (H)"><div class="tool-icon" style="background:repeating-linear-gradient(45deg, transparent, transparent 2px, #fff 2px, #fff 3px); width:18px; height:18px; margin-bottom:2px;"></div><div class="tool-cmd">HATCH</div></button>
+        <button class="tool-btn" onclick="toggleCommand('LINE')" title="線分 (L)"><div class="tool-icon">／</div><span class="tool-lbl">線分</span><div class="tool-cmd">LINE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('PLINE')" title="ポリライン (PL)"><div class="tool-icon">∧</div><span class="tool-lbl">複線</span><div class="tool-cmd">PLINE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('RECTANG')" title="長方形 (REC)"><div class="tool-icon">□</div><span class="tool-lbl">四角</span><div class="tool-cmd">RECT</div></button>
+        <button class="tool-btn" onclick="toggleCommand('CIRCLE')" title="円 (C)"><div class="tool-icon">◯</div><span class="tool-lbl">円</span><div class="tool-cmd">CIRCLE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('ARC')" title="円弧 (A)"><div class="tool-icon">⌒</div><span class="tool-lbl">円弧</span><div class="tool-cmd">ARC</div></button>
+        <button class="tool-btn" onclick="toggleCommand('ELLIPSE')" title="楕円 (EL)"><div class="tool-icon">⬭</div><span class="tool-lbl">楕円</span><div class="tool-cmd">ELLIP</div></button>
+        <button class="tool-btn" onclick="toggleCommand('TEXT')" title="文字 (T)"><div class="tool-icon">A</div><span class="tool-lbl">文字</span><div class="tool-cmd">TEXT</div></button>
+        <button class="tool-btn" onclick="toggleCommand('HATCH')" title="ハッチング (H)"><div class="tool-icon" style="background:repeating-linear-gradient(45deg, transparent, transparent 2px, #fff 2px, #fff 3px); width:14px; height:14px; margin-bottom:1px;"></div><span class="tool-lbl">塗潰</span><div class="tool-cmd">HATCH</div></button>
         
         <div class="tool-sep"></div>
         
-        <button class="tool-btn" onclick="toggleCommand('TRIM')" title="トリム (TR)"><div class="tool-icon" style="color:#ff6b6b;">✂</div><div class="tool-cmd">TRIM</div></button>
-        <button class="tool-btn" onclick="toggleCommand('EXTEND')" title="延長 (EX)"><div class="tool-icon" style="color:#33ff99;">↗</div><div class="tool-cmd">EXTEND</div></button>
-        <button class="tool-btn" onclick="toggleCommand('ERASE')" title="削除 (E)"><div class="tool-icon" style="color:#ff6b6b;">✖</div><div class="tool-cmd">ERASE</div></button>
-        <button class="tool-btn" onclick="toggleCommand('MOVE')" title="移動 (M)"><div class="tool-icon" style="color:#ffff00;">✥</div><div class="tool-cmd">MOVE</div></button>
-        <button class="tool-btn" onclick="toggleCommand('COPY')" title="コピー (CO)"><div class="tool-icon" style="color:#ffff00;">⊞</div><div class="tool-cmd">COPY</div></button>
-        <button class="tool-btn" onclick="toggleCommand('OFFSET')" title="オフセット (O)"><div class="tool-icon" style="color:#ffff00;">◱</div><div class="tool-cmd">OFFSET</div></button>
-        <button class="tool-btn" onclick="toggleCommand('ROTATE')" title="回転 (RO)"><div class="tool-icon" style="color:#ffff00;">↻</div><div class="tool-cmd">ROTATE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('TRIM')" title="トリム (TR)"><div class="tool-icon" style="color:#ff6b6b;">✂</div><span class="tool-lbl">トリム</span><div class="tool-cmd">TRIM</div></button>
+        <button class="tool-btn" onclick="toggleCommand('EXTEND')" title="延長 (EX)"><div class="tool-icon" style="color:#33ff99;">↗</div><span class="tool-lbl">延長</span><div class="tool-cmd">EXTEND</div></button>
+        <button class="tool-btn" onclick="toggleCommand('ERASE')" title="削除 (E)"><div class="tool-icon" style="color:#ff6b6b;">✖</div><span class="tool-lbl">削除</span><div class="tool-cmd">ERASE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('MOVE')" title="移動 (M)"><div class="tool-icon" style="color:#ffff00;">✥</div><span class="tool-lbl">移動</span><div class="tool-cmd">MOVE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('COPY')" title="コピー (CO)"><div class="tool-icon" style="color:#ffff00;">⊞</div><span class="tool-lbl">複写</span><div class="tool-cmd">COPY</div></button>
+        <button class="tool-btn" onclick="toggleCommand('OFFSET')" title="オフセット (O)"><div class="tool-icon" style="color:#ffff00;">◱</div><span class="tool-lbl">オフセ</span><div class="tool-cmd">OFFSET</div></button>
+        <button class="tool-btn" onclick="toggleCommand('ROTATE')" title="回転 (RO)"><div class="tool-icon" style="color:#ffff00;">↻</div><span class="tool-lbl">回転</span><div class="tool-cmd">ROTATE</div></button>
         
         <div class="tool-sep"></div>
         
-        <button class="tool-btn" onclick="toggleCommand('DIMLINEAR')" title="平行寸法 (DLI)"><div class="tool-icon" style="color:#00ffff;">↔</div><div class="tool-cmd">DIMLIN</div></button>
-        <button class="tool-btn" onclick="toggleCommand('DIMALIGNED')" title="整列寸法 (DAL)"><div class="tool-icon" style="color:#00ffff;">⤢</div><div class="tool-cmd">DIMALN</div></button>
-        <button class="tool-btn" onclick="toggleCommand('DIMRADIUS')" title="半径寸法 (DRA)"><div class="tool-icon" style="color:#00ffff;">R</div><div class="tool-cmd">DIMRAD</div></button>
-        <button class="tool-btn" onclick="toggleCommand('DIMDIAMETER')" title="直径寸法 (DDI)"><div class="tool-icon" style="color:#00ffff;">⌀</div><div class="tool-cmd">DIMDIA</div></button>
-        <button class="tool-btn" onclick="toggleCommand('DIMANGULAR')" title="角度寸法 (DAN)"><div class="tool-icon" style="color:#00ffff;">∠</div><div class="tool-cmd">DIMANG</div></button>
-        <button class="tool-btn" onclick="toggleCommand('DIMORDINATE')" title="座標寸法 (DOR)"><div class="tool-icon" style="color:#00ffff;">XY</div><div class="tool-cmd">DIMORD</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMLINEAR')" title="平行寸法 (DLI)"><div class="tool-icon" style="color:#00ffff;">↔</div><span class="tool-lbl">平行</span><div class="tool-cmd">DIMLIN</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMALIGNED')" title="整列寸法 (DAL)"><div class="tool-icon" style="color:#00ffff;">⤢</div><span class="tool-lbl">整列</span><div class="tool-cmd">DIMALN</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMRADIUS')" title="半径寸法 (DRA)"><div class="tool-icon" style="color:#00ffff;">R</div><span class="tool-lbl">半径</span><div class="tool-cmd">DIMRAD</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMDIAMETER')" title="直径寸法 (DDI)"><div class="tool-icon" style="color:#00ffff;">⌀</div><span class="tool-lbl">直径</span><div class="tool-cmd">DIMDIA</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMANGULAR')" title="角度寸法 (DAN)"><div class="tool-icon" style="color:#00ffff;">∠</div><span class="tool-lbl">角度</span><div class="tool-cmd">DIMANG</div></button>
+        <button class="tool-btn" onclick="toggleCommand('DIMORDINATE')" title="座標寸法 (DOR)"><div class="tool-icon" style="color:#00ffff;">XY</div><span class="tool-lbl">座標</span><div class="tool-cmd">DIMORD</div></button>
     </div>
 
     <!-- ステータスバー (案B: 整理＆座標表示) -->

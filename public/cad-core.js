@@ -176,6 +176,19 @@ function showPropertyPanel(title, htmlContent) {
 
 // プロパティパネルは画面中央(モバイル対応)で固定するため、ドラッグ機能は廃止しました。
 
+// アクションバー表示制御ヘルパー
+function showActionbarControls(options = {}) {
+    const ab = document.getElementById('fs-dim-actionbar');
+    if(!ab) return;
+    ab.style.display = 'flex';
+    const confirmBtn = ab.querySelector('button[onclick="dimConfirmPoint()"]');
+    const modeToggle = document.getElementById('dim-mode-toggle');
+    const dirToggle = document.getElementById('dim-dir-toggle');
+    if(confirmBtn) confirmBtn.style.display = options.hideConfirm ? 'none' : '';
+    if(modeToggle) modeToggle.style.display = options.showMode ? '' : 'none';
+    if(dirToggle) dirToggle.style.display = options.showDir ? '' : 'none';
+}
+
 // テキスト用パネル開始関数
 function startTextPlacement() {
     const txtInput = document.getElementById('prop-text-val');
@@ -186,11 +199,14 @@ function startTextPlacement() {
     
     cmdState.textStr = txtInput.value;
     cmdState.textHeight = parseFloat(hInput.value) || 20;
-    cmdState.isContinuous = contInput.checked;
+    cmdState.isContinuous = contInput ? contInput.checked : true;
+    cmdState.previewWcs = { x: mouse.wcsX || 0, y: mouse.wcsY || 0 };
     
     cmdState.mode = 'WAITING_TEXT_PLACE';
-    setPrompt('文字の配置点を指定 (連続: ' + (cmdState.isContinuous ? 'ON' : 'OFF') + ')');
-    addCommandLog('-> 配置点をタップしてください');
+    setPrompt('文字の配置点をタップ → 「確定」で配置');
+    addCommandLog('-> 配置点をタップし、画面下の「確定」を押してください');
+    hidePropertyPanel();
+    showActionbarControls({ showMode: false });
     
     // カーソルにプレビューを出したいので再描画
     render();
@@ -1164,7 +1180,11 @@ function drawRubberBand() {
     ctx.save(); ctx.strokeStyle=isLightCanvasBg()?'rgba(0,0,0,0.5)':'rgba(255,255,255,0.5)'; ctx.setLineDash([6,4]); ctx.lineWidth=1;
     const m=cmdState.mode, sw=cmdState.startWcs, mp={x:mouse.wcsX,y:mouse.wcsY};
     if(m==='WAITING_LINE_P2'&&sw) { const a=wcsToScreen(sw.x,sw.y),b=wcsToScreen(mp.x,mp.y); ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke(); }
-    else if(m==='WAITING_CIRCLE_RADIUS'&&sw) { const c=wcsToScreen(sw.x,sw.y),r=dist(sw.x,sw.y,mp.x,mp.y)*view.scale; ctx.beginPath();ctx.arc(c.x,c.y,r,0,Math.PI*2);ctx.stroke(); }
+    else if(m==='WAITING_CIRCLE_RADIUS'&&sw) { 
+        const pt = cmdState.lastInputWcs || mp;
+        const c=wcsToScreen(sw.x,sw.y), r=dist(sw.x,sw.y,pt.x,pt.y)*view.scale; 
+        ctx.beginPath();ctx.arc(c.x,c.y,r,0,Math.PI*2);ctx.stroke(); 
+    }
     else if(m==='WAITING_RECT_P2'&&sw) { const a=wcsToScreen(sw.x,sw.y),b=wcsToScreen(mp.x,mp.y); ctx.beginPath();ctx.rect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y));ctx.stroke(); }
     else if(m==='WAITING_ARC_P3'&&cmdState.points.length===2) {
         const p1=cmdState.points[0],p2=cmdState.points[1],p3=mp;
@@ -1187,18 +1207,22 @@ function drawRubberBand() {
         ctx.beginPath(); ctx.ellipse(c.x, c.y, rx*view.scale, ry*view.scale, -rot, 0, Math.PI*2); ctx.stroke();
     }
     else if(m==='WAITING_TEXT_PLACE' && cmdState.textStr) {
-        const p = wcsToScreen(mp.x, mp.y);
+        const targetPt = cmdState.previewWcs || mp;
+        const p = wcsToScreen(targetPt.x, targetPt.y);
         ctx.save();
         ctx.font = `${cmdState.textHeight * view.scale}px sans-serif`;
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.fillStyle = 'rgba(0, 255, 136, 0.8)';
         
         // UCSに合わせて回転してプレビュー
         ctx.translate(p.x, p.y);
         ctx.rotate(-view.rotation);
-        // 通常のTEXTエンティティは left/bottom で描画しているか確認 (通常は左下基準)
         ctx.textBaseline = 'bottom';
         ctx.textAlign = 'left';
         ctx.fillText(cmdState.textStr, 0, 0);
+        
+        // プレビュー基準点マーカー
+        ctx.strokeStyle = '#00ff88';
+        ctx.strokeRect(-3, -3, 6, 6);
         
         ctx.restore();
     }
@@ -1406,10 +1430,26 @@ function handlePointInput(wcs, fromMouse = false) {
     if(m==='WAITING_LINE_P1') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_LINE_P2'; setPrompt('次の点:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 1点目: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); render(); return; }
     if(m==='WAITING_LINE_P2') { saveUndo(); entities.push({type:'LINE',layer:currentLayerIndex,color:null,x1:cmdState.startWcs.x,y1:cmdState.startWcs.y,x2:wcs.x,y2:wcs.y}); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 線分作成 終点: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); cmdState.startWcs={x:wcs.x,y:wcs.y}; render(); return; }
     if(m==='WAITING_CIRCLE_CENTER') {
-        if(cmdState.presetRadius>0){ saveUndo(); entities.push({type:'CIRCLE',layer:currentLayerIndex,color:null,cx:wcs.x,cy:wcs.y,radius:cmdState.presetRadius}); addCommandLog(`-> 円作成 半径: ${cmdState.presetRadius}`); resetCommand(); return; }
-        cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_CIRCLE_RADIUS'; setPrompt('半径:'); hidePropertyPanel(); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 中心: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); render(); return;
+        cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_CIRCLE_RADIUS'; 
+        cmdState.previewRadius = cmdState.presetRadius > 0 ? cmdState.presetRadius : 50;
+        cmdState.lastInputWcs = {x: wcs.x, y: wcs.y};
+        setPrompt('半径を指定し「確定」をタップ:'); 
+        hidePropertyPanel(); 
+        showActionbarControls({ showMode: false });
+        const u=wcsToUcs(wcs.x,wcs.y); 
+        addCommandLog(`-> 中心: (${u.x.toFixed(2)},${u.y.toFixed(2)}) → 半径を決めて確定`); 
+        render(); 
+        return;
     }
-    if(m==='WAITING_CIRCLE_RADIUS') { const r=dist(cmdState.startWcs.x,cmdState.startWcs.y,wcs.x,wcs.y); saveUndo(); entities.push({type:'CIRCLE',layer:currentLayerIndex,color:null,cx:cmdState.startWcs.x,cy:cmdState.startWcs.y,radius:r}); addCommandLog(`-> 円作成 半径: ${r.toFixed(2)}`); resetCommand(); return; }
+    if(m==='WAITING_CIRCLE_RADIUS') { 
+        const r=dist(cmdState.startWcs.x,cmdState.startWcs.y,wcs.x,wcs.y); 
+        cmdState.previewRadius = r;
+        cmdState.lastInputWcs = {x: wcs.x, y: wcs.y};
+        addCommandLog(`-> 半径: ${r.toFixed(2)} (「確定」で配置)`);
+        showActionbarControls({ showMode: false });
+        render(); 
+        return; 
+    }
     if(m==='WAITING_RECT_P1') {
         if(cmdState.presetW>0 && cmdState.presetH>0){ saveUndo(); entities.push({type:'RECTANG',layer:currentLayerIndex,color:null,x1:wcs.x,y1:wcs.y,x2:wcs.x+cmdState.presetW,y2:wcs.y+cmdState.presetH}); addCommandLog(`-> 長方形作成 ${cmdState.presetW}×${cmdState.presetH}`); resetCommand(); return; }
         cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_RECT_P2'; setPrompt('対角:'); hidePropertyPanel(); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 1点目: (${u.x.toFixed(2)},${u.y.toFixed(2)})`); render(); return;
@@ -1437,16 +1477,10 @@ function handlePointInput(wcs, fromMouse = false) {
         addCommandLog(`-> 楕円作成 X半径: ${rx.toFixed(2)} Y半径: ${ry.toFixed(2)}`); resetCommand(); return;
     }
     if(m==='WAITING_TEXT_PLACE') {
-        saveUndo(); 
-        entities.push({type:'TEXT', layer:currentLayerIndex, color:null, x:wcs.x, y:wcs.y, text:cmdState.textStr, height:cmdState.textHeight});
-        addCommandLog(`-> テキスト配置: "${cmdState.textStr}"`); 
-        
-        if(cmdState.isContinuous) {
-            // 連続配置の場合はそのまま
-            addCommandLog('-> 続けて配置点をタップしてください。終了するにはEsc/キャンセル');
-        } else {
-            resetCommand(); 
-        }
+        cmdState.previewWcs = {x: wcs.x, y: wcs.y};
+        const u = wcsToUcs(wcs.x, wcs.y);
+        addCommandLog(`-> 配置位置: (${u.x.toFixed(2)},${u.y.toFixed(2)}) → 「確定」で配置`);
+        showActionbarControls({ showMode: false });
         render(); 
         return; 
     }
@@ -1884,7 +1918,8 @@ function processCommand(cmdText) {
     }
     else if(cmd==='L'||cmd==='LINE') { cmdState.mode='WAITING_LINE_P1'; setPrompt('1点目:'); setActiveTool('LINE'); addCommandLog('-> 1点目を指定'); }
     else if(cmd==='C'||cmd==='CIRCLE') {
-        cmdState.mode='WAITING_CIRCLE_CENTER'; setPrompt('中心:'); setActiveTool('CIRCLE'); addCommandLog('-> 中心を指定（または半径を入力）');
+        cmdState.mode='WAITING_CIRCLE_CENTER'; setPrompt('中心を指定 → 「確定」で配置:'); setActiveTool('CIRCLE'); addCommandLog('-> 中心を指定し、画面下の「確定」で配置');
+        showActionbarControls({ showMode: false });
         showPropertyPanel('円 設定', `
             <div class="prop-row"><label>半径:</label><input type="number" id="prop-circle-r" value="${lastParams.radius}" min="0" placeholder="クリックで指定"></div>
             <button class="prop-btn" onclick="applyCirclePreset()">この半径で配置</button>
@@ -2225,14 +2260,15 @@ function setupEventListeners() {
                     const idx = hitTestEntity(touchState.startX, touchState.startY);
                     if(idx >= 0) {
                         const hitEnt = entities[idx];
-                        if(hitEnt.type === 'DIMENSION') {
+                        if(hitEnt.type === 'DIMENSION' || hitEnt.type === 'TEXT') {
                             saveUndo();
                             entities.splice(idx, 1);
-                            addCommandLog(`-> 長押しにより寸法 (${hitEnt.subType || '不明'}) を削除しました`);
+                            const name = hitEnt.type === 'TEXT' ? `文字 "${hitEnt.text}"` : `寸法 (${hitEnt.subType || '不明'})`;
+                            addCommandLog(`-> 長押しにより ${name} を削除しました`);
                             cmdState.highlightIdx = -1;
                             if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
                             render();
-                            if(navigator.vibrate) navigator.vibrate([50, 50, 50]); // 長押し成功時は少し違うパターンの振動
+                            if(navigator.vibrate) navigator.vibrate([50, 50, 50]); // 長押し成功時の振動
                             touchState.hasMoved = true;
                         }
                     }
@@ -2849,6 +2885,36 @@ window.dimConfirmPoint = function() {
         // 寸法が確定した際にも振動フィードバック
         if(navigator.vibrate) navigator.vibrate(20);
         handlePointInput(pt, false);
+    } else if(cmdState.mode === 'WAITING_CIRCLE_RADIUS') {
+        const pt = cmdState.lastInputWcs || getInputPoint();
+        const r = Math.max(0.1, dist(cmdState.startWcs.x, cmdState.startWcs.y, pt.x, pt.y));
+        saveUndo();
+        entities.push({type:'CIRCLE', layer:currentLayerIndex, color:null, cx:cmdState.startWcs.x, cy:cmdState.startWcs.y, radius:r});
+        addCommandLog(`-> 円作成 半径: ${r.toFixed(2)} (続けて次の円を配置可能)`);
+        if(navigator.vibrate) navigator.vibrate(20);
+        cmdState.mode = 'WAITING_CIRCLE_CENTER'; // ★連続配置
+        cmdState.startWcs = null;
+        setPrompt('次の円の中心を指定 (終了は❌):');
+        showActionbarControls({ showMode: false });
+        render();
+    } else if(cmdState.mode === 'WAITING_CIRCLE_CENTER') {
+        const pt = getInputPoint();
+        const r = cmdState.presetRadius > 0 ? cmdState.presetRadius : 50;
+        saveUndo();
+        entities.push({type:'CIRCLE', layer:currentLayerIndex, color:null, cx:pt.x, cy:pt.y, radius:r});
+        addCommandLog(`-> 円作成 半径: ${r.toFixed(2)} (続けて次の円を配置可能)`);
+        if(navigator.vibrate) navigator.vibrate(20);
+        setPrompt('次の円の中心を指定 (終了は❌):');
+        render();
+    } else if(cmdState.mode === 'WAITING_TEXT_PLACE') {
+        const pt = cmdState.previewWcs || getInputPoint();
+        saveUndo();
+        entities.push({type:'TEXT', layer:currentLayerIndex, color:null, x:pt.x, y:pt.y, text:cmdState.textStr, height:cmdState.textHeight});
+        addCommandLog(`-> テキスト配置: "${cmdState.textStr}" (続けてタップで配置可能)`);
+        if(navigator.vibrate) navigator.vibrate(20);
+        setPrompt('次の配置点をタップ → 「確定」 (終了は❌):');
+        showActionbarControls({ showMode: false });
+        render();
     } else if(cmdState.mode === 'WAITING_UCS_2P_ORIGIN_PREVIEW') {
         const pt = getInputPoint();
         if(navigator.vibrate) navigator.vibrate(20);
