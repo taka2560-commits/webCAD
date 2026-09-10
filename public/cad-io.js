@@ -39,8 +39,9 @@ function loadDxfFile(file) {
             addCommandLog(`  文字コード: ${decoded.encoding} として読み込み`);
 
             const parser = new window.DxfParser();
+            registerExtraDxfHandlers(parser);
             const dxf = parser.parseSync(text);
-            importDxfData(dxf);
+            importDxfData(dxf, { skipUndo: true });
             setDrawingName(file.name);
             addCommandLog(`-> DXFファイル読み込み完了: ${file.name}`);
         } catch(err) {
@@ -51,295 +52,505 @@ function loadDxfFile(file) {
     reader.readAsArrayBuffer(file);
 }
 
-function importDxfData(dxf) {
-    saveUndo();
-    let importCount = 0;
-    let skipCount = 0;
+// ===== 取り込みオプション =====
+function shouldHideImportedArcs() {
+    try { const v = localStorage.getItem('cad_import_hide_arcs'); return v === null ? true : v === '1'; } catch(_) { return true; }
+}
 
-    // 画層の読み込み
+// dxf-parser が扱わない ATTRIB（ブロック属性の実値: 測点名・番号など）用の独自ハンドラを登録する
+// dxf-parser のハンドラ規約: parseEntity(scanner, curr) で code 0 に達するまで読み進めて返す
+function registerExtraDxfHandlers(parser) {
+    if(!parser || typeof parser.registerEntityHandler !== 'function') return;
+    class AttribHandler {
+        constructor() { this.ForEntityName = 'ATTRIB'; }
+        parseEntity(scanner, curr) {
+            const ent = { type: 'ATTRIB' };
+            const readPoint = (g) => {
+                const p = { x: g.value };
+                let n = scanner.next();
+                if(n.code === g.code + 10) {
+                    p.y = n.value;
+                    n = scanner.next();
+                    if(n.code === g.code + 20) p.z = n.value; else scanner.rewind();
+                } else { scanner.rewind(); }
+                return p;
+            };
+            curr = scanner.next();
+            while(!scanner.isEOF() && curr.code !== 0) {
+                switch(curr.code) {
+                    case 1: ent.text = curr.value; break;
+                    case 2: ent.tag = curr.value; break;
+                    case 8: ent.layer = curr.value; break;
+                    case 10: ent.startPoint = readPoint(curr); break;
+                    case 11: ent.endPoint = readPoint(curr); break;
+                    case 40: ent.textHeight = curr.value; break;
+                    case 41: ent.xScale = curr.value; break;
+                    case 50: ent.rotation = curr.value; break;
+                    case 60: ent.visible = (curr.value === 0); break;
+                    case 62: ent.colorIndex = curr.value; break;
+                    case 67: ent.inPaperSpace = (curr.value !== 0); break;
+                    case 70: ent.invisible = !!(curr.value & 1); ent.constant = !!(curr.value & 2); break;
+                    case 72: ent.halign = curr.value; break;
+                    case 74: ent.valign = curr.value; break;
+                    case 420: ent.color = curr.value; break;
+                    default: break;
+                }
+                curr = scanner.next();
+            }
+            return ent;
+        }
+    }
+    parser.registerEntityHandler(AttribHandler);
+}
+
+// ===== 取り込み先の準備（置き換え / 追加） =====
+// 図面が空でなければ確認し、置き換えの場合は図形・画層を初期化する。Undoは1回分にまとめる
+function _prepareImportTarget() {
+    saveUndo();
+    if(entities.length === 0) return 'fresh';
+    const replace = confirm('現在の図面を置き換えて開きますか？\n\n[OK] 置き換える\n[キャンセル] 現在の図面に追加する');
+    if(!replace) return 'append';
+    entities.length = 0;
+    layers.splice(0, layers.length, { name: '0', color: '#00ffff', visible: true });
+    currentLayerIndex = 0;
+    cmdState.highlightIdx = -1; cmdState.selectedIndices = [];
+    if(typeof window.setCurrentProjectName === 'function') window.setCurrentProjectName(null);
+    initLayers();
+    return 'replace';
+}
+
+// ===== 画層・色ヘルパー =====
+function rgbIntToHex(n) {
+    n = Number(n) || 0;
+    return '#' + ((n >>> 16) & 255).toString(16).padStart(2, '0') + ((n >>> 8) & 255).toString(16).padStart(2, '0') + (n & 255).toString(16).padStart(2, '0');
+}
+// dxf-parser の画層: colorIndex=ACI番号, color=RGB整数（ACIから変換済み）。以前は color をACIとして扱っていたため全画層が白になっていた
+function dxfLayerColorHex(dl) {
+    if(!dl) return '#FFFFFF';
+    if(typeof dl.colorIndex === 'number' && dl.colorIndex > 0 && dl.colorIndex < 256) return aciToHex(Math.abs(dl.colorIndex));
+    if(typeof dl.color === 'number') return dl.color <= 255 ? aciToHex(dl.color) : rgbIntToHex(dl.color);
+    return '#FFFFFF';
+}
+// エンティティ色: 256=ByLayer, 0=ByBlock → null（画層色で描画）。トゥルーカラー(420)はRGB整数
+function dxfEntityColorHex(e) {
+    if(e.colorIndex !== undefined && e.colorIndex !== 256 && e.colorIndex !== 0) return aciToHex(e.colorIndex);
+    if(e.colorIndex === undefined && typeof e.color === 'number' && e.color > 255) return rgbIntToHex(e.color);
+    return null;
+}
+let _dxfLayersAdded = false;
+// 画層テーブルに無い画層名を参照する図形があれば、その場で画層を作る（従来は画層0に寄せていた）
+function dxfLayerIndex(name) {
+    const nm = (name === undefined || name === null || name === '') ? '0' : String(name);
+    let idx = layers.findIndex(l => l.name === nm);
+    if(idx < 0) { layers.push({ name: nm, color: '#FFFFFF', visible: true }); idx = layers.length - 1; _dxfLayersAdded = true; }
+    return idx;
+}
+
+function importDxfData(dxf, opts) {
+    opts = opts || {};
+    if(!opts.skipUndo) saveUndo();
+    _dxfLayersAdded = false;
+    const hideArcs = shouldHideImportedArcs();
+    let importCount = 0;
+    const skipStats = {};
+    const noteSkip = (t) => { skipStats[t] = (skipStats[t] || 0) + 1; };
+
+    // 画層の読み込み（色はACI番号、非表示/フリーズ状態も引き継ぐ）
     if(dxf.tables && dxf.tables.layer && dxf.tables.layer.layers) {
         const dxfLayers = dxf.tables.layer.layers;
         Object.keys(dxfLayers).forEach(name => {
+            const dl = dxfLayers[name];
             if(!layers.find(l => l.name === name)) {
-                const dl = dxfLayers[name];
-                layers.push({ name: name, color: aciToHex(dl.color || 7), visible: true });
+                layers.push({ name: name, color: dxfLayerColorHex(dl), visible: !(dl.visible === false || dl.frozen === true) });
             }
         });
         initLayers();
     }
 
-    // エンティティの読み込み（INSERT以外）
-    if(dxf.entities) {
-        dxf.entities.forEach(e => {
-            if(e.type === 'INSERT') return; // ブロック参照は後で処理
-            // モデル空間のみを読み込む（ペーパースペース/レイアウト空間の図形を除外）
-            if(e.inPaperSpace || e.paperSpace) { skipCount++; return; }
-            
-            try {
-                const results = convertDxfEntity(e);
-                if(results) {
-                    if(Array.isArray(results)) { results.forEach(r => entities.push(r)); importCount += results.length; }
-                    else { entities.push(results); importCount++; }
-                } else { skipCount++; }
-            } catch(err) { skipCount++; console.warn('エンティティ変換エラー:', e.type, err); }
-        });
-    }
+    const blocks = dxf.blocks || {};
+    const addEntity = (ent) => {
+        if(!ent) return;
+        if(hideArcs && ent.type === 'ARC') ent.hidden = true;
+        entities.push(ent); importCount++;
+    };
+    const addResults = (results) => {
+        if(!results) return false;
+        if(Array.isArray(results)) { results.forEach(addEntity); return results.length > 0; }
+        addEntity(results); return true;
+    };
 
-    // ブロック参照(INSERT)の再帰展開
-    if(dxf.blocks && dxf.entities) {
-        dxf.entities.forEach(e => {
+    // エンティティは元の順序で処理する（ATTRIB は直前の INSERT に属する属性文字のため）
+    let lastInsertGid = null, lastInsertBlock = null;
+    (dxf.entities || []).forEach(e => {
+        if(e.inPaperSpace || e.paperSpace) { noteSkip('ペーパー空間'); lastInsertGid = null; return; }
+        try {
             if(e.type === 'INSERT') {
-                try {
-                    const expanded = expandInsert(e, dxf.blocks, 0);
-                    expanded.forEach(ent => entities.push(ent));
-                    importCount += expanded.length;
-                } catch(err) { skipCount++; console.warn('ブロック展開エラー:', e.name, err); }
+                const gid = newGroupId('b');
+                const expanded = expandInsert(e, blocks, 0, gid, e.name);
+                if(expanded.length === 0) noteSkip('INSERT:' + (e.name || '?'));
+                expanded.forEach(addEntity);
+                lastInsertGid = gid; lastInsertBlock = e.name;
+                return;
             }
-        });
-    }
+            if(e.type === 'ATTRIB') {
+                if(e.invisible) return; // 不可視属性は描画しない
+                const t = convertDxfEntity(e);
+                if(t) { if(lastInsertGid) { t.gid = lastInsertGid; t.blockName = lastInsertBlock; } addEntity(t); }
+                else noteSkip('ATTRIB');
+                return; // 属性の並びは INSERT の続きなので lastInsertGid を維持
+            }
+            lastInsertGid = null; lastInsertBlock = null;
+            if(e.type === 'DIMENSION') {
+                const dimEnts = expandDimension(e, blocks);
+                if(dimEnts.length === 0) noteSkip('DIMENSION');
+                dimEnts.forEach(addEntity);
+                return;
+            }
+            if(!addResults(convertDxfEntity(e))) noteSkip(e.type || '?');
+        } catch(err) { noteSkip(e.type || '?'); console.warn('エンティティ変換エラー:', e.type, err); }
+    });
 
-    addCommandLog(`  読み込み: ${importCount}個 / スキップ: ${skipCount}個`);
+    if(_dxfLayersAdded) initLayers();
+
+    const skipTotal = Object.values(skipStats).reduce((a, b) => a + b, 0);
+    addCommandLog(`  読み込み: ${importCount}個 / スキップ: ${skipTotal}個`);
+    if(skipTotal > 0) {
+        const detail = Object.entries(skipStats).sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t}×${c}`).join(', ');
+        addCommandLog(`  未対応・除外: ${detail}`);
+    }
 
     // === 重い画層の自動非表示 ===
-    // 全エンティティ数が多い場合、エンティティ数が多い画層を自動的に非表示にする
-    const AUTO_HIDE_TOTAL_THRESHOLD = 500;   // 全体がこの数を超えたら自動非表示を検討
-    const AUTO_HIDE_LAYER_THRESHOLD = 200;   // この数以上のエンティティを持つ画層を非表示に
-
+    // 全エンティティ数が非常に多い場合のみ、極端に多い画層を自動非表示にする（bboxカリングがあるため閾値は高め）
+    const AUTO_HIDE_TOTAL_THRESHOLD = 4000;
+    const AUTO_HIDE_LAYER_THRESHOLD = 2000;
+    const autoHidden = [];
     if(entities.length > AUTO_HIDE_TOTAL_THRESHOLD) {
-        // 画層ごとのエンティティ数を集計
         const layerCounts = {};
-        entities.forEach(e => {
-            const li = e.layer !== undefined ? e.layer : 0;
-            layerCounts[li] = (layerCounts[li] || 0) + 1;
-        });
-
-        // エンティティ数が多い順にソート
-        const sorted = Object.entries(layerCounts).sort((a, b) => b[1] - a[1]);
-        const hiddenLayerNames = [];
-
-        sorted.forEach(([layerIdx, count]) => {
+        entities.forEach(e => { const li = e.layer !== undefined ? e.layer : 0; layerCounts[li] = (layerCounts[li] || 0) + 1; });
+        Object.entries(layerCounts).sort((a, b) => b[1] - a[1]).forEach(([layerIdx, count]) => {
             const idx = parseInt(layerIdx);
-            if(count >= AUTO_HIDE_LAYER_THRESHOLD && layers[idx]) {
-                layers[idx].visible = false;
-                hiddenLayerNames.push(`${layers[idx].name}(${count}個)`);
-            }
+            if(count >= AUTO_HIDE_LAYER_THRESHOLD && layers[idx]) { layers[idx].visible = false; autoHidden.push(`${layers[idx].name}(${count}個)`); }
         });
-
-        if(hiddenLayerNames.length > 0) {
-            addCommandLog(`⚡ 軽量化: 重い画層を自動非表示にしました:`);
-            hiddenLayerNames.forEach(name => addCommandLog(`   🚫 ${name}`));
-            addCommandLog(`  ※ 画層パネル(👁️)から再表示できます`);
+        if(autoHidden.length > 0) {
+            addCommandLog(`⚡ 軽量化: 重い画層を自動非表示にしました: ${autoHidden.join(', ')}`);
+            addCommandLog(`  ※ 画層パネル(👁)から再表示できます`);
         }
     }
 
     if(typeof updateLayerPanel === 'function') updateLayerPanel();
     zoomExtents();
     render();
+    if(typeof showToast === 'function') {
+        let msg = `読み込み完了: ${importCount}個の図形`;
+        if(skipTotal > 0) msg += `（未対応 ${skipTotal}個）`;
+        if(autoHidden.length > 0) msg += `\n重い画層を自動非表示: ${autoHidden.length}件`;
+        showToast(msg, 4000);
+    }
+    return { importCount, skipStats };
+}
+
+// ===== 寸法(DIMENSION)の展開 =====
+// DXFの寸法は実描画形状が匿名ブロック(*Dnn)に入っている。ブロックがあればそれを展開し、
+// 無ければ寸法値テキストだけを配置する。展開した部品は1グループ(ブロック名「寸法」)にまとめる
+function expandDimension(e, blocks) {
+    const gid = newGroupId('d');
+    let ents = [];
+    if(e.block && blocks[e.block]) {
+        ents = expandInsert({ name: e.block, position: { x: 0, y: 0 }, xScale: 1, yScale: 1, rotation: 0 }, blocks, 0, gid, '寸法');
+    }
+    if(ents.length === 0) {
+        const pt = e.middleOfText || e.anchorPoint;
+        if(pt) {
+            let txt = (e.text !== undefined && e.text !== null) ? String(e.text) : '';
+            const measured = (e.actualMeasurement !== undefined) ? String(Math.round(e.actualMeasurement * 100) / 100) : '';
+            if(txt === '' || txt === '<>') txt = measured;
+            else if(txt.includes('<>')) txt = txt.replace('<>', measured);
+            txt = _decodeCadText(txt);
+            if(txt) ents.push({ type: 'TEXT', layer: dxfLayerIndex(e.layer), color: dxfEntityColorHex(e), x: pt.x, y: pt.y, text: txt, height: 2.5, halign: 'center', valign: 'middle', gid, blockName: '寸法' });
+        }
+    }
+    return ents;
 }
 
 // ===== ブロック参照(INSERT)の再帰展開 =====
-function expandInsert(insertEnt, blocks, depth) {
+// ・ブロック基点(BLOCK 10/20)を差し引いてから縮尺・回転・挿入点を適用する
+// ・ネストしたINSERTは親の回転・縮尺を継承する
+// ・展開した図形には gid（挿入1つ＝1グループ）と blockName を付与し、まとめて選択・移動・非表示できるようにする
+function expandInsert(insertEnt, blocks, depth, gid, blockName) {
     if(depth > 10) return []; // 無限再帰防止
-    const blockName = insertEnt.name;
-    const block = blocks[blockName];
+    const block = blocks[insertEnt.name];
     if(!block || !block.entities) return [];
+    gid = gid || newGroupId('b');
+    blockName = blockName || insertEnt.name;
 
-    const ix = insertEnt.position ? insertEnt.position.x : 0;
-    const iy = insertEnt.position ? insertEnt.position.y : 0;
-    const sx = insertEnt.xScale || 1, sy = insertEnt.yScale || 1;
-    const rot = (insertEnt.rotation || 0) * Math.PI / 180;
-    const cols = insertEnt.columnCount || 1, rows = insertEnt.rowCount || 1;
+    const ix = insertEnt.position ? (insertEnt.position.x || 0) : 0;
+    const iy = insertEnt.position ? (insertEnt.position.y || 0) : 0;
+    const sx = (insertEnt.xScale === undefined || insertEnt.xScale === 0) ? 1 : insertEnt.xScale;
+    const sy = (insertEnt.yScale === undefined || insertEnt.yScale === 0) ? 1 : insertEnt.yScale;
+    const rotDeg = insertEnt.rotation || 0;
+    const rot = rotDeg * Math.PI / 180;
+    const cosR = Math.cos(rot), sinR = Math.sin(rot);
+    const bpx = block.position ? (block.position.x || 0) : 0;
+    const bpy = block.position ? (block.position.y || 0) : 0;
+    const cols = Math.max(1, insertEnt.columnCount || 1), rows = Math.max(1, insertEnt.rowCount || 1);
     const colSpacing = insertEnt.columnSpacing || 0, rowSpacing = insertEnt.rowSpacing || 0;
+    // 基点補正: world = R·S·(p − 基点) + 挿入点 = R·S·p + (挿入点 − R·S·基点)
+    const baseOffX = -(sx * bpx * cosR - sy * bpy * sinR);
+    const baseOffY = -(sx * bpx * sinR + sy * bpy * cosR);
 
     const result = [];
+    const tag = (ent) => { if(ent) { ent.gid = gid; ent.blockName = blockName; result.push(ent); } };
+    const tagAll = (r) => { if(!r) return; if(Array.isArray(r)) r.forEach(tag); else tag(r); };
 
     for(let col = 0; col < cols; col++) {
         for(let row = 0; row < rows; row++) {
-            const baseX = ix + col * colSpacing;
-            const baseY = iy + row * rowSpacing;
+            // 配列複写の間隔はブロック座標系（縮尺・回転後）で並ぶ
+            const dcol = col * colSpacing, drow = row * rowSpacing;
+            const ox = ix + baseOffX + (sx * dcol * cosR - sy * drow * sinR);
+            const oy = iy + baseOffY + (sx * dcol * sinR + sy * drow * cosR);
 
             block.entities.forEach(be => {
-                if(be.type === 'INSERT') {
-                    // ネストされたブロック参照を再帰展開
-                    const nestedInsert = Object.assign({}, be);
-                    if(nestedInsert.position) {
-                        const px = nestedInsert.position.x * sx;
-                        const py = nestedInsert.position.y * sy;
-                        const rx = px * Math.cos(rot) - py * Math.sin(rot);
-                        const ry = px * Math.sin(rot) + py * Math.cos(rot);
-                        nestedInsert.position = { x: rx + baseX, y: ry + baseY };
+                try {
+                    if(be.type === 'INSERT') {
+                        const px = be.position ? (be.position.x || 0) : 0, py = be.position ? (be.position.y || 0) : 0;
+                        const nested = Object.assign({}, be, {
+                            position: { x: ox + (sx * px * cosR - sy * py * sinR), y: oy + (sx * px * sinR + sy * py * cosR) },
+                            rotation: (be.rotation || 0) + rotDeg,
+                            xScale: ((be.xScale === undefined || be.xScale === 0) ? 1 : be.xScale) * sx,
+                            yScale: ((be.yScale === undefined || be.yScale === 0) ? 1 : be.yScale) * sy
+                        });
+                        expandInsert(nested, blocks, depth + 1, gid, blockName).forEach(n => result.push(n));
+                    } else if(be.type === 'ATTDEF') {
+                        // 定数属性だけはブロック定義の値をそのまま表示する。可変属性の値は INSERT 側の ATTRIB が持つ
+                        if(be.constant && !be.invisible) tagAll(convertDxfEntity(Object.assign({}, be, { type: 'TEXT', halign: be.horizontalJustification, valign: be.verticalJustification }), ox, oy, sx, sy, rot));
+                    } else if(be.type === 'ATTRIB') {
+                        if(!be.invisible) tagAll(convertDxfEntity(be, ox, oy, sx, sy, rot));
+                    } else {
+                        tagAll(convertDxfEntity(be, ox, oy, sx, sy, rot));
                     }
-                    if(nestedInsert.xScale) nestedInsert.xScale *= sx;
-                    if(nestedInsert.yScale) nestedInsert.yScale *= sy;
-                    const nested = expandInsert(nestedInsert, blocks, depth + 1);
-                    nested.forEach(n => result.push(n));
-                } else {
-                    try {
-                        const transformed = convertDxfEntity(be, baseX, baseY, sx, sy, rot);
-                        if(transformed) {
-                            if(Array.isArray(transformed)) transformed.forEach(t => result.push(t));
-                            else result.push(transformed);
-                        }
-                    } catch(err) { console.warn('ブロック内エンティティ変換エラー:', be.type, err); }
-                }
+                } catch(err) { console.warn('ブロック内エンティティ変換エラー:', be.type, err); }
             });
         }
     }
     return result;
 }
 
-// ===== DXFエンティティ変換（拡張版） =====
-function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
-    offX = offX || 0; offY = offY || 0; scaleX = scaleX || 1; scaleY = scaleY || 1; rotation = rotation || 0;
-    const tx = (x, y) => {
-        const sx = x * scaleX, sy = y * scaleY;
-        if(rotation === 0) return sx + offX;
-        return sx * Math.cos(rotation) - sy * Math.sin(rotation) + offX;
-    };
-    const ty = (x, y) => {
-        const sx = x * scaleX, sy = y * scaleY;
-        if(rotation === 0) return sy + offY;
-        return sx * Math.sin(rotation) + sy * Math.cos(rotation) + offY;
-    };
-    const layerIdx = layers.findIndex(l => l.name === (e.layer || '0'));
-    const layer = Math.max(0, layerIdx);
-    let color = null; // デフォルトはByLayer
-    if(e.colorIndex !== undefined && e.colorIndex !== 256 && e.colorIndex !== 0) {
-        color = aciToHex(e.colorIndex);
+// ===== 幾何ヘルパー =====
+// ポリラインの bulge（円弧セグメント）を折れ線で近似展開する。bulge = tan(挟角/4)、正=反時計回り
+function expandBulgeVertices(vertices, closed, segsPer90) {
+    const out = [];
+    const n = vertices.length;
+    segsPer90 = segsPer90 || 8;
+    for(let i = 0; i < n; i++) {
+        const v = vertices[i];
+        out.push({ x: v.x, y: v.y });
+        const bulge = v.bulge || 0;
+        if(!bulge) continue;
+        if(i === n - 1 && !closed) continue; // 開いたポリラインの末尾 bulge は無視
+        const nx = vertices[(i + 1) % n];
+        if(!nx) continue;
+        const theta = 4 * Math.atan(bulge);            // 符号付き挟角
+        const dx = nx.x - v.x, dy = nx.y - v.y, d = Math.hypot(dx, dy);
+        if(d < 1e-12 || Math.abs(theta) < 1e-9) continue;
+        const r = d / (2 * Math.sin(Math.abs(theta) / 2));
+        const mx = (v.x + nx.x) / 2, my = (v.y + nx.y) / 2;
+        const lnx = -dy / d, lny = dx / d;              // 弦の左法線
+        const h = r * Math.cos(Math.abs(theta) / 2);   // 中点→中心の距離（挟角>180°なら負）
+        const sgn = bulge > 0 ? 1 : -1;
+        const cx = mx + sgn * lnx * h, cy = my + sgn * lny * h;
+        const a1 = Math.atan2(v.y - cy, v.x - cx);
+        const steps = Math.max(1, Math.ceil(Math.abs(theta) / (Math.PI / 2) * segsPer90));
+        for(let k = 1; k < steps; k++) {
+            const a = a1 + theta * k / steps;
+            out.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+        }
     }
+    return out;
+}
+
+// B-スプライン（非有理）の de Boor 評価。knots が無ければ clamped uniform を生成
+function evalBSplinePoints(ctrl, degree, knots, samples) {
+    const n = ctrl.length;
+    if(n < 2) return ctrl.map(p => ({ x: p.x, y: p.y }));
+    let p = degree || 3; if(p >= n) p = n - 1;
+    let k = (knots && knots.length === n + p + 1) ? knots.slice() : null;
+    if(!k) {
+        k = [];
+        for(let i = 0; i <= p; i++) k.push(0);
+        const inner = n - p - 1;
+        for(let i = 1; i <= inner; i++) k.push(i / (inner + 1));
+        for(let i = 0; i <= p; i++) k.push(1);
+    }
+    const u0 = k[p], u1 = k[n];
+    if(!(u1 > u0)) return ctrl.map(pt => ({ x: pt.x, y: pt.y }));
+    const pts = [];
+    for(let s = 0; s <= samples; s++) {
+        let u = u0 + (u1 - u0) * s / samples;
+        if(s === samples) u = u1;
+        let span = p;
+        if(u >= u1) span = n - 1; else { while(span < n - 1 && u >= k[span + 1]) span++; }
+        const d = [];
+        for(let j = 0; j <= p; j++) { const c = ctrl[span - p + j]; d.push({ x: c.x, y: c.y }); }
+        for(let r = 1; r <= p; r++) {
+            for(let j = p; j >= r; j--) {
+                const i = span - p + j;
+                const den = k[i + p - r + 1] - k[i];
+                const a = den === 0 ? 0 : (u - k[i]) / den;
+                d[j] = { x: (1 - a) * d[j - 1].x + a * d[j].x, y: (1 - a) * d[j - 1].y + a * d[j].y };
+            }
+        }
+        pts.push(d[p]);
+    }
+    return pts;
+}
+
+// ===== DXFエンティティ変換 =====
+// (offX, offY, scaleX, scaleY, rotation) はブロック展開時の変換。回転はラジアン
+function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
+    offX = offX || 0; offY = offY || 0;
+    scaleX = (scaleX === undefined || scaleX === 0) ? 1 : scaleX;
+    scaleY = (scaleY === undefined || scaleY === 0) ? 1 : scaleY;
+    rotation = rotation || 0;
+    const D2R = Math.PI / 180;
+    const cosR = Math.cos(rotation), sinR = Math.sin(rotation);
+    const tx = (x, y) => scaleX * x * cosR - scaleY * y * sinR + offX;
+    const ty = (x, y) => scaleX * x * sinR + scaleY * y * cosR + offY;
+    const tvec = (x, y) => ({ x: scaleX * x * cosR - scaleY * y * sinR, y: scaleX * x * sinR + scaleY * y * cosR });
+    const mirrored = (scaleX * scaleY) < 0;
+    const sAbs = Math.abs(scaleX);
+    const layer = dxfLayerIndex(e.layer);
+    const color = dxfEntityColorHex(e);
+    const base = { layer, color };
+    if(e.visible === false) base.hidden = true;
+    const mk = (obj) => Object.assign({}, base, obj);
 
     // LINE
     if(e.type === 'LINE') {
         if(!e.vertices || e.vertices.length < 2) return null;
-        return {type:'LINE', layer, color,
-            x1:tx(e.vertices[0].x, e.vertices[0].y), y1:ty(e.vertices[0].x, e.vertices[0].y),
-            x2:tx(e.vertices[1].x, e.vertices[1].y), y2:ty(e.vertices[1].x, e.vertices[1].y)};
+        const a = e.vertices[0], b = e.vertices[1];
+        return mk({ type: 'LINE', x1: tx(a.x, a.y), y1: ty(a.x, a.y), x2: tx(b.x, b.y), y2: ty(b.x, b.y) });
     }
     // CIRCLE
     if(e.type === 'CIRCLE') {
         if(!e.center) return null;
-        return {type:'CIRCLE', layer, color, cx:tx(e.center.x, e.center.y), cy:ty(e.center.x, e.center.y), radius:e.radius*Math.abs(scaleX)};
+        return mk({ type: 'CIRCLE', cx: tx(e.center.x, e.center.y), cy: ty(e.center.x, e.center.y), radius: (e.radius || 0) * sAbs });
     }
-    // ARC
+    // ARC: 始点・終点を変換してから角度を求め直す（回転・鏡像に正しく追従）
     if(e.type === 'ARC') {
         if(!e.center) return null;
-        let sa = (e.startAngle || 0) * Math.PI / 180;
-        let ea = (e.endAngle || 360) * Math.PI / 180;
-        if(rotation !== 0) { sa += rotation; ea += rotation; }
-        return {type:'ARC', layer, color, cx:tx(e.center.x, e.center.y), cy:ty(e.center.x, e.center.y), radius:e.radius*Math.abs(scaleX), startAngle:sa, endAngle:ea, counterclockwise:true, hidden:true};
+        const r = e.radius || 0;
+        const sa = (e.startAngle || 0) * D2R, ea = (e.endAngle === undefined ? 360 : e.endAngle) * D2R;
+        const c = { x: tx(e.center.x, e.center.y), y: ty(e.center.x, e.center.y) };
+        const sx0 = e.center.x + r * Math.cos(sa), sy0 = e.center.y + r * Math.sin(sa);
+        const ex0 = e.center.x + r * Math.cos(ea), ey0 = e.center.y + r * Math.sin(ea);
+        const ps = { x: tx(sx0, sy0), y: ty(sx0, sy0) };
+        const pe = { x: tx(ex0, ey0), y: ty(ex0, ey0) };
+        return mk({ type: 'ARC', cx: c.x, cy: c.y, radius: r * sAbs,
+            startAngle: Math.atan2(ps.y - c.y, ps.x - c.x), endAngle: Math.atan2(pe.y - c.y, pe.x - c.x), counterclockwise: !mirrored });
     }
-    // LWPOLYLINE / POLYLINE
+    // LWPOLYLINE / POLYLINE（bulge の円弧セグメントは折れ線近似で展開）
     if(e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') {
-        const pts = (e.vertices || []).map(v => ({x:tx(v.x, v.y), y:ty(v.x, v.y)}));
-        if(pts.length >= 2) return {type:'PLINE', layer, color, points:pts, closed:!!e.shape};
+        const verts = (e.vertices || []).filter(v => v && typeof v.x === 'number' && typeof v.y === 'number');
+        if(verts.length < 2) return null;
+        const closed = !!e.shape;
+        const pts = expandBulgeVertices(verts, closed).map(v => ({ x: tx(v.x, v.y), y: ty(v.x, v.y) }));
+        if(pts.length >= 2) return mk({ type: 'PLINE', points: pts, closed });
+        return null;
     }
     // POINT
     if(e.type === 'POINT') {
         if(!e.position) return null;
-        return {type:'POINT', layer, color, x:tx(e.position.x, e.position.y), y:ty(e.position.x, e.position.y)};
+        return mk({ type: 'POINT', x: tx(e.position.x, e.position.y), y: ty(e.position.x, e.position.y) });
     }
-    // ELLIPSE
+    // ELLIPSE: 長軸ベクトルを変換して半径・回転を求め直す
     if(e.type === 'ELLIPSE') {
         if(!e.center || !e.majorAxisEndPoint) return null;
-        const rx = Math.sqrt(e.majorAxisEndPoint.x**2 + e.majorAxisEndPoint.y**2) * Math.abs(scaleX);
+        const m = tvec(e.majorAxisEndPoint.x, e.majorAxisEndPoint.y);
+        const rx = Math.hypot(m.x, m.y);
         const ry = rx * (e.axisRatio || 1);
-        let rot = Math.atan2(e.majorAxisEndPoint.y, e.majorAxisEndPoint.x);
-        if(rotation !== 0) { rot += rotation; }
-        return {type:'ELLIPSE', layer, color, cx:tx(e.center.x, e.center.y), cy:ty(e.center.x, e.center.y), rx:rx, ry:ry, rotation:rot};
+        return mk({ type: 'ELLIPSE', cx: tx(e.center.x, e.center.y), cy: ty(e.center.x, e.center.y), rx, ry, rotation: Math.atan2(m.y, m.x) });
     }
-    // TEXT
-    if(e.type === 'TEXT') {
-        const pos = e.alignmentPoint || e.startPoint || e.position || {x:0, y:0};
+    // TEXT / ATTRIB（位置合わせ点は整列指定があるとき code 11 側を使う）
+    if(e.type === 'TEXT' || e.type === 'ATTRIB') {
+        const h = e.halign || 0, v = e.valign || 0;
+        const aligned = (h !== 0 || v !== 0) && e.endPoint && !(h === 3 || h === 5);
+        const pos = aligned ? e.endPoint : (e.startPoint || e.position || { x: 0, y: 0 });
         let halign = 'left', valign = 'bottom';
-        if(e.halign === 1 || e.halign === 4) halign = 'center';
-        else if(e.halign === 2) halign = 'right';
-        if(e.valign === 2) valign = 'middle';
-        else if(e.valign === 3) valign = 'top';
-        return {type:'TEXT', layer, color, x:tx(pos.x, pos.y), y:ty(pos.x, pos.y), text:_decodeCadText(e.text || ''), height:(e.textHeight || 2.5)*Math.abs(scaleX), halign, valign};
+        if(h === 1 || h === 4) halign = 'center'; else if(h === 2) halign = 'right';
+        if(v === 2) valign = 'middle'; else if(v === 3) valign = 'top';
+        const text = _decodeCadText(e.text || '');
+        if(!text) return null;
+        return mk({ type: 'TEXT', x: tx(pos.x, pos.y), y: ty(pos.x, pos.y), text, height: (e.textHeight || 2.5) * sAbs,
+            rotation: (e.rotation || 0) * D2R + rotation, halign, valign });
     }
-    // MTEXT
+    // MTEXT（回転はラジアン。方向ベクトル(11)があればそちらを優先）
     if(e.type === 'MTEXT') {
-        const pos = e.position || {x:0, y:0};
-        // MTEXTの書式コード除去（cad-text-parse.js: 貪欲マッチのデグレ対策済み・回帰テストあり）
-        let text = _cleanCadMtext(e.text || '');
+        const pos = e.position || { x: 0, y: 0 };
+        const text = _cleanCadMtext(e.text || '');
+        if(!text) return null;
         let halign = 'left', valign = 'top';
         const attach = e.attachmentPoint || 1;
         if(attach === 2 || attach === 5 || attach === 8) halign = 'center';
         else if(attach === 3 || attach === 6 || attach === 9) halign = 'right';
-        if(attach >= 1 && attach <= 3) valign = 'top';
-        else if(attach >= 4 && attach <= 6) valign = 'middle';
+        if(attach >= 4 && attach <= 6) valign = 'middle';
         else if(attach >= 7 && attach <= 9) valign = 'bottom';
-        return {type:'TEXT', layer, color, x:tx(pos.x, pos.y), y:ty(pos.x, pos.y), text:text, height:(e.height || e.nominalTextHeight || 2.5)*Math.abs(scaleX), halign, valign};
+        let rot = 0;
+        if(e.directionVector && (e.directionVector.x || e.directionVector.y)) rot = Math.atan2(e.directionVector.y, e.directionVector.x);
+        else if(e.rotation) rot = e.rotation;
+        return mk({ type: 'TEXT', x: tx(pos.x, pos.y), y: ty(pos.x, pos.y), text, height: (e.height || e.nominalTextHeight || 2.5) * sAbs,
+            rotation: rot + rotation, halign, valign });
     }
-    // HATCH - 境界パスをPLINEとして読み込み
+    // HATCH（dxf-parser未対応のため通常は到達しない。境界情報があればポリラインとして取り込む）
     if(e.type === 'HATCH') {
         const results = [];
-        if(e.boundaries || e.boundary) {
-            const boundaries = e.boundaries || e.boundary || [];
-            boundaries.forEach(b => {
-                // 境界エッジの処理
-                if(b.edges) {
-                    b.edges.forEach(edge => {
-                        if(edge.type === 'LINE' && edge.vertices && edge.vertices.length >= 2) {
-                            results.push({type:'LINE', layer, color,
-                                x1:tx(edge.vertices[0].x, edge.vertices[0].y), y1:ty(edge.vertices[0].x, edge.vertices[0].y),
-                                x2:tx(edge.vertices[1].x, edge.vertices[1].y), y2:ty(edge.vertices[1].x, edge.vertices[1].y)});
-                        } else if(edge.type === 'ARC' && edge.center) {
-                            const sa = (edge.startAngle || 0) * Math.PI / 180;
-                            const ea = (edge.endAngle || 360) * Math.PI / 180;
-                            results.push({type:'ARC', layer, color, cx:tx(edge.center.x, edge.center.y), cy:ty(edge.center.x, edge.center.y),
-                                radius:(edge.radius || 1)*Math.abs(scaleX), startAngle:sa, endAngle:ea, counterclockwise:!edge.isCounterClockwise, hidden:true});
-                        }
-                    });
-                }
-                // ポリライン境界
-                if(b.polyline && b.polyline.length >= 2) {
-                    const pts = b.polyline.map(v => ({x:tx(v.x, v.y), y:ty(v.x, v.y)}));
-                    results.push({type:'PLINE', layer, color, points:pts, closed:true});
-                }
-                // 頂点リスト
-                if(b.vertices && b.vertices.length >= 2) {
-                    const pts = b.vertices.map(v => ({x:tx(v.x, v.y), y:ty(v.x, v.y)}));
-                    results.push({type:'PLINE', layer, color, points:pts, closed:true});
-                }
-            });
-        }
+        const boundaries = e.boundaries || e.boundary || [];
+        boundaries.forEach(b => {
+            const src = b.polyline || b.vertices;
+            if(src && src.length >= 2) results.push(mk({ type: 'PLINE', points: src.map(v => ({ x: tx(v.x, v.y), y: ty(v.x, v.y) })), closed: true }));
+        });
         return results.length > 0 ? results : null;
     }
-    // SPLINE - 制御点でポリライン近似
+    // SPLINE: 制御点+ノットから曲線を評価。無ければフィット点
     if(e.type === 'SPLINE') {
-        const pts = (e.controlPoints || e.fitPoints || []).map(v => ({x:tx(v.x, v.y), y:ty(v.x, v.y)}));
-        if(pts.length >= 2) return {type:'PLINE', layer, color, points:pts, closed:!!e.closed};
+        let pts = [];
+        if(e.controlPoints && e.controlPoints.length >= 2) {
+            const samples = Math.min(400, Math.max(16, e.controlPoints.length * 8));
+            pts = evalBSplinePoints(e.controlPoints, e.degreeOfSplineCurve || 3, e.knotValues, samples);
+        } else if(e.fitPoints && e.fitPoints.length >= 2) {
+            pts = e.fitPoints;
+        }
+        pts = pts.map(v => ({ x: tx(v.x, v.y), y: ty(v.x, v.y) }));
+        if(pts.length >= 2) return mk({ type: 'PLINE', points: pts, closed: !!e.closed });
+        return null;
     }
-    // SOLID / 3DFACE - 三角形/四角形の塗りつぶし面
+    // SOLID / 3DFACE（SOLIDの頂点順は 1-2-4-3 のため 3,4 を入れ替えて多角形化）
     if(e.type === 'SOLID' || e.type === '3DFACE') {
-        const pts = [];
-        if(e.points) { e.points.forEach(p => pts.push({x:tx(p.x, p.y), y:ty(p.x, p.y)})); }
-        else {
-            ['corner1','corner2','corner3','corner4','firstCorner','secondCorner','thirdCorner','fourthCorner'].forEach(k => {
-                if(e[k]) pts.push({x:tx(e[k].x, e[k].y), y:ty(e[k].x, e[k].y)});
-            });
+        let src = [];
+        if(e.points) src = e.points.filter(p => p);
+        else ['corner1', 'corner2', 'corner3', 'corner4', 'firstCorner', 'secondCorner', 'thirdCorner', 'fourthCorner'].forEach(k => { if(e[k]) src.push(e[k]); });
+        if(src.length === 4 && e.type === 'SOLID') {
+            const p3 = src[2], p4 = src[3];
+            src = (Math.abs(p3.x - p4.x) < 1e-9 && Math.abs(p3.y - p4.y) < 1e-9) ? [src[0], src[1], p3] : [src[0], src[1], p4, p3];
         }
-        if(pts.length >= 3) return {type:'PLINE', layer, color, points:pts, closed:true};
+        const pts = src.map(p => ({ x: tx(p.x, p.y), y: ty(p.x, p.y) }));
+        if(pts.length >= 3) return mk({ type: 'PLINE', points: pts, closed: true });
+        return null;
     }
-    // DIMENSION - 寸法記入は線分+テキストに分解
+    // DIMENSION（ブロック内の寸法など、expandDimension を経由しない場合の簡易表示）
     if(e.type === 'DIMENSION') {
-        const results = [];
-        if(e.anchorPoint && e.middleOfText) {
-            // 寸法線
-            if(e.anchorPoint) results.push({type:'POINT', layer, color, x:tx(e.anchorPoint.x, e.anchorPoint.y), y:ty(e.anchorPoint.x, e.anchorPoint.y)});
-            // 寸法値テキスト
-            if(e.middleOfText) {
-                const val = e.text || '';
-                results.push({type:'TEXT', layer, color, x:tx(e.middleOfText.x, e.middleOfText.y), y:ty(e.middleOfText.x, e.middleOfText.y), text:val, height:2.5*Math.abs(scaleX)});
-            }
-        }
-        return results.length > 0 ? results : null;
+        const pt = e.middleOfText || e.anchorPoint;
+        if(!pt) return null;
+        let txt = (e.text !== undefined && e.text !== null) ? String(e.text) : '';
+        const measured = (e.actualMeasurement !== undefined) ? String(Math.round(e.actualMeasurement * 100) / 100) : '';
+        if(txt === '' || txt === '<>') txt = measured; else if(txt.includes('<>')) txt = txt.replace('<>', measured);
+        txt = _decodeCadText(txt);
+        if(!txt) return null;
+        return mk({ type: 'TEXT', x: tx(pt.x, pt.y), y: ty(pt.x, pt.y), text: txt, height: 2.5 * sAbs, halign: 'center', valign: 'middle' });
     }
-    // LEADER / MULTILEADER
+    // LEADER
     if(e.type === 'LEADER') {
-        const pts = (e.vertices || []).map(v => ({x:tx(v.x, v.y), y:ty(v.x, v.y)}));
-        if(pts.length >= 2) return {type:'PLINE', layer, color, points:pts, closed:false};
+        const pts = (e.vertices || []).map(v => ({ x: tx(v.x, v.y), y: ty(v.x, v.y) }));
+        if(pts.length >= 2) return mk({ type: 'PLINE', points: pts, closed: false });
     }
     return null;
 }
@@ -425,12 +636,12 @@ function exportDxf() {
                 if(e.closed) d.drawLine(e.points[e.points.length-1].x, e.points[e.points.length-1].y, e.points[0].x, e.points[0].y, opts);
             }
             else if(e.type === 'POINT') { d.drawPoint(e.x, e.y, opts); }
-            else if(e.type === 'TEXT') { d.drawText(e.x, e.y, e.height || 2.5, 0, e.text || '', opts); }
+            else if(e.type === 'TEXT') { d.drawText(e.x, e.y, e.height || 2.5, (e.rotation || 0) * 180 / Math.PI, String(e.text || '').replace(/\n/g, ' '), opts); }
             // 寸法は補助線+テキストとして出力
             else if(e.type === 'DIMENSION') { exportDimAsDxf(d, e); }
         });
         const blob = new Blob([d.toDxfString()], {type:'application/dxf'});
-        downloadBlob(blob, 'drawing.dxf');
+        downloadBlob(blob, exportFileName('dxf'));
         addCommandLog('-> DXFエクスポート完了');
     } catch(err) {
         addCommandLog(`エラー: DXFエクスポートに失敗 - ${err.message}`);
@@ -527,23 +738,17 @@ async function loadDwgFile(file) {
             return;
         }
 
-        // レイヤーの追加
-        importResult.layers.forEach(l => {
-            if(!layers.find(existing => existing.name === l.name)) {
-                layers.push(l);
-            }
-        });
-        if(importResult.layers.length > 0) initLayers();
-
-        // エンティティをインポート
-        saveUndo();
+        // エンティティをインポート（画層は変換時に layers へ直接追加済み）
+        initLayers();
         importResult.entities.forEach(e => entities.push(e));
         setDrawingName(file.name);
         addCommandLog(`-> DWGファイル読み込み完了: ${file.name} (${importResult.entities.length}個のオブジェクト)`);
         if(importResult.warnings.length > 0) {
             importResult.warnings.forEach(w => addCommandLog(`  注意: ${w}`));
         }
+        if(typeof updateLayerPanel === 'function') updateLayerPanel();
         zoomExtents(); render();
+        if(typeof showToast === 'function') showToast(`読み込み完了: ${importResult.entities.length}個の図形`, 4000);
 
     } catch(err) {
         addCommandLog(`エラー: DWGファイルの読み込みに失敗 - ${err.message}`);
@@ -554,207 +759,207 @@ async function loadDwgFile(file) {
 
 // ===== LibreDwg DwgDatabase からアプリ用エンティティへの変換 =====
 function convertDwgDatabaseToApp(db) {
-    const result = { entities: [], layers: [], warnings: [] };
-    
-    // 画層テーブルの処理
+    const result = { entities: [], warnings: [] };
+    const hideArcs = shouldHideImportedArcs();
+
+    // 画層テーブル: 既存の layers に無いものだけ追加し、以降は「名前→index」で解決する
+    // （従来は「既存数 + 新規リスト内の順番」で index を決めていたため、既存と重複する画層があるとずれていた）
     const layerTable = (db.tables && db.tables.LAYER) || (db.tables && db.tables.layer);
     if (layerTable && layerTable.entries) {
         layerTable.entries.forEach(l => {
             let hexColor = '#FFFFFF';
             let cIdx = l.colorIndex;
-            if (cIdx === undefined && l.color && l.color.colorIndex !== undefined) {
-                cIdx = l.color.colorIndex;
-            } else if (cIdx === undefined && typeof l.color === 'number') {
-                cIdx = l.color;
-            }
-            if (cIdx !== undefined && cIdx > 0 && cIdx < 256) {
-                hexColor = aciToHex(cIdx);
-            }
+            if (cIdx === undefined && l.color && l.color.colorIndex !== undefined) cIdx = l.color.colorIndex;
+            else if (cIdx === undefined && typeof l.color === 'number') cIdx = l.color;
+            if (cIdx !== undefined && cIdx > 0 && cIdx < 256) hexColor = aciToHex(cIdx);
             const lName = l.name || '0';
-            result.layers.push({ name: lName, color: hexColor, visible: !l.off && !l.frozen });
+            if (!layers.find(x => x.name === lName)) layers.push({ name: lName, color: hexColor, visible: !l.off && !l.frozen });
         });
     }
-
-    const defaultLayer = currentLayerIndex;
-    const defaultColor = '#FFFFFF';
+    const layerIndexOf = (name) => {
+        const nm = (name === undefined || name === null || name === '') ? '0' : String(name);
+        let idx = layers.findIndex(l => l.name === nm);
+        if (idx < 0) { layers.push({ name: nm, color: '#FFFFFF', visible: true }); idx = layers.length - 1; }
+        return idx;
+    };
 
     // ブロックレコードの準備 (INSERT用)
     const blocks = {};
     if (db.tables && db.tables.BLOCK_RECORD && db.tables.BLOCK_RECORD.entries) {
-        db.tables.BLOCK_RECORD.entries.forEach(b => {
-            blocks[b.name] = b;
-        });
+        db.tables.BLOCK_RECORD.entries.forEach(b => { blocks[b.name] = b; });
     }
 
     let importCount = 0;
-    let skipCount = 0;
+    const skipStats = {};
+    const noteSkip = (t) => { skipStats[t] = (skipStats[t] || 0) + 1; };
+    const push = (ent, gid, blockName) => {
+        if (gid) { ent.gid = gid; ent.blockName = blockName; }
+        if (hideArcs && ent.type === 'ARC') ent.hidden = true;
+        result.entities.push(ent); importCount++;
+    };
 
-    // 再帰的にエンティティを展開する内部関数
-    function processDwgEntity(ent, depth, pX, pY, sX, sY, rot) {
+    // 再帰的にエンティティを展開する内部関数（gid: 最上位INSERT単位のグループID）
+    function processDwgEntity(ent, depth, pX, pY, sX, sY, rot, gid, blockName) {
         if (depth > 10) return; // 無限再帰防止
-
         try {
             // ブロック参照 (INSERT) の再帰展開
             if (ent.type === 'INSERT') {
                 const b = blocks[ent.name];
+                const gidHere = gid || newGroupId('b');
+                const bnHere = blockName || ent.name;
                 if (b && b.entities && Array.isArray(b.entities)) {
                     const insX = ent.insertionPoint ? ent.insertionPoint.x : 0;
                     const insY = ent.insertionPoint ? ent.insertionPoint.y : 0;
-                    
-                    // 親の変換を適用した新しい原点
-                    const newPx = pX + (insX * sX * Math.cos(rot) - insY * sY * Math.sin(rot));
-                    const newPy = pY + (insX * sX * Math.sin(rot) + insY * sY * Math.cos(rot));
-                    
-                    const newSx = sX * (ent.xScale !== undefined ? ent.xScale : 1);
-                    const newSy = sY * (ent.yScale !== undefined ? ent.yScale : 1);
+                    const newSx = sX * (ent.xScale !== undefined && ent.xScale !== 0 ? ent.xScale : 1);
+                    const newSy = sY * (ent.yScale !== undefined && ent.yScale !== 0 ? ent.yScale : 1);
                     const newRot = rot + (ent.rotation || 0); // ラジアン想定
-                    
-                    b.entities.forEach(child => {
-                        processDwgEntity(child, depth + 1, newPx, newPy, newSx, newSy, newRot);
-                    });
+                    // 挿入点をワールドへ
+                    const insWx = pX + (insX * sX * Math.cos(rot) - insY * sY * Math.sin(rot));
+                    const insWy = pY + (insX * sX * Math.sin(rot) + insY * sY * Math.cos(rot));
+                    // ブロック基点があれば差し引く: world = R·S·(p − 基点) + 挿入点
+                    const bp = b.basePoint || b.origin || b.position || null;
+                    const bpx = bp ? (bp.x || 0) : 0, bpy = bp ? (bp.y || 0) : 0;
+                    const newPx = insWx - (newSx * bpx * Math.cos(newRot) - newSy * bpy * Math.sin(newRot));
+                    const newPy = insWy - (newSx * bpx * Math.sin(newRot) + newSy * bpy * Math.cos(newRot));
+                    b.entities.forEach(child => processDwgEntity(child, depth + 1, newPx, newPy, newSx, newSy, newRot, gidHere, bnHere));
                 }
-                return; // INSERT自体は描画オブジェクトではないためスキップ
+                // 属性（測点名など）が INSERT に付随している場合
+                const attrs = ent.attributes || ent.attribs || ent.attribList;
+                if (Array.isArray(attrs)) attrs.forEach(a => processDwgEntity(Object.assign({ type: 'ATTRIB' }, a), depth + 1, pX, pY, sX, sY, rot, gidHere, bnHere));
+                return;
             }
 
-            // 座標変換ヘルパー関数
             const tx = (x, y) => pX + (x * sX * Math.cos(rot) - y * sY * Math.sin(rot));
             const ty = (x, y) => pY + (x * sX * Math.sin(rot) + y * sY * Math.cos(rot));
+            const sAbs = Math.abs(sX);
 
             let layerName = '0';
-            if (ent.layer) {
-                layerName = typeof ent.layer === 'object' ? (ent.layer.name || '0') : ent.layer;
-            }
-            const appLayerIdx = layers.findIndex(l => l.name === layerName);
-            const newLayerIdx = result.layers.findIndex(l => l.name === layerName);
-            const layer = appLayerIdx >= 0 ? appLayerIdx : (newLayerIdx >= 0 ? layers.length + newLayerIdx : defaultLayer);
-            
-            let color = defaultColor;
-            if (ent.colorIndex !== undefined && ent.colorIndex !== 256 && ent.colorIndex !== 0) {
-                color = aciToHex(ent.colorIndex);
-            } else {
-                const lObj = result.layers.find(l => l.name === layerName) || layers.find(l => l.name === layerName);
-                if (lObj) color = lObj.color;
-            }
+            if (ent.layer) layerName = typeof ent.layer === 'object' ? (ent.layer.name || '0') : ent.layer;
+            const layer = layerIndexOf(layerName);
+
+            let color = null; // ByLayer
+            if (ent.colorIndex !== undefined && ent.colorIndex !== 256 && ent.colorIndex !== 0) color = aciToHex(ent.colorIndex);
+            const base = { layer, color };
 
             if (ent.type === 'LINE') {
-                if(ent.startPoint && ent.endPoint) {
-                    result.entities.push({type:'LINE', layer, color, 
-                        x1:tx(ent.startPoint.x, ent.startPoint.y), y1:ty(ent.startPoint.x, ent.startPoint.y), 
-                        x2:tx(ent.endPoint.x, ent.endPoint.y), y2:ty(ent.endPoint.x, ent.endPoint.y)});
-                    importCount++;
-                } else skipCount++;
+                if (ent.startPoint && ent.endPoint) {
+                    push(Object.assign({ type: 'LINE',
+                        x1: tx(ent.startPoint.x, ent.startPoint.y), y1: ty(ent.startPoint.x, ent.startPoint.y),
+                        x2: tx(ent.endPoint.x, ent.endPoint.y), y2: ty(ent.endPoint.x, ent.endPoint.y) }, base), gid, blockName);
+                } else noteSkip('LINE');
             } else if (ent.type === 'CIRCLE') {
-                if(ent.center && ent.radius) {
-                    result.entities.push({type:'CIRCLE', layer, color, 
-                        cx:tx(ent.center.x, ent.center.y), cy:ty(ent.center.x, ent.center.y), 
-                        radius:ent.radius * Math.abs(sX)});
-                    importCount++;
-                } else skipCount++;
+                if (ent.center && ent.radius) {
+                    push(Object.assign({ type: 'CIRCLE', cx: tx(ent.center.x, ent.center.y), cy: ty(ent.center.x, ent.center.y), radius: ent.radius * sAbs }, base), gid, blockName);
+                } else noteSkip('CIRCLE');
             } else if (ent.type === 'ARC') {
-                if(ent.center && ent.radius) {
-                    let sa = ent.startAngle || 0;
-                    let ea = ent.endAngle || (Math.PI * 2);
-                    if (rot !== 0) { sa += rot; ea += rot; }
-                    result.entities.push({type:'ARC', layer, color, 
-                        cx:tx(ent.center.x, ent.center.y), cy:ty(ent.center.x, ent.center.y), 
-                        radius:ent.radius * Math.abs(sX), 
-                        startAngle:sa, endAngle:ea, counterclockwise:true, hidden:true});
-                    importCount++;
-                } else skipCount++;
+                if (ent.center && ent.radius) {
+                    const sa = ent.startAngle || 0, ea = (ent.endAngle === undefined || ent.endAngle === null) ? Math.PI * 2 : ent.endAngle;
+                    const c = { x: tx(ent.center.x, ent.center.y), y: ty(ent.center.x, ent.center.y) };
+                    const r = ent.radius;
+                    const ps = { x: tx(ent.center.x + r * Math.cos(sa), ent.center.y + r * Math.sin(sa)), y: ty(ent.center.x + r * Math.cos(sa), ent.center.y + r * Math.sin(sa)) };
+                    const pe = { x: tx(ent.center.x + r * Math.cos(ea), ent.center.y + r * Math.sin(ea)), y: ty(ent.center.x + r * Math.cos(ea), ent.center.y + r * Math.sin(ea)) };
+                    push(Object.assign({ type: 'ARC', cx: c.x, cy: c.y, radius: r * sAbs,
+                        startAngle: Math.atan2(ps.y - c.y, ps.x - c.x), endAngle: Math.atan2(pe.y - c.y, pe.x - c.x),
+                        counterclockwise: (sX * sY) >= 0 }, base), gid, blockName);
+                } else noteSkip('ARC');
             } else if (ent.type === 'POINT') {
                 const pt = ent.position || ent.point;
-                if(pt) {
-                    result.entities.push({type:'POINT', layer, color, x:tx(pt.x, pt.y), y:ty(pt.x, pt.y)});
-                    importCount++;
-                } else skipCount++;
-            } else if (ent.type === 'TEXT') {
-                const pt = ent.alignmentPoint || ent.insertionPoint || ent.insertion_pt || ent.position;
+                if (pt) push(Object.assign({ type: 'POINT', x: tx(pt.x, pt.y), y: ty(pt.x, pt.y) }, base), gid, blockName);
+                else noteSkip('POINT');
+            } else if (ent.type === 'TEXT' || ent.type === 'ATTRIB') {
+                if (ent.type === 'ATTRIB' && (ent.invisible || (ent.flags & 1))) return;
+                const pt = ent.alignmentPoint || ent.insertionPoint || ent.insertion_pt || ent.position || ent.startPoint;
                 const textStr = _decodeCadText(ent.textValue !== undefined ? ent.textValue : (ent.text || ''));
                 let halign = 'left', valign = 'bottom';
-                if(ent.horizontalAlignment === 1 || ent.horizontalAlignment === 4) halign = 'center';
-                else if(ent.horizontalAlignment === 2) halign = 'right';
-                if(ent.verticalAlignment === 2) valign = 'middle';
-                else if(ent.verticalAlignment === 3) valign = 'top';
+                if (ent.horizontalAlignment === 1 || ent.horizontalAlignment === 4) halign = 'center';
+                else if (ent.horizontalAlignment === 2) halign = 'right';
+                if (ent.verticalAlignment === 2) valign = 'middle';
+                else if (ent.verticalAlignment === 3) valign = 'top';
                 if (pt && textStr) {
-                    result.entities.push({type:'TEXT', layer, color, 
-                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:textStr, height:(ent.height || 2.5) * Math.abs(sX), halign, valign});
-                    importCount++;
-                } else skipCount++;
+                    push(Object.assign({ type: 'TEXT', x: tx(pt.x, pt.y), y: ty(pt.x, pt.y), text: textStr,
+                        height: (ent.height || ent.textHeight || 2.5) * sAbs, rotation: (ent.rotation || 0) + rot, halign, valign }, base), gid, blockName);
+                } else noteSkip(ent.type);
             } else if (ent.type === 'MTEXT') {
                 const pt = ent.insertionPoint || ent.position;
-                let text = _cleanCadMtext(ent.text || ent.textValue || '');
+                const text = _cleanCadMtext(ent.text || ent.textValue || '');
                 let halign = 'left', valign = 'top';
                 const attach = ent.attachmentPoint || ent.attachment || 1;
-                if(attach === 2 || attach === 5 || attach === 8) halign = 'center';
-                else if(attach === 3 || attach === 6 || attach === 9) halign = 'right';
-                if(attach >= 1 && attach <= 3) valign = 'top';
-                else if(attach >= 4 && attach <= 6) valign = 'middle';
-                else if(attach >= 7 && attach <= 9) valign = 'bottom';
+                if (attach === 2 || attach === 5 || attach === 8) halign = 'center';
+                else if (attach === 3 || attach === 6 || attach === 9) halign = 'right';
+                if (attach >= 4 && attach <= 6) valign = 'middle';
+                else if (attach >= 7 && attach <= 9) valign = 'bottom';
+                let mrot = ent.rotation || 0;
+                const dv = ent.direction || ent.xAxisDirection;
+                if (dv && (dv.x || dv.y)) mrot = Math.atan2(dv.y, dv.x);
                 if (pt && text) {
-                    result.entities.push({type:'TEXT', layer, color, 
-                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:text, height:(ent.textHeight || ent.height || 2.5) * Math.abs(sX), halign, valign});
-                    importCount++;
-                } else skipCount++;
+                    push(Object.assign({ type: 'TEXT', x: tx(pt.x, pt.y), y: ty(pt.x, pt.y), text,
+                        height: (ent.textHeight || ent.height || 2.5) * sAbs, rotation: mrot + rot, halign, valign }, base), gid, blockName);
+                } else noteSkip('MTEXT');
             } else if (ent.type && ent.type.includes('DIMENSION')) {
                 const pt = ent.textPoint || ent.definitionPoint || ent.insertionPoint;
                 let dimText = ent.text;
-                if (!dimText && ent.measurement !== undefined) {
-                    dimText = parseFloat(ent.measurement).toFixed(0);
-                } else if (dimText && dimText.includes('<>')) {
-                    dimText = dimText.replace('<>', parseFloat(ent.measurement || 0).toFixed(0));
-                }
+                if (!dimText && ent.measurement !== undefined) dimText = parseFloat(ent.measurement).toFixed(0);
+                else if (dimText && dimText.includes('<>')) dimText = dimText.replace('<>', parseFloat(ent.measurement || 0).toFixed(0));
                 if (dimText) dimText = _decodeCadText(dimText);
                 if (pt && dimText) {
-                    result.entities.push({type:'TEXT', layer, color, 
-                        x:tx(pt.x, pt.y), y:ty(pt.x, pt.y), text:dimText, height: (ent.textHeight || ent.height || 2.5) * Math.abs(sX)});
-                    importCount++;
-                } else skipCount++;
+                    push(Object.assign({ type: 'TEXT', x: tx(pt.x, pt.y), y: ty(pt.x, pt.y), text: dimText, height: (ent.textHeight || ent.height || 2.5) * sAbs, halign: 'center', valign: 'middle' }, base), gid || newGroupId('d'), blockName || '寸法');
+                } else noteSkip('DIMENSION');
             } else if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE2D' || ent.type === 'POLYLINE_2D') {
                 if (ent.vertices && ent.vertices.length > 0) {
-                    const pts = ent.vertices.map(v => {
-                        const vx = v.x !== undefined ? v.x : v.point.x;
-                        const vy = v.y !== undefined ? v.y : v.point.y;
-                        return { x: tx(vx, vy), y: ty(vx, vy) };
+                    const verts = ent.vertices.map(v => {
+                        const vx = v.x !== undefined ? v.x : (v.point ? v.point.x : 0);
+                        const vy = v.y !== undefined ? v.y : (v.point ? v.point.y : 0);
+                        return { x: vx, y: vy, bulge: v.bulge || 0 };
                     });
-                    result.entities.push({type:'PLINE', layer, color, points:pts, closed: !!ent.flag || !!ent.closed});
-                    importCount++;
-                } else skipCount++;
+                    const closed = !!ent.closed || !!(ent.flag & 1) || !!ent.isClosed;
+                    const pts = expandBulgeVertices(verts, closed).map(v => ({ x: tx(v.x, v.y), y: ty(v.x, v.y) }));
+                    if (pts.length >= 2) push(Object.assign({ type: 'PLINE', points: pts, closed }, base), gid, blockName);
+                    else noteSkip('POLYLINE');
+                } else noteSkip('POLYLINE');
             } else if (ent.type === 'ELLIPSE') {
                 const center = ent.center;
                 const endPt = ent.majorAxisEndPoint;
                 if (center && endPt) {
                     // libredwg-web may return majorAxisEndPoint as absolute or relative depending on context/version.
-                    // We calculate both and assume the smaller magnitude is the true major axis.
-                    const rx_rel = Math.sqrt(endPt.x**2 + endPt.y**2);
-                    const rx_abs = Math.sqrt((endPt.x - center.x)**2 + (endPt.y - center.y)**2);
+                    const rx_rel = Math.sqrt(endPt.x ** 2 + endPt.y ** 2);
+                    const rx_abs = Math.sqrt((endPt.x - center.x) ** 2 + (endPt.y - center.y) ** 2);
                     const isAbsolute = rx_abs < rx_rel;
-                    
                     const dx = isAbsolute ? (endPt.x - center.x) : endPt.x;
                     const dy = isAbsolute ? (endPt.y - center.y) : endPt.y;
-                    
-                    const rx = Math.sqrt(dx**2 + dy**2) * Math.abs(sX);
+                    const rx = Math.sqrt(dx ** 2 + dy ** 2) * sAbs;
                     const ry = rx * (ent.axisRatio || 1);
-                    const ellipseRot = Math.atan2(dy, dx) + rot;
-                    
-                    result.entities.push({type:'ELLIPSE', layer, color, 
-                        cx:tx(center.x, center.y), cy:ty(center.x, center.y), rx:rx, ry:ry, rotation:ellipseRot}); 
-                    importCount++;
-                } else skipCount++;
+                    push(Object.assign({ type: 'ELLIPSE', cx: tx(center.x, center.y), cy: ty(center.x, center.y), rx, ry, rotation: Math.atan2(dy, dx) + rot }, base), gid, blockName);
+                } else noteSkip('ELLIPSE');
+            } else if (ent.type === 'SPLINE') {
+                let pts = [];
+                const ctrl = ent.controlPoints || ent.ctrlPts;
+                if (ctrl && ctrl.length >= 2) pts = evalBSplinePoints(ctrl, ent.degree || 3, ent.knots, Math.min(400, Math.max(16, ctrl.length * 8)));
+                else if (ent.fitPoints && ent.fitPoints.length >= 2) pts = ent.fitPoints;
+                pts = pts.map(v => ({ x: tx(v.x, v.y), y: ty(v.x, v.y) }));
+                if (pts.length >= 2) push(Object.assign({ type: 'PLINE', points: pts, closed: !!ent.closed }, base), gid, blockName);
+                else noteSkip('SPLINE');
+            } else if ((ent.type === 'SOLID' || ent.type === '3DFACE') && Array.isArray(ent.points || ent.corners)) {
+                let src = (ent.points || ent.corners).filter(p => p);
+                if (src.length === 4 && ent.type === 'SOLID') src = [src[0], src[1], src[3], src[2]];
+                const pts = src.map(p => ({ x: tx(p.x, p.y), y: ty(p.x, p.y) }));
+                if (pts.length >= 3) push(Object.assign({ type: 'PLINE', points: pts, closed: true }, base), gid, blockName);
+                else noteSkip(ent.type);
             } else {
-                skipCount++;
+                noteSkip(ent.type || '?');
             }
-        } catch(e) {
-            skipCount++;
+        } catch (e) {
+            noteSkip(ent && ent.type ? ent.type : '?');
         }
     }
 
     if (db.entities && Array.isArray(db.entities)) {
-        db.entities.forEach(ent => {
-            processDwgEntity(ent, 0, 0, 0, 1, 1, 0);
-        });
-        
-        addCommandLog(`  変換完了: ${importCount}個 (未対応図形スキップ: ${skipCount}個)`);
-        
+        db.entities.forEach(ent => processDwgEntity(ent, 0, 0, 0, 1, 1, 0, null, null));
+        const skipTotal = Object.values(skipStats).reduce((a, b) => a + b, 0);
+        addCommandLog(`  変換完了: ${importCount}個 (未対応図形スキップ: ${skipTotal}個)`);
+        if (skipTotal > 0) {
+            const detail = Object.entries(skipStats).sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t}×${c}`).join(', ');
+            addCommandLog(`  未対応・除外: ${detail}`);
+        }
     } else {
         result.warnings.push('DwgDatabase に entities が見つかりませんでした。');
     }
@@ -767,6 +972,14 @@ async function exportDwg() {
     addCommandLog('注意: DWG形式での保存は現在DXF形式にフォールバックされます。');
     exportDxf();
     addCommandLog('-> DXF形式として保存されました');
+}
+
+// エクスポート時のファイル名（図面名があればそれを使う）
+function exportFileName(ext) {
+    let base = (window._drawingName || '').trim();
+    if(!base && document.title && document.title !== 'Web CAD' && document.title !== 'WebCAD') base = document.title.replace(/ - WebCAD$/, '');
+    base = (base || 'drawing').replace(/\.(dxf|dwg)$/i, '').replace(/[\\/:*?"<>|]/g, '_');
+    return base + '.' + ext;
 }
 
 // ===== ファイルダウンロード =====
@@ -798,8 +1011,10 @@ function setupFileIO() {
         const file = e.target.files[0];
         if(!file) return;
         const ext = file.name.split('.').pop().toLowerCase();
-        if(ext === 'dxf') loadDxfFile(file);
-        else if(ext === 'dwg') loadDwgFile(file);
+        if(ext === 'dxf' || ext === 'dwg') {
+            _prepareImportTarget(); // 置き換え/追加の確認（Undo 1回分を保存）
+            if(ext === 'dxf') loadDxfFile(file); else loadDwgFile(file);
+        }
         else addCommandLog(`未対応の形式です: .${ext}`);
         fileInput.value = ''; // リセット
     });

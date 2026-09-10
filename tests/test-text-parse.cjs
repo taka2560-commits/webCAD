@@ -1,11 +1,17 @@
 // ===== cad-text-parse.js の回帰テスト =====
-// 実行方法: node tests/test-text-parse.js
+// 実行方法: node tests/test-text-parse.cjs
+// （package.json が "type": "module" のため、テストは .cjs とし、対象ファイルは vm で評価して読み込む）
 //
 // MTEXTの書式コード除去は過去に3回のデグレーション
 // （貪欲マッチによる本文巻き込み消去、セミコロン抜けタイポ等）を
 // 起こした箇所のため、修正時は必ずこのテストを通すこと。
 
-const { decodeDxfText, cleanMtextFormatting, parseCadText, decodeDxfBuffer } = require('../cad-text-parse.js');
+const fs = require('fs'), path = require('path'), vm = require('vm');
+const _code = fs.readFileSync(path.join(__dirname, '../public/cad-text-parse.js'), 'utf8');
+const _sandbox = { module: { exports: {} }, TextDecoder, TextEncoder, console };
+_sandbox.globalThis = _sandbox;
+vm.runInNewContext(_code, _sandbox);
+const { decodeDxfText, cleanMtextFormatting, parseCadText, decodeDxfBuffer } = _sandbox.module.exports;
 
 let pass = 0, fail = 0;
 function eq(actual, expected, label) {

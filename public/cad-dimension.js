@@ -604,10 +604,11 @@ function handleDimPointInput(mode, wcs) {
         const idx = hitTestEntity(mouse.screenX, mouse.screenY);
         if(idx >= 0) {
             cmdState.moveTarget = idx;
-            cmdState.selectedIndices = []; // 単体選択なので複数選択の残留をクリア
+            const grp = (typeof expandGroupTargets === 'function') ? expandGroupTargets(idx) : [idx];
+            cmdState.selectedIndices = grp.length > 1 ? grp : []; // グループ選択ONならブロック全体を対象にする
             cmdState.mode = 'WAITING_MOVE_BASE'; setPrompt('基点 (移動の基準点):');
             cmdState.highlightIdx = idx;
-            addCommandLog('-> エンティティ選択、基準点を指定'); render();
+            addCommandLog(grp.length > 1 ? `-> ブロック ${grp.length}個を選択、基準点を指定` : '-> エンティティ選択、基準点を指定'); render();
         } else { addCommandLog('エンティティが見つかりません'); }
         return;
     }
@@ -635,10 +636,11 @@ function handleDimPointInput(mode, wcs) {
         const idx = hitTestEntity(mouse.screenX, mouse.screenY);
         if(idx >= 0) {
             cmdState.moveTarget = idx;
-            cmdState.selectedIndices = []; // 単体選択なので複数選択の残留をクリア
+            const grp = (typeof expandGroupTargets === 'function') ? expandGroupTargets(idx) : [idx];
+            cmdState.selectedIndices = grp.length > 1 ? grp : []; // グループ選択ONならブロック全体を対象にする
             cmdState.mode = 'WAITING_COPY_BASE'; setPrompt('基点 (コピーの基準点):');
             cmdState.highlightIdx = idx;
-            addCommandLog('-> エンティティ選択、基準点を指定'); render();
+            addCommandLog(grp.length > 1 ? `-> ブロック ${grp.length}個を選択、基準点を指定` : '-> エンティティ選択、基準点を指定'); render();
         } else { addCommandLog('エンティティが見つかりません'); }
         return;
     }
@@ -654,9 +656,11 @@ function handleDimPointInput(mode, wcs) {
         if(targets.length > 0) {
             saveUndo();
             const copies = [];
+            const gidMap = {}; // 元gid → コピー先の新gid（ブロックのまとまりを保ったまま別グループにする）
             targets.forEach(i => {
                 if(!entities[i]) return;
                 const copy = JSON.parse(JSON.stringify(entities[i]));
+                if(copy.gid) { if(!gidMap[copy.gid]) gidMap[copy.gid] = (typeof newGroupId === 'function') ? newGroupId('c') : copy.gid + '_c'; copy.gid = gidMap[copy.gid]; }
                 moveEntity(copy, dx, dy);
                 copies.push(copy);
             });

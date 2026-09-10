@@ -230,6 +230,20 @@
         .menu-item-btn:active { transform: scale(0.94); }
         .menu-item-btn.danger { color: var(--warn); border-color: rgba(255,107,107,0.3); }
 
+        /* トースト通知（読み込み結果などの一時メッセージ） */
+        #cad-toast { position:fixed; left:50%; top:64px; transform:translateX(-50%); background:rgba(18,22,28,0.94); color:#e0e0e0; border:1px solid rgba(0,255,136,0.4); border-radius:12px; padding:10px 16px; font-size:13px; font-weight:600; z-index:200001; opacity:0; pointer-events:none; transition:opacity .25s; max-width:90vw; text-align:center; white-space:pre-line; box-shadow:0 6px 20px rgba(0,0,0,0.5); }
+        #cad-toast.show { opacity:1; }
+
+        /* 選択アクションバー（IDLEで図形/ブロックを選択中に表示） */
+        #sel-actionbar { display:none; position:fixed; bottom:56px; left:8px; right:58px; z-index:35; align-items:center; gap:6px; padding:6px 10px; border-radius:var(--r-pill); overflow-x:auto; white-space:nowrap; }
+        #sel-actionbar::-webkit-scrollbar { display:none; }
+        body.fullscreen-mode #sel-actionbar { bottom:24px; left:72px; right:72px; }
+        #sel-label { color:var(--green); font:700 12px 'Segoe UI',sans-serif; flex-shrink:0; margin-right:2px; max-width:150px; overflow:hidden; text-overflow:ellipsis; }
+        .sel-btn { flex-shrink:0; height:30px; padding:0 10px; border-radius:var(--r-pill); background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); color:var(--text-color); font:600 12px 'Segoe UI',sans-serif; cursor:pointer; display:inline-flex; align-items:center; gap:4px; }
+        .sel-btn:active { transform:scale(0.92); }
+        .sel-btn.warn { color:var(--warn); border-color:rgba(255,107,107,0.4); }
+        .sel-btn.green { color:var(--green); border-color:rgba(0,255,136,0.4); }
+
         /* レスポンシブ調整 */
         @media screen and (max-width: 430px) {
             #status-bar { padding: 0 6px; font-size: 11px; height: 34px; gap: 4px; }
@@ -342,6 +356,7 @@
             <div id="current-layer-color" style="width:14px;height:14px;background-color:white;border-radius:3px;border:1px solid #5a5a5a;flex-shrink:0;"></div>
             <select id="layer-select" style="max-width:75px;font-size:11px;padding:3px;border-radius:var(--r-sub);background:rgba(0,0,0,0.3);color:#fff;border:1px solid var(--border-3);"></select>
             <button class="top-btn icon-only" onclick="toggleLayerPanel()" style="color:var(--green);" title="画層一括管理">👁</button>
+            <button class="top-btn icon-only" onclick="toggleBlockManagerPanel()" style="color:var(--green);" title="ブロック/グループ管理">🧩</button>
         </div>
 
         <button class="top-btn" onclick="zoomExtents()" title="全体表示">🔍 全体</button>
@@ -386,6 +401,7 @@
             <div class="menu-btn-grid">
                 <button class="menu-item-btn" onclick="zoomToOrigin(); toggleTopMenu();">🔍 原点へズーム</button>
                 <button class="menu-item-btn" onclick="showOptionsPanel(); toggleTopMenu();">⚙ オプション</button>
+                <button class="menu-item-btn" onclick="showBlockManagerPanel(); toggleTopMenu();">🧩 ブロック管理</button>
             </div>
         </div>
     </div>
@@ -560,6 +576,7 @@
                         <button class="fsd-btn flex green" onclick="toggleLayerPanel(); autoCloseDrawer();">👁 画層管理</button>
                         <button class="fsd-btn flex yellow" onclick="issueCommand('LAYOFF'); autoCloseDrawer();">🚫 タッチ消去</button>
                     </div>
+                    <button class="fsd-btn green" onclick="toggleBlockManagerPanel(); autoCloseDrawer();">🧩 ブロック管理</button>
                     <div class="fsd-row">
                         <button class="fsd-btn flex" onclick="saveUCS(); autoCloseDrawer();">💾 保存</button>
                         <button class="fsd-btn flex red" onclick="deleteUCS(); autoCloseDrawer();">🗑 消去</button>
@@ -599,7 +616,20 @@
         <button onclick="dimConfirmPoint()" style="background:#00ff88; color:#000; border:none; padding:8px 16px; border-radius:16px; font-weight:bold; font-size:14px;">☑️ 確定</button>
         <button id="dim-mode-toggle" onclick="dimToggleMode()" style="background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">📏 直列 (変更)</button>
         <button id="dim-dir-toggle" onclick="dimToggleDir()" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⚙ 自動 (X/Y)</button>
-        <button onclick="issueCommand('CANCEL')" style="background:transparent; color:#ff6b6b; border:1px solid #ff6b6b; padding:6px 12px; border-radius:12px; font-size:12px;">❌ 終了</button>
+        <button id="dim-cancel-btn" onclick="issueCommand('CANCEL')" style="background:transparent; color:#ff6b6b; border:1px solid #ff6b6b; padding:6px 12px; border-radius:12px; font-size:12px;">❌ 終了</button>
+    </div>
+
+    <!-- 選択アクションバー（IDLEで図形・ブロックを選択中に表示。移動/複写/回転/削除/隠す/グループ化） -->
+    <div id="sel-actionbar" class="glass-panel">
+        <span id="sel-label">選択</span>
+        <button class="sel-btn" onclick="issueCommand('MOVE')" title="選択図形を移動">✥ 移動</button>
+        <button class="sel-btn" onclick="issueCommand('COPY')" title="選択図形を複写">⊞ 複写</button>
+        <button class="sel-btn" onclick="issueCommand('ROTATE')" title="選択図形を回転">↻ 回転</button>
+        <button class="sel-btn warn" onclick="issueCommand('ERASE')" title="選択図形を削除">✖ 削除</button>
+        <button class="sel-btn" onclick="hideSelectedEntities()" title="選択図形を非表示">🚫 隠す</button>
+        <button id="sel-group-btn" class="sel-btn green" onclick="toggleGroupOfSelection()">🧩 グループ化</button>
+        <button class="sel-btn" onclick="zoomToSelection()" title="選択図形へズーム">🔍</button>
+        <button class="sel-btn" onclick="clearSelection(); render();" title="選択解除">✕</button>
     </div>
 
     <!-- プロジェクト一覧パネル（モーダル） -->

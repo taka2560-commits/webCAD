@@ -3,6 +3,13 @@ import js from "@eslint/js";
 export default [
     js.configs.recommended,
     {
+        // Service Worker はグローバルが異なる
+        files: ["public/sw.js"],
+        languageOptions: {
+            globals: { self: "readonly", caches: "readonly", fetch: "readonly", console: "readonly", URL: "readonly", Promise: "readonly" }
+        }
+    },
+    {
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: "module",
@@ -88,7 +95,16 @@ export default [
                 populateLayerPanel: "readonly",
                 toggleOsnapMain: "readonly",
                 toggleOrtho: "readonly",
-                getEntityColor: "readonly"
+                getEntityColor: "readonly",
+                // ブロック/グループ・トースト（cad-core.js で定義、cad-io.js / cad-dimension.js から利用）
+                newGroupId: "readonly",
+                showToast: "readonly",
+                escapeHtml: "readonly",
+                getGroupMembers: "readonly",
+                expandGroupTargets: "readonly",
+                shouldHideImportedArcs: "readonly",
+                expandBulgeVertices: "readonly",
+                evalBSplinePoints: "readonly"
             }
         },
         rules: {

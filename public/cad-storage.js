@@ -229,6 +229,12 @@ window.saveProject = async function(nameOverride) {
     }
 };
 
+// 現在のプロジェクト名を外部から設定/解除（DXF読み込みで置き換えたときに前の名前で上書き保存しないため）
+window.setCurrentProjectName = function(name) {
+    _currentProjectName = name || null;
+    document.title = name ? `${name} - WebCAD` : 'Web CAD';
+};
+
 window.saveProjectAs = async function() {
     const name = prompt('新しいプロジェクト名を入力してください:', _currentProjectName || `図面_${new Date().toLocaleDateString('ja-JP')}`);
     if (!name) return;

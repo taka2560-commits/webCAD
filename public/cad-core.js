@@ -37,12 +37,22 @@ function setCanvasBackground(c){
 function showOptionsPanel(){
     const opts = [['#000','黒'],['#808080','グレー'],['#ffffff','白']];
     const btns = opts.map(o=>`<button class="prop-btn opt-bg-btn ${canvasBg===o[0]?'active':''}" data-bg="${o[0]}" onclick="setCanvasBackground('${o[0]}')" style="flex:1;">${o[1]}</button>`).join('');
+    const hideArcs = (typeof shouldHideImportedArcs === 'function') ? shouldHideImportedArcs() : true;
     const html = `
         <div class="prop-row"><label>背景色:</label></div>
         <div style="display:flex;gap:6px;">${btns}</div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" ${window.groupSelectEnabled?'checked':''} onchange="setGroupSelectEnabled(this.checked)" style="width:16px;height:16px;"> タップでブロック全体を選択</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" ${hideArcs?'checked':''} onchange="setImportHideArcs(this.checked)" style="width:16px;height:16px;"> 取り込み時に円弧を非表示にする</label>
+            <div style="color:#888;font-size:10px;">非表示にした円弧は、画層管理の「隠れ図形を再表示」で表示できます</div>
+        </div>
     `;
     showPropertyPanel('オプション', html);
 }
+window.setImportHideArcs = function(v) {
+    try { localStorage.setItem('cad_import_hide_arcs', v ? '1' : '0'); } catch(e) {}
+    addCommandLog(`-> 取り込み時の円弧非表示: ${v ? 'ON' : 'OFF'}`);
+};
 
 // ===== 作図設定の永続化（localStorage連携） =====
 const DEFAULT_LAST_PARAMS = {
@@ -203,6 +213,99 @@ let touchState = {
 };
 const DRAG_THRESHOLD = 8;
 
+// ===== ブロック / グループ =====
+// インポートしたブロック(INSERT)や寸法は、展開後の図形に gid（グループID）と blockName を付けて
+// 「1つのまとまり」として扱えるようにしている。ユーザーが選択図形をグループ化することもできる。
+let _gidCounter = 0;
+function newGroupId(prefix) { _gidCounter++; return (prefix || 'g') + Date.now().toString(36) + '_' + _gidCounter; }
+// タップでブロック全体を選択するか（スマホでは部品を個別に拾うのが難しいため既定ON）
+window.groupSelectEnabled = (function() { try { const v = localStorage.getItem('cad_group_select'); return v === null ? true : v === '1'; } catch(e) { return true; } })();
+function getGroupMembers(gid) {
+    const out = [];
+    if(!gid) return out;
+    entities.forEach((e, i) => { if(e.gid === gid) out.push(i); });
+    return out;
+}
+// 図形1つの index から、グループ選択ONなら同じグループの全 index を返す
+function expandGroupTargets(idx) {
+    const e = entities[idx];
+    if(!e) return [];
+    if(window.groupSelectEnabled && e.gid) { const m = getGroupMembers(e.gid); if(m.length) return m; }
+    return [idx];
+}
+function escapeHtml(s) {
+    if(s === undefined || s === null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+// 画面上部に一時的なメッセージを出す（コマンドラインが畳まれているスマホ向け）
+function showToast(msg, ms) {
+    let t = document.getElementById('cad-toast');
+    if(!t) { t = document.createElement('div'); t.id = 'cad-toast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), ms || 3000);
+}
+function clearSelection() {
+    cmdState.highlightIdx = -1;
+    cmdState.selectedIndices = [];
+    updatePropertiesPanel();
+}
+// IDLE時のタップ/クリック選択。グループ選択ONならブロック全体（同じgid）を選択し、同じ対象の再タップで解除
+function selectEntityAt(sx, sy) {
+    const idx = hitTestEntity(sx, sy);
+    if(idx < 0) { clearSelection(); return; }
+    const e = entities[idx];
+    const members = (window.groupSelectEnabled && e.gid) ? getGroupMembers(e.gid) : [];
+    const sel = cmdState.selectedIndices || [];
+    const sameSingle = cmdState.highlightIdx === idx && sel.length === 0;
+    const sameGroup = members.length > 1 && sel.length === members.length && sel.includes(idx);
+    if(sameSingle || sameGroup) { clearSelection(); return; }
+    cmdState.highlightIdx = idx;
+    cmdState.selectedIndices = members.length > 1 ? members : [];
+    updatePropertiesPanel();
+}
+// 回転の対象（複数選択があれば全部、無ければハイライト1つ）
+function _getRotateTargets() {
+    if(cmdState.selectedIndices && cmdState.selectedIndices.length > 0) return cmdState.selectedIndices.slice();
+    return cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : [];
+}
+// 文字のローカル矩形（WCS単位、文字方向x・下向きy）。描画の textAlign/textBaseline と対応させる
+function textLocalBox(e) {
+    const h = e.height || 10;
+    const lines = String(e.text === undefined ? '' : e.text).split('\n');
+    let w = 0;
+    try {
+        ctx.save(); ctx.font = `${h}px sans-serif`;
+        lines.forEach(l => { w = Math.max(w, ctx.measureText(l).width); });
+        ctx.restore();
+    } catch(err) { w = Math.max(...lines.map(l => l.length)) * h * 0.7; }
+    let xMin = 0, xMax = w;
+    if(e.halign === 'center') { xMin = -w / 2; xMax = w / 2; }
+    else if(e.halign === 'right') { xMin = -w; xMax = 0; }
+    let yMin, yMax;
+    if(e.valign === 'top') { yMin = 0; yMax = h; }
+    else if(e.valign === 'middle') { yMin = -h / 2; yMax = h / 2; }
+    else { yMin = -h; yMax = h * 0.25; }
+    yMax += (lines.length - 1) * h * 1.4; // 複数行は下に伸びる
+    return { xMin, xMax, yMin, yMax, w, h };
+}
+
+// 文字のヒット距離（画面px）。文字の矩形内なら0、外なら矩形までの距離
+function textHitDistance(e, sx, sy) {
+    const p = wcsToScreen(e.x, e.y);
+    const b = textLocalBox(e);
+    const th = -(view.rotation + (e.rotation || 0)); // 描画時の canvas 回転角
+    const c = Math.cos(th), s = Math.sin(th);
+    const dx = sx - p.x, dy = sy - p.y;
+    const lx = dx * c + dy * s, ly = -dx * s + dy * c;   // 文字ローカル座標（画面px）
+    const k = view.scale;
+    const x0 = b.xMin * k, x1 = b.xMax * k, y0 = b.yMin * k, y1 = b.yMax * k;
+    const ex = lx < x0 ? x0 - lx : (lx > x1 ? lx - x1 : 0);
+    const ey = ly < y0 ? y0 - ly : (ly > y1 ? ly - y1 : 0);
+    return Math.hypot(ex, ey);
+}
+
 // ===== ユーティリティ =====
 function isMobile() { return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window); }
 function addCommandLog(t) { const d=document.createElement('div'); d.textContent=t; commandLog.appendChild(d); commandLog.scrollTop=commandLog.scrollHeight; }
@@ -211,27 +314,28 @@ function resetCommand() {
     cmdState={mode:'IDLE',startWcs:null,points:[],highlightIdx:-1,selectedIndices:[]}; 
     setPrompt('コマンド:'); activeCommandName=''; setActiveTool(null);
     
-    // 画層管理フローティングパネルが表示されている場合は閉じずに、表示状態（ボタンのアクティブ状態等）を更新するだけにする
+    // 画層管理・ブロック管理のフローティングパネルは閉じずに内容だけ更新する
     const panel = document.getElementById('property-panel');
     const title = document.getElementById('property-panel-title');
-    if (panel && panel.style.display === 'flex' && title && title.textContent === '画層一括管理') {
-        if (typeof window.updateLayerManagerContent === 'function') {
-            window.updateLayerManagerContent();
-        }
+    const titleText = title ? title.textContent : '';
+    if (panel && panel.style.display === 'flex' && (titleText === '画層一括管理' || titleText === 'ブロック管理')) {
+        if (titleText === '画層一括管理' && typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
+        if (titleText === 'ブロック管理' && typeof window.updateBlockManagerContent === 'function') window.updateBlockManagerContent();
     } else {
         hidePropertyPanel();
     }
-    
+
     // 寸法・非表示アクションバーを確実に隠す＆ボタン状態を復元
     const actionbar = document.getElementById('fs-dim-actionbar');
     if(actionbar) {
         actionbar.style.display = 'none';
         const confirmBtn = actionbar.querySelector('button[onclick="dimConfirmPoint()"]');
         if (confirmBtn) confirmBtn.style.display = '';
-        const cancelBtn = actionbar.querySelector('button[onclick="resetCommand()"]');
-        if (cancelBtn) cancelBtn.textContent = '✖ キャンセル';
+        const cancelBtn = document.getElementById('dim-cancel-btn');
+        if (cancelBtn) { cancelBtn.textContent = '❌ 終了'; cancelBtn.style.background = 'transparent'; cancelBtn.style.padding = ''; cancelBtn.style.borderRadius = ''; }
     }
-    render(); 
+    if(typeof updateSelectionBar === 'function') updateSelectionBar();
+    render();
 }
 function issueCommand(cmd) { cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd); }
 function setActiveTool(name) { document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); if(name){document.querySelectorAll('.tool-cmd').forEach(el=>{if(el.textContent===name)el.parentElement.classList.add('active');});} updateCommandPill(); }
@@ -340,6 +444,11 @@ function closeDrawing() {
     if(entities.length === 0) { addCommandLog('図面は空です'); return; }
     saveUndo();
     entities.length = 0;
+    layers.splice(0, layers.length, {name:'0', color:'#00ffff', visible:true});
+    currentLayerIndex = 0;
+    initLayers();
+    if(typeof window.updateLayerPanel === 'function') window.updateLayerPanel();
+    if(typeof window.setCurrentProjectName === 'function') window.setCurrentProjectName(null);
     resetCommand();
     setDrawingName('新規図面');
     resetUCS();
@@ -349,6 +458,7 @@ function closeDrawing() {
 
 // 図面名の表示更新
 function setDrawingName(name) {
+    window._drawingName = name || ''; // 新UIでは表示欄が無いため、エクスポート名などに使う
     const el = document.getElementById('drawing-name');
     if(el) { el.textContent = name; el.title = name; }
 }
@@ -927,7 +1037,7 @@ function hitTestEntity(sx,sy) {
         else if(e.type==='RECTANG') { const p1=wcsToScreen(e.x1,e.y1),p2=wcsToScreen(e.x2,e.y1),p3=wcsToScreen(e.x2,e.y2),p4=wcsToScreen(e.x1,e.y2); d=Math.min(distPointToSeg(sx,sy,p1.x,p1.y,p2.x,p2.y),distPointToSeg(sx,sy,p2.x,p2.y,p3.x,p3.y),distPointToSeg(sx,sy,p3.x,p3.y,p4.x,p4.y),distPointToSeg(sx,sy,p4.x,p4.y,p1.x,p1.y)); }
         else if(e.type==='PLINE') { for(let j=1;j<e.points.length;j++){const a=wcsToScreen(e.points[j-1].x,e.points[j-1].y),b=wcsToScreen(e.points[j].x,e.points[j].y);d=Math.min(d,distPointToSeg(sx,sy,a.x,a.y,b.x,b.y));} if(e.closed&&e.points.length>2){const a=wcsToScreen(e.points[e.points.length-1].x,e.points[e.points.length-1].y),b=wcsToScreen(e.points[0].x,e.points[0].y);d=Math.min(d,distPointToSeg(sx,sy,a.x,a.y,b.x,b.y));} }
         else if(e.type==='ELLIPSE') { const c=wcsToScreen(e.cx,e.cy); d=Math.abs(dist(sx,sy,c.x,c.y)-(e.rx+e.ry)/2*view.scale); }
-        else if(e.type==='TEXT') { const p=wcsToScreen(e.x,e.y); d=dist(sx,sy,p.x,p.y-5); }
+        else if(e.type==='TEXT') { d = textHitDistance(e, sx, sy); }
         else if(e.type==='POINT') { const p=wcsToScreen(e.x,e.y); d=dist(sx,sy,p.x,p.y); }
         else if(e.type==='HATCH') {
             const tgt = e.target;
@@ -1178,6 +1288,7 @@ function drawOneEntity(e, color) {
         ctx.save();
         ctx.translate(p.x, p.y);
         if(view.rotation !== 0) ctx.rotate(-view.rotation);
+        if(e.rotation) ctx.rotate(-e.rotation); // 文字自体の回転（DXFの回転角・ROTATEコマンド）
         // DXF/DWGインポート時の文字整列を反映（未指定なら従来通り左・ベースライン基準）
         ctx.textAlign = (e.halign === 'center' || e.halign === 'right') ? e.halign : 'left';
         ctx.textBaseline = (e.valign === 'top') ? 'top' : (e.valign === 'middle') ? 'middle' : 'alphabetic';
@@ -1205,7 +1316,7 @@ function drawOneEntity(e, color) {
 
 // 図形のバウンディングボックスを計算 (初回のみ実行される)
 function calcBBox(e) {
-    let minX=0, minY=0, maxX=0, maxY=0;
+    let minX, minY, maxX, maxY;
     if(e.type==='LINE') {
         minX = Math.min(e.x1, e.x2); maxX = Math.max(e.x1, e.x2);
         minY = Math.min(e.y1, e.y2); maxY = Math.max(e.y1, e.y2);
@@ -1222,8 +1333,13 @@ function calcBBox(e) {
             if(p.x < minX) minX = p.x; if(p.y < minY) minY = p.y;
             if(p.x > maxX) maxX = p.x; if(p.y > maxY) maxY = p.y;
         }
-    } else if(e.type==='POINT' || e.type==='TEXT') {
+    } else if(e.type==='POINT') {
         minX = e.x; maxX = e.x; minY = e.y; maxY = e.y;
+    } else if(e.type==='TEXT') {
+        // 文字の広がり（回転に依らない保守的な範囲）。アンカー点だけだと画面端で文字が消える
+        const b = textLocalBox(e);
+        const r = Math.hypot(Math.max(Math.abs(b.xMin), Math.abs(b.xMax)), Math.max(Math.abs(b.yMin), Math.abs(b.yMax)));
+        minX = e.x - r; maxX = e.x + r; minY = e.y - r; maxY = e.y + r;
     } else if(e.type==='ELLIPSE') {
         const r = Math.max(e.rx||0, e.ry||0) || e.radius || 0;
         minX = e.cx - r; maxX = e.cx + r; minY = e.cy - r; maxY = e.cy + r;
@@ -1359,14 +1475,15 @@ function drawRubberBand() {
         const a=wcsToScreen(cmdState.rotateRef1.x, cmdState.rotateRef1.y), b=wcsToScreen(mp.x, mp.y);
         ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
         
-        if(cmdState.highlightIdx>=0 && entities[cmdState.highlightIdx]) {
+        const rotTargets = _getRotateTargets();
+        if(rotTargets.length > 0) {
             ctx.save();
             const bscr = wcsToScreen(cmdState.rotateBase.x, cmdState.rotateBase.y);
             ctx.translate(bscr.x, bscr.y);
             ctx.rotate(-deltaAngle); // Canvas Y is down, WCS Y is up
             ctx.translate(-bscr.x, -bscr.y);
             ctx.setLineDash([2,2]);
-            drawOneEntity(entities[cmdState.highlightIdx], '#ffff00');
+            rotTargets.forEach(i => { if(entities[i]) drawOneEntity(entities[i], '#ffff00'); });
             ctx.restore();
         }
     }
@@ -1628,7 +1745,12 @@ function handlePointInput(wcs, fromMouse = false) {
     }
     if(m==='WAITING_ERASE_SELECT') {
         const idx=hitTestEntity(mouse.screenX,mouse.screenY);
-        if(idx>=0){saveUndo(); entities.splice(idx,1); addCommandLog('-> エンティティ削除'); cmdState.highlightIdx=-1; render();}
+        if(idx>=0){
+            const targets = expandGroupTargets(idx);
+            saveUndo(); targets.sort((a,b)=>b-a).forEach(i => entities.splice(i,1));
+            addCommandLog(targets.length > 1 ? `-> グループ ${targets.length}個を削除` : '-> エンティティ削除');
+            cmdState.highlightIdx=-1; cmdState.selectedIndices=[]; render();
+        }
         else addCommandLog('エンティティが見つかりません');
         return;
     }
@@ -1636,6 +1758,7 @@ function handlePointInput(wcs, fromMouse = false) {
         const idx=hitTestEntity(mouse.screenX,mouse.screenY);
         if(idx>=0) {
             cmdState.highlightIdx = idx;
+            const grp = expandGroupTargets(idx); cmdState.selectedIndices = grp.length > 1 ? grp : [];
             cmdState.mode = 'WAITING_ROTATE_BASE'; setPrompt('回転: 中心となる基点を指定');
             addCommandLog('-> 対象を選択。基点を指定'); render(); return;
         } else { addCommandLog('エンティティが見つかりません'); return; }
@@ -1669,9 +1792,10 @@ function handlePointInput(wcs, fromMouse = false) {
     if(m==='WAITING_ROTATE_BASE') {
         // 角度プリセットがあれば基点クリックで即確定
         if(cmdState.presetAngleDeg !== undefined && !isNaN(cmdState.presetAngleDeg)) {
+            const rt = _getRotateTargets();
             saveUndo();
-            rotateEntity(entities[cmdState.highlightIdx], wcs.x, wcs.y, cmdState.presetAngleDeg * Math.PI/180);
-            addCommandLog(`-> 回転完了 (角度: ${cmdState.presetAngleDeg}度)`);
+            rt.forEach(i => { if(entities[i]) rotateEntity(entities[i], wcs.x, wcs.y, cmdState.presetAngleDeg * Math.PI/180); });
+            addCommandLog(`-> 回転完了 (角度: ${cmdState.presetAngleDeg}度${rt.length > 1 ? ', ' + rt.length + '個' : ''})`);
             cmdState.highlightIdx = -1; resetCommand(); return;
         }
         cmdState.rotateBase = {x:wcs.x, y:wcs.y};
@@ -1695,10 +1819,10 @@ function handlePointInput(wcs, fromMouse = false) {
     if(m==='WAITING_ROTATE_DEST') {
         const destAngle = Math.atan2(wcs.y - cmdState.rotateRef1.y, wcs.x - cmdState.rotateRef1.x);
         const deltaAngle = destAngle - cmdState.refAngle;
+        const rt = _getRotateTargets();
         saveUndo();
-        const e = entities[cmdState.highlightIdx];
-        rotateEntity(e, cmdState.rotateBase.x, cmdState.rotateBase.y, deltaAngle);
-        addCommandLog(`-> 回転完了 (角度: ${(deltaAngle * 180 / Math.PI).toFixed(2)}度)`);
+        rt.forEach(i => { if(entities[i]) rotateEntity(entities[i], cmdState.rotateBase.x, cmdState.rotateBase.y, deltaAngle); });
+        addCommandLog(`-> 回転完了 (角度: ${(deltaAngle * 180 / Math.PI).toFixed(2)}度${rt.length > 1 ? ', ' + rt.length + '個' : ''})`);
         cmdState.highlightIdx = -1;
         resetCommand();
         return;
@@ -1768,6 +1892,7 @@ function rotateEntity(e, cx, cy, angle) {
     } else if(e.type === 'POINT' || e.type === 'TEXT') {
         const nx = rx(e.x, e.y), ny = ry(e.x, e.y);
         e.x = nx; e.y = ny;
+        if(e.type === 'TEXT') e.rotation = (e.rotation || 0) + angle;
     }
 }
 
@@ -2021,7 +2146,7 @@ function processCommand(cmdText) {
             const toggleBtn = document.getElementById('dim-mode-toggle');
             if (toggleBtn) toggleBtn.style.display = 'none'; // 設定ボタンも不要
             
-            const cancelBtn = ab.querySelector('button[onclick="resetCommand()"]');
+            const cancelBtn = document.getElementById('dim-cancel-btn');
             if (cancelBtn) {
                 cancelBtn.textContent = '✖ 非表示終了';
                 cancelBtn.style.background = '#ff6b6b';
@@ -2153,6 +2278,9 @@ function processCommand(cmdText) {
     }
     else if(cmd==='WCS') { resetUCS(); }
     else if(cmd==='SHOWALL') { window.showHiddenEntities(); }
+    else if(cmd==='GROUP'||cmd==='G') { window.groupSelection(); }
+    else if(cmd==='UNGROUP'||cmd==='EXPLODE'||cmd==='X') { window.explodeSelection(); }
+    else if(cmd==='BLOCKS'||cmd==='BLOCK') { window.showBlockManagerPanel(); }
     else if(cmd==='U'||cmd==='UNDO') { undo(); }
     else if(cmd==='REDO') { redo(); }
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
@@ -2169,23 +2297,12 @@ function updateMousePos(e) {
     const uc=wcsToUcs(wcs.x,wcs.y); mouse.ucsX=uc.x; mouse.ucsY=uc.y;
 }
 function setupEventListeners() {
-    // 全てのボタンに対するグローバルハプティクス（短い振動）
-    document.addEventListener('click', (e) => {
-        let target = e.target;
-        while(target && target !== document.body) {
-            if(target.tagName === 'BUTTON') {
-                if(navigator.vibrate) navigator.vibrate(10);
-                break;
-            }
-            target = target.parentNode;
-        }
-    });
+    // ボタンのハプティクスは index.html 側の click リスナーで一元管理（二重振動を防ぐため、ここでは登録しない）
 
     canvas.addEventListener('mousemove', (e) => {
         updateMousePos(e);
         if(mouse.isPanning) {
-            const sx=screenToWcs(mouse.screenX,mouse.screenY), sx0=screenToWcs(mouse.screenX-e.movementX,mouse.screenY-e.movementY);
-            ucs.originX+=sx.x-sx0.x; ucs.originY+=sx.y-sx0.y;
+            view.x += e.movementX; view.y += e.movementY; // 中ボタンドラッグは画面パン（UCS原点は動かさない）
             render(); return;
         }
         if(mouse.isTrimming) {
@@ -2224,12 +2341,12 @@ function setupEventListeners() {
                 const idx = hitTestEntity(mouse.screenX, mouse.screenY);
                 if(idx >= 0) {
                     if (cmdState.mode === 'IDLE') {
-                        cmdState.highlightIdx = (cmdState.highlightIdx === idx) ? -1 : idx;
+                        selectEntityAt(mouse.screenX, mouse.screenY);
                     } else {
                         const pt=getInputPoint(); handlePointInput(pt, true);
                     }
                 } else {
-                    if (cmdState.mode === 'IDLE') cmdState.highlightIdx = -1;
+                    if (cmdState.mode === 'IDLE') { cmdState.highlightIdx = -1; cmdState.selectedIndices = []; }
                     if (window.areaSelectEnabled) {
                         mouse.isSelecting = true;
                         mouse.selStartX = mouse.screenX;
@@ -2359,7 +2476,11 @@ function setupEventListeners() {
         else if(e.type === 'RECTANG') { pts = [wcsToScreen(e.x1, e.y1), wcsToScreen(e.x2, e.y1), wcsToScreen(e.x2, e.y2), wcsToScreen(e.x1, e.y2)]; }
         else if(e.type === 'PLINE' && e.points.length > 0) { pts = e.points.map(p => wcsToScreen(p.x, p.y)); }
         else if(e.type === 'ELLIPSE') { const c = wcsToScreen(e.cx, e.cy); const rx = e.rx * view.scale, ry = e.ry * view.scale; return {minX:c.x-rx, minY:c.y-ry, maxX:c.x+rx, maxY:c.y+ry}; }
-        else if(e.type === 'TEXT') { const p = wcsToScreen(e.x, e.y); return {minX:p.x, minY:p.y-20, maxX:p.x+100, maxY:p.y}; }
+        else if(e.type === 'TEXT') {
+            const p = wcsToScreen(e.x, e.y); const b = textLocalBox(e); const k = view.scale;
+            const th = -(view.rotation + (e.rotation || 0)), c = Math.cos(th), s = Math.sin(th);
+            pts = [[b.xMin, b.yMin], [b.xMax, b.yMin], [b.xMax, b.yMax], [b.xMin, b.yMax]].map(([lx, ly]) => ({ x: p.x + (lx * c - ly * s) * k, y: p.y + (lx * s + ly * c) * k }));
+        }
         else if(e.type === 'POINT') { const p = wcsToScreen(e.x, e.y); return {minX:p.x-5, minY:p.y-5, maxX:p.x+5, maxY:p.y+5}; }
 
         if(pts.length === 0) return null;
@@ -2569,14 +2690,8 @@ function setupEventListeners() {
                     handlePointInput(pt, false);
                 }
             } else if(!touchState.hasMoved) {
-                // 短いタップでIDLEモード: エンティティ選択/選択解除
-                const idx = hitTestEntity(mouse.screenX, mouse.screenY);
-                if(idx >= 0) {
-                    cmdState.highlightIdx = (cmdState.highlightIdx === idx) ? -1 : idx;
-                } else {
-                    cmdState.highlightIdx = -1;
-                }
-                updatePropertiesPanel();
+                // 短いタップでIDLEモード: エンティティ選択/選択解除（グループ選択ONならブロック全体）
+                selectEntityAt(mouse.screenX, mouse.screenY);
             }
 
             touchState.isDragging = false;
@@ -2610,6 +2725,225 @@ window.showHiddenEntities = function() {
     addCommandLog(`-> 非表示だった図形 ${hiddenCount}個 を再表示しました（元に戻すにはUndo）`);
     if (typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
     render();
+};
+
+
+// ===== ブロック/グループ管理（スマホ向け） =====
+// グループ選択のON/OFF
+window.setGroupSelectEnabled = function(enabled) {
+    window.groupSelectEnabled = !!enabled;
+    try { localStorage.setItem('cad_group_select', enabled ? '1' : '0'); } catch(e) {}
+    addCommandLog(`-> タップでブロック全体を選択: ${enabled ? 'ON' : 'OFF'}`);
+    if(typeof window.updateBlockManagerContent === 'function') window.updateBlockManagerContent();
+};
+
+// ブロック名ごとの集計（インスタンス数・部品数・非表示数）
+function getBlockSummary() {
+    const map = new Map();
+    entities.forEach(e => {
+        if(!e.gid) return;
+        const name = e.blockName || 'グループ';
+        let s = map.get(name);
+        if(!s) { s = { name, gids: new Set(), count: 0, hidden: 0 }; map.set(name, s); }
+        s.gids.add(e.gid); s.count++; if(e.hidden) s.hidden++;
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+}
+let _blockNameCache = [];
+
+// 指定 index 群にズーム
+function zoomToEntities(indices) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    indices.forEach(i => {
+        const e = entities[i]; if(!e) return;
+        const b = (e.type === 'HATCH' && e.target) ? calcBBox(e.target) : (e.bbox || (e.bbox = calcBBox(e)));
+        if(!b) return;
+        if(b.minX < minX) minX = b.minX; if(b.minY < minY) minY = b.minY;
+        if(b.maxX > maxX) maxX = b.maxX; if(b.maxY > maxY) maxY = b.maxY;
+    });
+    if(!isFinite(minX)) return;
+    const pad = 60, w = maxX - minX || 1, h = maxY - minY || 1;
+    view.scale = Math.min((canvas.width - pad * 2) / w, (canvas.height - pad * 2) / h, 50);
+    _reanchorView(canvas.width / 2, canvas.height / 2, { x: (minX + maxX) / 2, y: (minY + maxY) / 2 });
+    render();
+}
+
+window.showBlockManagerPanel = function() {
+    showPropertyPanel('ブロック管理', '<div id="block-manager-container"></div>');
+    window.updateBlockManagerContent();
+};
+window.toggleBlockManagerPanel = function() {
+    const panel = document.getElementById('property-panel');
+    const title = document.getElementById('property-panel-title');
+    if(panel && panel.style.display === 'flex' && title && title.textContent === 'ブロック管理') hidePropertyPanel();
+    else window.showBlockManagerPanel();
+};
+
+window.updateBlockManagerContent = function() {
+    const c = document.getElementById('block-manager-container');
+    if(!c) return;
+    const summary = getBlockSummary();
+    _blockNameCache = summary.map(s => s.name);
+    const sel = cmdState.selectedIndices || [];
+    const selIdx = sel.length ? sel : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
+    const selGids = new Set(); selIdx.forEach(i => { const e = entities[i]; if(e && e.gid) selGids.add(e.gid); });
+    const btn = (label, onclick, color, extra) => `<button class="status-btn" style="font-size:11px; padding:2px 8px; height:26px; border-radius:8px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); color:${color || '#ddd'}; cursor:pointer; ${extra || ''}" onclick="${onclick}">${label}</button>`;
+
+    let html = `
+    <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1);">
+        <label style="display:flex; align-items:center; gap:8px; padding:4px 8px; background:rgba(255,255,255,0.05); border-radius:6px; cursor:pointer; font-size:12px; color:#ddd; font-weight:bold;">
+            <input type="checkbox" ${window.groupSelectEnabled ? 'checked' : ''} onchange="setGroupSelectEnabled(this.checked)" style="width:16px; height:16px; cursor:pointer;">
+            タップでブロック全体を選択
+        </label>`;
+    // 選択中のグループに対する操作
+    if(selIdx.length > 0) {
+        const first = entities[selIdx[0]];
+        const isGroup = selGids.size >= 1;
+        const label = isGroup ? `🧩 ${escapeHtml(first && first.blockName || 'グループ')}${selGids.size > 1 ? ` 他${selGids.size - 1}` : ''} (${selIdx.length}個)` : `${selIdx.length}個を選択中`;
+        html += `<div style="font-size:12px; color:#00ff88; font-weight:bold;">${label}</div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            ${isGroup ? btn('分解（グループ解除）', 'explodeSelection()', '#ffcc00') : ''}
+            ${(!isGroup && selIdx.length > 1) ? btn('🧩 グループ化', 'groupSelection()', '#00ff88') : ''}
+            ${btn('🔍 ズーム', 'zoomToSelection()', '#61afef')}
+            ${btn('🚫 隠す', 'hideSelectedEntities()', '#ff6b6b')}
+            ${btn('✕ 選択解除', 'clearSelection(); render();', '#aaa')}
+        </div>`;
+    } else {
+        html += `<div style="font-size:11px; color:#888;">図形をタップするとブロック（同じ挿入のまとまり）を選択できます。複数選択して「グループ化」もできます。</div>`;
+    }
+    html += `</div>`;
+
+    // ブロック一覧
+    if(summary.length === 0) {
+        html += `<div style="color:#666; font-size:11px; font-style:italic; padding:6px 8px;">ブロック・グループはありません（DXF/DWGのブロックは取り込み時に自動でグループになります）</div>`;
+    } else {
+        html += `<div style="font-size:11px; color:#888; margin-bottom:4px;">ブロック一覧 (${summary.length}種類)</div>`;
+        html += `<div style="max-height:260px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding-right:4px;">`;
+        summary.forEach((s, i) => {
+            const allHidden = s.hidden === s.count;
+            const eye = allHidden ? '➖' : '👁️';
+            const nameStyle = allHidden ? 'color:#888;' : 'color:#ddd;';
+            html += `
+            <div class="prop-row" style="display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.02); padding:4px 6px; border-radius:4px; margin:0;">
+                <button class="status-btn" style="padding:2px 5px; font-size:12px; width:28px; text-align:center; background:${allHidden ? 'rgba(255,255,255,0.05)' : 'rgba(0,255,136,0.1)'}; border:1px solid ${allHidden ? 'rgba(255,255,255,0.15)' : 'rgba(0,255,136,0.3)'}; color:${allHidden ? '#888' : '#00ff88'}; border-radius:3px; cursor:pointer;" onclick="toggleBlockVisibility(${i})" title="${allHidden ? '表示する' : '非表示にする'}">${eye}</button>
+                <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; ${nameStyle}" title="${escapeHtml(s.name)}">${escapeHtml(s.name)} <span style="color:#888; font-size:10px;">×${s.gids.size} (${s.count}個)</span></div>
+                <button class="status-btn" style="padding:2px 6px; font-size:12px; background:rgba(97,175,239,0.12); border:1px solid rgba(97,175,239,0.3); color:#61afef; border-radius:3px; cursor:pointer;" onclick="zoomToBlock(${i})" title="この種類のブロックへズーム">🔍</button>
+                <button class="status-btn" style="padding:2px 6px; font-size:12px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); color:#ddd; border-radius:3px; cursor:pointer;" onclick="selectBlockByName(${i})" title="この種類のブロックをすべて選択">☑</button>
+            </div>`;
+        });
+        html += `</div>`;
+    }
+    c.innerHTML = html;
+};
+
+window.toggleBlockVisibility = function(i) {
+    const name = _blockNameCache[i]; if(name === undefined) return;
+    const idxs = []; entities.forEach((e, k) => { if(e.gid && (e.blockName || 'グループ') === name) idxs.push(k); });
+    if(idxs.length === 0) return;
+    const allHidden = idxs.every(k => entities[k].hidden);
+    saveUndo();
+    idxs.forEach(k => { entities[k].hidden = !allHidden; });
+    if(!allHidden) { cmdState.selectedIndices = (cmdState.selectedIndices || []).filter(k => !idxs.includes(k)); if(idxs.includes(cmdState.highlightIdx)) cmdState.highlightIdx = -1; }
+    addCommandLog(`-> ブロック「${name}」を${allHidden ? '表示' : '非表示'}にしました (${idxs.length}個)`);
+    updatePropertiesPanel();
+    window.updateBlockManagerContent();
+    if(typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
+    render();
+};
+window.zoomToBlock = function(i) {
+    const name = _blockNameCache[i]; if(name === undefined) return;
+    const idxs = []; entities.forEach((e, k) => { if(e.gid && (e.blockName || 'グループ') === name) idxs.push(k); });
+    zoomToEntities(idxs);
+};
+window.selectBlockByName = function(i) {
+    const name = _blockNameCache[i]; if(name === undefined) return;
+    const idxs = []; entities.forEach((e, k) => { if(e.gid && (e.blockName || 'グループ') === name && !e.hidden) idxs.push(k); });
+    if(idxs.length === 0) { addCommandLog(`-> ブロック「${name}」に表示中の図形がありません`); return; }
+    cmdState.selectedIndices = idxs; cmdState.highlightIdx = idxs[0];
+    addCommandLog(`-> ブロック「${name}」を ${idxs.length}個 選択しました`);
+    updatePropertiesPanel();
+    window.updateBlockManagerContent();
+    render();
+};
+window.zoomToSelection = function() {
+    const sel = (cmdState.selectedIndices && cmdState.selectedIndices.length) ? cmdState.selectedIndices : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
+    if(sel.length) zoomToEntities(sel);
+};
+// 選択図形をグループ化（既にブロック名があるものはその名前を保持）
+window.groupSelection = function() {
+    const sel = (cmdState.selectedIndices && cmdState.selectedIndices.length) ? cmdState.selectedIndices.slice() : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
+    if(sel.length < 2) { addCommandLog('-> グループ化するには2個以上の図形を選択してください（範囲選択やブロック一覧の☑で複数選択できます）'); showToast('2個以上選択してからグループ化してください'); return; }
+    saveUndo();
+    const gid = newGroupId('u');
+    sel.forEach(i => { const e = entities[i]; if(e) { e.gid = gid; if(!e.blockName) e.blockName = 'グループ'; } });
+    addCommandLog(`-> ${sel.length}個の図形をグループ化しました`);
+    showToast(`${sel.length}個をグループ化しました`);
+    updatePropertiesPanel();
+    if(typeof window.updateBlockManagerContent === 'function') window.updateBlockManagerContent();
+    render();
+};
+// 選択中のグループを分解（gid/blockName を外す）。ブロックの部品を個別に編集したいときに使う
+window.explodeSelection = function() {
+    const sel = (cmdState.selectedIndices && cmdState.selectedIndices.length) ? cmdState.selectedIndices : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
+    const gids = new Set(); sel.forEach(i => { const e = entities[i]; if(e && e.gid) gids.add(e.gid); });
+    if(gids.size === 0) { addCommandLog('-> 分解できるグループが選択されていません'); return; }
+    saveUndo();
+    let n = 0;
+    entities.forEach(e => { if(e.gid && gids.has(e.gid)) { delete e.gid; delete e.blockName; n++; } });
+    addCommandLog(`-> ${gids.size}個のグループを分解しました（${n}個の図形を個別化）`);
+    showToast(`グループを分解しました（${n}個）`);
+    cmdState.selectedIndices = [];
+    updatePropertiesPanel();
+    if(typeof window.updateBlockManagerContent === 'function') window.updateBlockManagerContent();
+    render();
+};
+// 選択図形を非表示（再表示は画層管理の「隠れ図形を再表示」）
+window.hideSelectedEntities = function() {
+    const sel = (cmdState.selectedIndices && cmdState.selectedIndices.length) ? cmdState.selectedIndices.slice() : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
+    if(sel.length === 0) return;
+    saveUndo();
+    sel.forEach(i => { if(entities[i]) entities[i].hidden = true; });
+    addCommandLog(`-> ${sel.length}個の図形を非表示にしました（再表示: 画層管理の「隠れ図形を再表示」）`);
+    showToast(`${sel.length}個を非表示にしました`);
+    clearSelection();
+    if(typeof window.updateBlockManagerContent === 'function') window.updateBlockManagerContent();
+    if(typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
+    render();
+};
+// ハイライト中の図形が属するグループ全体を選択
+window.selectGroupOfHighlighted = function() {
+    const e = entities[cmdState.highlightIdx];
+    if(!e || !e.gid) return;
+    cmdState.selectedIndices = getGroupMembers(e.gid);
+    updatePropertiesPanel();
+    render();
+};
+// 選択アクションバー（IDLEで図形を選択中に表示。移動/複写/回転/削除/隠す/グループ化）
+function updateSelectionBar() {
+    const bar = document.getElementById('sel-actionbar');
+    if(!bar) return;
+    const sel = cmdState.selectedIndices || [];
+    const n = sel.length > 0 ? sel.length : (cmdState.highlightIdx >= 0 ? 1 : 0);
+    if(cmdState.mode !== 'IDLE' || n === 0) { bar.style.display = 'none'; return; }
+    const idxs = sel.length ? sel : [cmdState.highlightIdx];
+    const gids = new Set(); idxs.forEach(i => { const e = entities[i]; if(e && e.gid) gids.add(e.gid); });
+    const first = entities[idxs[0]];
+    const label = document.getElementById('sel-label');
+    if(label) {
+        if(gids.size >= 1 && first && first.gid) label.textContent = `🧩 ${first.blockName || 'グループ'}${gids.size > 1 ? ` 他${gids.size - 1}` : ''} (${n}個)`;
+        else label.textContent = `${n}個選択`;
+    }
+    const gbtn = document.getElementById('sel-group-btn');
+    if(gbtn) {
+        if(gids.size > 0) { gbtn.style.display = ''; gbtn.textContent = '分解'; gbtn.dataset.action = 'explode'; }
+        else if(n > 1) { gbtn.style.display = ''; gbtn.textContent = '🧩 グループ化'; gbtn.dataset.action = 'group'; }
+        else gbtn.style.display = 'none';
+    }
+    bar.style.display = 'flex';
+}
+window.toggleGroupOfSelection = function() {
+    const gbtn = document.getElementById('sel-group-btn');
+    if(gbtn && gbtn.dataset.action === 'explode') window.explodeSelection(); else window.groupSelection();
 };
 
 // 非表示画層のうっすら表示切り替え
@@ -2813,6 +3147,7 @@ window.updateLayerPanel = function() {
 };
 window.toggleLayerVisibility = function(idx) {
     if(layers[idx]) {
+        saveUndo();
         layers[idx].visible = (layers[idx].visible === false) ? true : false;
         if(layers[idx].visible === false && cmdState.highlightIdx >= 0) {
             if(entities[cmdState.highlightIdx] && entities[cmdState.highlightIdx].layer == idx) {
@@ -2828,6 +3163,7 @@ window.hideLayerOfSelected = function() {
     if(cmdState.highlightIdx < 0 || !entities[cmdState.highlightIdx]) return;
     const layerIdx = entities[cmdState.highlightIdx].layer;
     if(layerIdx === undefined || !layers[layerIdx]) return;
+    saveUndo();
     layers[layerIdx].visible = false;
     cmdState.highlightIdx = -1;
     // 選択解除されたインデックスも含め、同じ画層の選択をすべてクリア
@@ -2853,6 +3189,14 @@ function updatePropertiesPanel() {
         const e = entities[cmdState.highlightIdx];
         const layerColor = layers[e.layer] ? layers[e.layer].color : '#ffffff';
         let html = `<div style="font-weight:bold;margin-bottom:10px;color:var(--highlight-color);">${e.type}</div>`;
+        if(e.gid) {
+            const gcount = getGroupMembers(e.gid).length;
+            html += `<div class="prop-row"><div class="prop-label">ブロック</div><div style="flex:1;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                <span style="color:var(--green);font-weight:600;">🧩 ${escapeHtml(e.blockName || 'グループ')}</span><span style="color:#888;font-size:10px;">(${gcount}個)</span>
+                <button class="status-btn" style="font-size:10px;padding:2px 6px;border:1px solid #666;border-radius:3px;" onclick="selectGroupOfHighlighted()">全選択</button>
+                <button class="status-btn" style="font-size:10px;padding:2px 6px;border:1px solid #666;border-radius:3px;" onclick="showBlockManagerPanel()">🧩管理</button>
+            </div></div>`;
+        }
         html += `<div class="prop-row"><div class="prop-label">画層</div>
             <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
                 <input class="prop-val" style="width:60px;" type="text" value="${layers[e.layer]?layers[e.layer].name:e.layer}" readonly title="画層名">
@@ -2869,10 +3213,7 @@ function updatePropertiesPanel() {
             html += `<div class="prop-row"><div class="prop-label">サイズ</div><input class="prop-val" type="number" step="0.1" value="${e.size||10}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'size', this.value)"></div>`;
         }
         
-        const escapeHtml = (unsafe) => {
-            if(typeof unsafe !== 'string') return unsafe;
-            return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-        };
+        // escapeHtml はグローバル版（cad-core.js 先頭付近で定義）を使う
         
         if(e.type === 'LINE') {
             const p1 = wcsToUcs(e.x1, e.y1); const p2 = wcsToUcs(e.x2, e.y2);
@@ -2914,6 +3255,7 @@ function updatePropertiesPanel() {
     } else {
         p.innerHTML = '<div style="color:#888; text-align:center; padding:20px 0;">図形が選択されていません</div>';
     }
+    if(typeof updateSelectionBar === 'function') updateSelectionBar();
 }
 
 window.changeEntityProp = function(idx, prop, val) {
