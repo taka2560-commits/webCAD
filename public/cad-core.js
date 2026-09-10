@@ -878,19 +878,24 @@ function findSnap(sx, sy, wx, wy) {
         pts = pts.filter(p => p.t !== '近接点');
     }
 
-    let best=null, bestD=SNAP_R;
-    
-    // スナップ優先順位: 1.端点/中点/中心/交点/垂線  2.近接点
-    pts.forEach(p=>{ 
-        const sp=wcsToScreen(p.x,p.y); 
-        const d=dist(sx,sy,sp.x,sp.y); 
-        if(d<bestD){
-            // 近接点は少し吸着範囲を狭めるか優先度を下げる（同じ距離なら他のスナップを優先）
-            if(p.t==='近接点' && best && best.type!=='近接点' && Math.abs(d-bestD)<3) return;
-            bestD=d; best={wcsX:p.x, wcsY:p.y, type:p.t};
-        } 
-    });
-    return best;
+    // タッチ操作は指の位置精度が低いため吸着半径を少し広げる
+    const radius = (typeof isMobile === 'function' && isMobile()) ? SNAP_R * 1.4 : SNAP_R;
+
+    // スナップ優先順位（AutoCAD準拠の2段階）:
+    //   1) 幾何スナップ（端点・中点・中心・交点・垂線）: 範囲内で最もカーソルに近いもの
+    //   2) 近接点: 幾何スナップが範囲内に1つも無いときだけ採用
+    // ※ 近接点はカーソル直下（距離≒0）に必ず存在するため、単純な最近傍比較だと
+    //    後から評価される交点などが永久に選ばれなくなる
+    const pick = (cands) => {
+        let best=null, bestD=radius;
+        cands.forEach(p=>{
+            const sp=wcsToScreen(p.x,p.y);
+            const d=dist(sx,sy,sp.x,sp.y);
+            if(d<bestD){ bestD=d; best={wcsX:p.x, wcsY:p.y, type:p.t}; }
+        });
+        return best;
+    };
+    return pick(pts.filter(p => p.t !== '近接点')) || pick(pts.filter(p => p.t === '近接点'));
 }
 
 // ===== ヒットテスト =====
