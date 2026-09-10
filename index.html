@@ -12,6 +12,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="WebCAD">
     <link rel="apple-touch-icon" href="/icon-192.png">
+    <!-- エラー記録・表示（他のどのスクリプトより先に読み込む） -->
+    <script src="cad-errors.js"></script>
     <style>
         :root {
             --bg-color:#111418; /* キャンバスのベース色 */
@@ -233,6 +235,9 @@
         /* トースト通知（読み込み結果などの一時メッセージ） */
         #cad-toast { position:fixed; left:50%; top:64px; transform:translateX(-50%); background:rgba(18,22,28,0.94); color:#e0e0e0; border:1px solid rgba(0,255,136,0.4); border-radius:12px; padding:10px 16px; font-size:13px; font-weight:600; z-index:200001; opacity:0; pointer-events:none; transition:opacity .25s; max-width:90vw; text-align:center; white-space:pre-line; box-shadow:0 6px 20px rgba(0,0,0,0.5); }
         #cad-toast.show { opacity:1; }
+        #cad-update-notice { position:fixed; left:50%; top:64px; transform:translateX(-50%); z-index:200001; display:flex; align-items:center; gap:8px; padding:6px 6px 6px 14px; background:rgba(18,22,28,0.96); border:1px solid rgba(0,255,136,0.45); border-radius:12px; color:#e0e0e0; font:600 12px 'Segoe UI',sans-serif; box-shadow:0 6px 20px rgba(0,0,0,0.5); max-width:92vw; }
+        #cad-update-notice .upd-btn { height:32px; padding:0 12px; border-radius:8px; background:rgba(0,255,136,0.12); border:1px solid rgba(0,255,136,0.5); color:#00ff88; font:700 12px 'Segoe UI',sans-serif; cursor:pointer; }
+        #cad-update-notice .upd-x { width:32px; height:32px; border-radius:8px; background:none; border:1px solid #3a4049; color:#aaa; cursor:pointer; }
 
         /* 選択アクションバー（IDLEで図形/ブロックを選択中に表示） */
         #sel-actionbar { display:none; position:fixed; bottom:56px; left:8px; right:58px; z-index:35; align-items:center; gap:6px; padding:6px 10px; border-radius:var(--r-pill); overflow-x:auto; white-space:nowrap; }
@@ -339,6 +344,11 @@
         .opt-bg-btn { background:#2a2e35 !important; color:#e0e0e0 !important; border:1px solid var(--border-3) !important; }
         .opt-bg-btn:hover { background:#3a4049 !important; }
         .opt-bg-btn.active { border-color:var(--green) !important; color:var(--green) !important; background:rgba(0,255,136,0.10) !important; }
+        /* 主ボタン(緑)以外のパネル内ボタン: 通常操作=btn-sub、警告・エラー関連=btn-warn（黄） */
+        .prop-btn.btn-sub { background:#2a2e35; color:#e0e0e0; border:1px solid var(--border-3); border-radius:var(--r-sub); min-height:36px; font-weight:600; }
+        .prop-btn.btn-sub:hover { background:#3a4049; }
+        .prop-btn.btn-warn { background:rgba(255,204,0,0.08); color:#ffcc00; border:1px solid rgba(255,204,0,0.5); border-radius:var(--r-sub); min-height:36px; font-weight:600; }
+        .prop-btn.btn-warn:hover { background:rgba(255,204,0,0.16); }
     </style>
 </head>
 <body>
@@ -644,14 +654,8 @@
         </div>
     </div>
 
-    <!-- 外部ライブラリ (CDN) -->
-    <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.min.js"></script>
-    <!-- dxf-writer はブラウザ用ビルド(dist/Drawing.min.js)が存在しないため、jsdelivrのESM変換経由で読み込む -->
-    <script type="module">
-        import('https://cdn.jsdelivr.net/npm/dxf-writer@1.18.4/+esm')
-            .then(module => { window.Drawing = module.default || module; })
-            .catch(err => { console.warn('dxf-writer could not be loaded:', err); });
-    </script>
+    <!-- 外部ライブラリ（dxf-parser / dxf-writer / libredwg-web）: npm から Vite で同梱（オフライン対応） -->
+    <script type="module" src="/src/vendor.js"></script>
     <!-- CADモジュール -->
     <script src="cad-text-parse.js"></script>
     <script src="cad-dimension.js"></script>
@@ -661,13 +665,51 @@
 
     <!-- Service Worker Registration -->
     <script>
-        if ('serviceWorker' in navigator) {
+        (function () {
+            if (!('serviceWorker' in navigator)) return;
+            // Vite 開発サーバーでは SW を使わない（古いキャッシュの JS を掴んで検証を誤るため）。
+            // 以前に登録された SW とキャッシュも片付ける。
+            const isDevServer = !!document.querySelector('script[src="/@vite/client"]');
+            if (isDevServer) {
+                navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+                if (window.caches) caches.keys().then(ks => ks.filter(k => k.startsWith('webcad-')).forEach(k => caches.delete(k)));
+                return;
+            }
+            // 起動中に新しい版が有効になったら、再読み込みを案内する（初回インストール時は除く）
+            let hadController = !!navigator.serviceWorker.controller;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!hadController) { hadController = true; return; }
+                showUpdateNotice();
+            });
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
-                .then(reg => console.log('ServiceWorker registration successful'))
-                .catch(err => console.log('ServiceWorker registration failed: ', err));
+                    .then(reg => {
+                        // 長時間開きっぱなしでも更新に気付けるよう、復帰時に更新を確認
+                        document.addEventListener('visibilitychange', () => {
+                            if (document.visibilityState === 'visible') reg.update().catch(() => {});
+                        });
+                    })
+                    .catch(err => console.warn('ServiceWorker の登録に失敗しました:', err));
             });
-        }
+            function showUpdateNotice() {
+                if (document.getElementById('cad-update-notice')) return;
+                const el = document.createElement('div');
+                el.id = 'cad-update-notice';
+                el.setAttribute('role', 'status');
+                el.innerHTML = '<span>新しいバージョンに更新されました</span>' +
+                    '<button type="button" class="upd-btn">再読み込み</button>' +
+                    '<button type="button" class="upd-x" aria-label="閉じる">✕</button>';
+                el.querySelector('.upd-btn').addEventListener('click', async () => {
+                    // 作業中の図形を失わないよう保存してから再読み込み
+                    try { if (typeof window.flushAutoSave === 'function') await window.flushAutoSave(); } catch (e) { /* 続行 */ }
+                    // 再読み込み後は確認なしで今の図面を復元する（cad-storage.js の checkAutoRestore が参照）
+                    try { sessionStorage.setItem('cad_auto_restore', '1'); } catch (e) { /* 続行 */ }
+                    location.reload();
+                });
+                el.querySelector('.upd-x').addEventListener('click', () => el.remove());
+                document.body.appendChild(el);
+            }
+        })();
 
         // 起動時の自動復元チェック（少し遅延を入れてモジュール読み込みを待つ）
         window.addEventListener('load', () => {

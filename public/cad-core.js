@@ -46,9 +46,82 @@ function showOptionsPanel(){
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" ${hideArcs?'checked':''} onchange="setImportHideArcs(this.checked)" style="width:16px;height:16px;"> 取り込み時に円弧を非表示にする</label>
             <div style="color:#888;font-size:10px;">非表示にした円弧は、画層管理の「隠れ図形を再表示」で表示できます</div>
         </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
+            <div style="font-size:11px;color:#aaa;font-weight:700;">オフライン・データ</div>
+            <div id="opt-dwg-status" style="font-size:11px;color:#ddd;">DWG読込エンジン: 確認中…</div>
+            <button class="prop-btn btn-sub" id="opt-dwg-cache-btn" onclick="cacheDwgEngine()" style="display:none;">DWG読込エンジンを端末に保存（初回のみ数MB）</button>
+            <div id="opt-autosave-status" style="font-size:11px;color:#ddd;">自動保存: 確認中…</div>
+            <div id="opt-storage-status" style="font-size:11px;color:#888;">保存領域: 確認中…</div>
+            <button class="prop-btn btn-warn" onclick="if(window.cadErrors) window.cadErrors.show()">⚠ エラーログ（<span class="cad-err-count">${window.cadErrors ? window.cadErrors.count() : 0}</span>件）</button>
+            <div id="opt-build-info" style="font-size:10px;color:#666;"></div>
+        </div>
     `;
     showPropertyPanel('オプション', html);
+    refreshOfflineStatus();
 }
+
+// ===== オフライン・データの状態表示 =====
+function _swRequest(type) {
+    return new Promise((resolve, reject) => {
+        const ctrl = navigator.serviceWorker && navigator.serviceWorker.controller;
+        if(!ctrl) { reject(new Error('no-sw')); return; }
+        const ch = new MessageChannel();
+        const timer = setTimeout(() => reject(new Error('timeout')), type === 'lazy-cache' ? 180000 : 5000);
+        ch.port1.onmessage = (ev) => { clearTimeout(timer); resolve(ev.data || {}); };
+        ctrl.postMessage({ type }, [ch.port2]);
+    });
+}
+function _fmtBytes(n) {
+    if(n == null) return '?';
+    if(n >= 1073741824) return (n / 1073741824).toFixed(1) + 'GB';
+    if(n >= 1048576) return (n / 1048576).toFixed(1) + 'MB';
+    return Math.max(1, Math.round(n / 1024)) + 'KB';
+}
+function _setDwgStatus(text, showBtn) {
+    const st = document.getElementById('opt-dwg-status');
+    const btn = document.getElementById('opt-dwg-cache-btn');
+    if(st) st.textContent = text;
+    if(btn) btn.style.display = showBtn ? '' : 'none';
+}
+async function refreshOfflineStatus() {
+    const bi = window.cadErrors ? window.cadErrors.buildInfo() : { id: '?', at: '' };
+    const binfo = document.getElementById('opt-build-info');
+    if(binfo) binfo.textContent = `バージョン: build ${bi.id}${bi.at ? '（' + new Date(bi.at).toLocaleString('ja-JP') + '）' : ''}`;
+
+    _swRequest('lazy-status').then(r => {
+        if(!r.ok) { _setDwgStatus('DWG読込エンジン: 状態を確認できません', true); return; }
+        if(r.total === 0) _setDwgStatus('DWG読込エンジン: 同梱済み', false);
+        else if(r.cached >= r.total) _setDwgStatus('DWG読込エンジン: 端末に保存済み（オフラインでもDWGを開けます）', false);
+        else _setDwgStatus('DWG読込エンジン: 未保存（電波のある場所で1回DWGを開くか、下のボタンで保存）', true);
+    }).catch(() => _setDwgStatus('DWG読込エンジン: オフライン機能が無効です（開発版、または初回表示）', false));
+
+    if(typeof window.getStorageStatus === 'function') {
+        const s = await window.getStorageStatus();
+        const as = document.getElementById('opt-autosave-status');
+        if(as) {
+            const t = s.lastAutoSave ? new Date(s.lastAutoSave).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : null;
+            as.textContent = '自動保存: ' + (t ? `${t} に保存` : 'この起動ではまだ保存していません') + (s.unsaved ? '（未保存の変更あり・まもなく保存）' : '');
+        }
+        const el = document.getElementById('opt-storage-status');
+        if(el) {
+            const used = s.usage != null ? `使用 ${_fmtBytes(s.usage)}${s.quota ? ' / 上限 ' + _fmtBytes(s.quota) : ''}` : '使用量不明';
+            const keep = s.persisted === true ? '自動削除されない設定' : (s.persisted === false ? '容量不足時にブラウザが削除する可能性あり。重要な図面はDXFでも保存してください' : '');
+            el.textContent = `保存領域: ${used}${keep ? '（' + keep + '）' : ''}`;
+        }
+    }
+}
+window.cacheDwgEngine = async function() {
+    _setDwgStatus('DWG読込エンジン: 保存中…（数MBの通信があります）', false);
+    try {
+        const r = await _swRequest('lazy-cache');
+        if(!r.ok) throw new Error(r.error || '保存に失敗しました');
+        _setDwgStatus('DWG読込エンジン: 端末に保存済み（オフラインでもDWGを開けます）', false);
+        showToast('DWG読込エンジンを端末に保存しました');
+    } catch(err) {
+        _setDwgStatus('DWG読込エンジン: 保存に失敗しました（電波を確認してください）', true);
+        if(window.cadErrors) window.cadErrors.record('offline', 'DWG読込エンジンの保存に失敗: ' + (err && err.message || err), '', { silent: true });
+    }
+};
 window.setImportHideArcs = function(v) {
     try { localStorage.setItem('cad_import_hide_arcs', v ? '1' : '0'); } catch(e) {}
     addCommandLog(`-> 取り込み時の円弧非表示: ${v ? 'ON' : 'OFF'}`);
@@ -723,8 +796,8 @@ function saveUndo() {
     // 自動保存トリガー
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
-function undo() { if(!undoStack.length){addCommandLog('元に戻す操作がありません');return;} redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); }
-function redo() { if(!redoStack.length){addCommandLog('やり直す操作がありません');return;} undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); }
+function undo() { if(!undoStack.length){addCommandLog('元に戻す操作がありません');return;} redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
+function redo() { if(!redoStack.length){addCommandLog('やり直す操作がありません');return;} undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
 
 // ===== 数学ユーティリティ =====
 function dist(x1,y1,x2,y2) { return Math.sqrt((x2-x1)**2+(y2-y1)**2); }
@@ -2285,6 +2358,7 @@ function processCommand(cmdText) {
     else if(cmd==='REDO') { redo(); }
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
     else if(cmd==='CANCEL') { resetCommand(); }
+    else if(cmd==='ERRORS'||cmd==='ERRLOG') { if(window.cadErrors) window.cadErrors.show(); }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
     else { addCommandLog(`不明なコマンドです "${cmdText}"`); resetCommand(); }
 }

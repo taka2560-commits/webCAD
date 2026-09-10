@@ -1,20 +1,26 @@
 {
   "name": "Web CAD",
   "short_name": "WebCAD",
+  "description": "測量・建設現場向けのブラウザ2D CAD（DXF/DWG対応・オフライン動作）",
+  "lang": "ja",
+  "id": "/",
   "start_url": ".",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#212830",
-  "theme_color": "#212830",
+  "background_color": "#111418",
+  "theme_color": "#111418",
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

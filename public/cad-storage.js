@@ -7,7 +7,10 @@ const CAD_DB_VERSION = 1;
 const STORE_PROJECTS = 'projects';
 const STORE_AUTOSAVE = 'autosave';
 const AUTOSAVE_KEY = '__autosave__';
-const AUTOSAVE_INTERVAL = 300000; // 5分
+// 変更が止まってから15秒後に保存。編集し続けていても最初の変更から60秒以内には必ず保存する。
+// （以前は5分間隔で、スマホでは離脱時の保存も効かず最大5分の作業が消えることがあった）
+const AUTOSAVE_DEBOUNCE_MS = 15000;
+const AUTOSAVE_MAX_WAIT_MS = 60000;
 
 let _cadDb = null;
 let _autoSaveTimer = null;
@@ -39,8 +42,13 @@ function _dbPut(storeName, key, value) {
         const tx = db.transaction(storeName, 'readwrite');
         const store = tx.objectStore(storeName);
         const req = key !== undefined ? store.put(value, key) : store.put(value);
-        req.onsuccess = () => resolve();
-        req.onerror = (e) => reject(e);
+        // put 自体が成功しても、容量不足(QuotaExceededError)等はトランザクションの abort で届く。
+        // 本当に書き込まれたことを保証するため complete を待って成功とする。
+        const fail = () => reject(tx.error || req.error || new Error('IndexedDB への書き込みに失敗しました'));
+        tx.oncomplete = () => resolve();
+        tx.onerror = fail;
+        tx.onabort = fail;
+        if (typeof tx.commit === 'function') { try { tx.commit(); } catch (e) { /* 古いブラウザ */ } }
     }));
 }
 
@@ -84,6 +92,8 @@ function _buildSaveData(name) {
     });
     return {
         name: name || '無題',
+        projectName: name === AUTOSAVE_KEY ? _currentProjectName : (name || null),
+        drawingName: window._drawingName || null,
         entities: cleanEntities,
         layers: JSON.parse(JSON.stringify(layers)),
         currentLayerIndex: currentLayerIndex,
@@ -156,43 +166,110 @@ function _syncUcsLabels() {
 }
 
 // ===== 自動保存 =====
-let _autoSavePending = false;
+// ・変更（saveUndo / undo / redo）のたびに scheduleAutoSave() が呼ばれ、少し待ってまとめて保存する
+// ・アプリを裏に回した/閉じたとき（visibilitychange / pagehide）は即保存する
+//   （スマホでは beforeunload がほぼ発火しないため、これが無いと直前の作業が消える）
+let _autoSavePending = null;  // 実行中の保存 Promise
+let _changeSeq = 0;           // 変更の通番
+let _savedSeq = 0;            // 自動保存済みの通番
+let _projectSavedSeq = 0;     // 名前付き保存（または読込）時点の通番
+let _firstUnsavedAt = 0;      // 未保存の変更が最初に発生した時刻
+let _autoSaveErrorNotified = false;
 
 function scheduleAutoSave() {
-    // まだ予約がなければタイマーをセット（即時実行はしない）
-    if (!_autoSaveTimer && !_autoSavePending) {
-        const now = Date.now();
-        const elapsed = now - _lastAutoSaveTime;
-        const wait = Math.max(AUTOSAVE_INTERVAL - elapsed, 10000); // 最低10秒は待つ
-        _autoSaveTimer = setTimeout(() => {
-            _autoSaveTimer = null;
-            _doAutoSave();
-        }, wait);
-    }
+    _changeSeq++;
+    const now = Date.now();
+    if (!_firstUnsavedAt) _firstUnsavedAt = now;
+    clearTimeout(_autoSaveTimer);
+    const wait = Math.max(0, Math.min(AUTOSAVE_DEBOUNCE_MS, _firstUnsavedAt + AUTOSAVE_MAX_WAIT_MS - now));
+    _autoSaveTimer = setTimeout(() => { _autoSaveTimer = null; _doAutoSave(); }, wait);
 }
 
+function _hasUnsavedChanges() { return _changeSeq !== _savedSeq; }
+// 名前付きプロジェクトとして保存していない変更があるか
+function _hasUnsavedProjectChanges() { return entities.length > 0 && (!_currentProjectName || _changeSeq !== _projectSavedSeq); }
+
 function _doAutoSave() {
-    if (_autoSavePending) return; // 二重実行防止
-    _autoSavePending = true;
-    _lastAutoSaveTime = Date.now();
-    // UIをブロックしないようsetTimeoutで切り離す
-    setTimeout(() => {
-        try {
-            const data = _buildSaveData('__autosave__');
-            _dbPut(STORE_AUTOSAVE, AUTOSAVE_KEY, data).then(() => {
-                _updateAutoSaveStatus('保存済み');
-            }).catch(err => {
-                console.error('自動保存エラー:', err);
-                _updateAutoSaveStatus('エラー');
-            }).finally(() => {
-                _autoSavePending = false;
-            });
-        } catch (err) {
-            console.error('自動保存エラー:', err);
-            _autoSavePending = false;
+    // 保存中なら、終わってから（まだ未保存の変更があれば）もう一度保存する
+    if (_autoSavePending) {
+        return _autoSavePending.then(() => (_hasUnsavedChanges() ? _doAutoSave() : true));
+    }
+    clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = null;
+    const seq = _changeSeq;
+    let data;
+    try {
+        // その場でスナップショットを取る（直後に別の図面へ切り替わっても今の内容が保存される）
+        data = _buildSaveData(AUTOSAVE_KEY);
+    } catch (err) {
+        console.error('自動保存エラー:', err);
+        _updateAutoSaveStatus('エラー');
+        return Promise.resolve(false);
+    }
+    _autoSavePending = _dbPut(STORE_AUTOSAVE, AUTOSAVE_KEY, data).then(() => {
+        _savedSeq = seq;
+        if (!_hasUnsavedChanges()) _firstUnsavedAt = 0;
+        _lastAutoSaveTime = Date.now();
+        _autoSaveErrorNotified = false;
+        _updateAutoSaveStatus('保存済み');
+        _requestPersistentStorage();
+        return true;
+    }).catch(err => {
+        console.error('自動保存エラー:', err);
+        _updateAutoSaveStatus('エラー');
+        // 容量不足などは作業が失われる恐れがあるため、一度だけ画面に知らせる
+        if (!_autoSaveErrorNotified) {
+            _autoSaveErrorNotified = true;
+            const msg = (err && (err.name === 'QuotaExceededError')) ? '端末の保存容量が不足しています' : ((err && err.message) || String(err));
+            if (window.cadErrors) window.cadErrors.record('storage', '自動保存に失敗しました: ' + msg, err && err.stack);
         }
-    }, 0);
+        return false;
+    }).finally(() => {
+        _autoSavePending = null;
+    });
+    return _autoSavePending;
 }
+
+// 未保存の変更があれば今すぐ自動保存する（再読み込み前・アプリ離脱時用）
+window.flushAutoSave = function() {
+    if (_autoSavePending || _hasUnsavedChanges()) return _doAutoSave();
+    return Promise.resolve(true);
+};
+
+function _onPageHidden() {
+    if (_hasUnsavedChanges()) _doAutoSave();
+}
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') _onPageHidden();
+});
+window.addEventListener('pagehide', _onPageHidden);
+
+// ブラウザの容量逼迫時に保存データが自動削除されないよう「永続ストレージ」を要求する（初回保存時に1回）
+let _persistRequested = false;
+function _requestPersistentStorage() {
+    if (_persistRequested) return;
+    _persistRequested = true;
+    try {
+        if (navigator.storage && navigator.storage.persist) {
+            navigator.storage.persisted()
+                .then(p => (p ? true : navigator.storage.persist()))
+                .catch(() => {});
+        }
+    } catch { /* 非対応 */ }
+}
+
+// オプション画面用: 保存領域の状態
+window.getStorageStatus = async function() {
+    const st = { persisted: null, usage: null, quota: null, lastAutoSave: _lastAutoSaveTime, unsaved: _hasUnsavedChanges() };
+    try {
+        if (navigator.storage && navigator.storage.persisted) st.persisted = await navigator.storage.persisted();
+        if (navigator.storage && navigator.storage.estimate) {
+            const est = await navigator.storage.estimate();
+            st.usage = est.usage; st.quota = est.quota;
+        }
+    } catch { /* 非対応 */ }
+    return st;
+};
 
 function _updateAutoSaveStatus(status) {
     const el = document.getElementById('autosave-status');
@@ -218,7 +295,10 @@ window.saveProject = async function(nameOverride) {
         const data = _buildSaveData(name);
         await _dbPut(STORE_PROJECTS, undefined, data);
         _currentProjectName = name;
+        _projectSavedSeq = _changeSeq;
+        _requestPersistentStorage();
         addCommandLog(`-> プロジェクト「${name}」を保存しました (${entities.length}図形)`);
+        if (typeof showToast === 'function') showToast(`「${name}」を保存しました`, 2500);
         _updateAutoSaveStatus('手動保存');
         // タイトル更新
         document.title = `${name} - WebCAD`;
@@ -226,12 +306,15 @@ window.saveProject = async function(nameOverride) {
     } catch (err) {
         console.error('プロジェクト保存エラー:', err);
         addCommandLog('エラー: プロジェクトの保存に失敗しました');
+        const msg = (err && err.name === 'QuotaExceededError') ? '端末の保存容量が不足しています' : ((err && err.message) || String(err));
+        if (window.cadErrors) window.cadErrors.record('storage', 'プロジェクトの保存に失敗しました: ' + msg, err && err.stack);
     }
 };
 
 // 現在のプロジェクト名を外部から設定/解除（DXF読み込みで置き換えたときに前の名前で上書き保存しないため）
 window.setCurrentProjectName = function(name) {
     _currentProjectName = name || null;
+    _projectSavedSeq = _changeSeq;
     document.title = name ? `${name} - WebCAD` : 'Web CAD';
 };
 
@@ -305,15 +388,17 @@ window.hideProjectList = function() {
 };
 
 window.loadProjectFromList = async function(name) {
-    if (!confirm(`プロジェクト「${name}」を読み込みますか？\n（現在の作業は自動保存されます）`)) return;
-    
-    // 現在の作業を自動保存
-    _doAutoSave();
-    
+    const warn = _hasUnsavedProjectChanges()
+        ? '\n\n⚠ 現在の図面には名前を付けて保存していない変更があります。読み込むと失われます（必要なら先に「保存」してください）。'
+        : '';
+    if (!confirm(`プロジェクト「${name}」を読み込みますか？${warn}`)) return;
+
     try {
         const data = await _dbGet(STORE_PROJECTS, name);
         if (data && applyProjectData(data)) {
             _currentProjectName = name;
+            _projectSavedSeq = _changeSeq;
+            if (typeof setDrawingName === 'function' && data.drawingName) setDrawingName(data.drawingName);
             document.title = `${name} - WebCAD`;
             addCommandLog(`-> プロジェクト「${name}」を復元しました (${entities.length}図形)`);
             window.hideProjectList();
@@ -344,14 +429,22 @@ window.deleteProjectFromList = async function(name) {
 
 // ===== 起動時の自動復元チェック =====
 async function checkAutoRestore() {
+    // アプリ更新の「再読み込み」から起動した場合は確認なしで復元する
+    let silent = false;
+    try { silent = sessionStorage.getItem('cad_auto_restore') === '1'; sessionStorage.removeItem('cad_auto_restore'); } catch { /* 非対応 */ }
     try {
         const data = await _dbGet(STORE_AUTOSAVE, AUTOSAVE_KEY);
-        if (data && data.entities && data.entities.length > 0) {
+        // 既に図面を開いている場合（起動直後にファイルを開いた等）は上書きしない
+        if (data && data.entities && data.entities.length > 0 && entities.length === 0) {
             const dt = new Date(data.savedAt);
             const dateStr = `${dt.getMonth()+1}/${dt.getDate()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
-            if (confirm(`前回の作業データがあります（${dateStr}、${data.entityCount || data.entities.length}図形）。\n\n復元しますか？`)) {
+            const label = data.projectName ? `「${data.projectName}」` : (data.drawingName ? `「${data.drawingName}」` : '');
+            if (silent || confirm(`前回の作業データ${label}があります（${dateStr}、${data.entityCount || data.entities.length}図形）。\n\n復元しますか？\n（復元しない場合、次に編集した時点で上書きされます）`)) {
                 applyProjectData(data);
+                if (data.projectName) window.setCurrentProjectName(data.projectName);
+                if (typeof setDrawingName === 'function' && data.drawingName) setDrawingName(data.drawingName);
                 addCommandLog(`-> 自動保存データを復元しました (${entities.length}図形)`);
+                if (silent && typeof showToast === 'function') showToast('更新前の図面を復元しました', 3000);
             }
         }
     } catch (err) {
@@ -360,20 +453,9 @@ async function checkAutoRestore() {
 }
 
 // ===== ページ離脱時の保存 =====
-window.addEventListener('beforeunload', () => {
-    if (entities.length > 0) {
-        try {
-            // 同期的に書き込み（best effort）
-            const data = _buildSaveData('__autosave__');
-            const req = indexedDB.open(CAD_DB_NAME, CAD_DB_VERSION);
-            req.onsuccess = (e) => {
-                const db = e.target.result;
-                const tx = db.transaction(STORE_AUTOSAVE, 'readwrite');
-                tx.objectStore(STORE_AUTOSAVE).put(data, AUTOSAVE_KEY);
-            };
-        } catch (e) { /* best effort */ }
-    }
-});
+// PC ブラウザでタブを閉じる場合の保険（既に開いている DB 接続で即座に書き込みを開始する）。
+// スマホでは上の visibilitychange / pagehide が主に働く。
+window.addEventListener('beforeunload', _onPageHidden);
 
 // ===== コマンド処理 =====
 function processStorageCommand(cmd) {

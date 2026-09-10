@@ -6,7 +6,21 @@ export default [
         // Service Worker はグローバルが異なる
         files: ["public/sw.js"],
         languageOptions: {
-            globals: { self: "readonly", caches: "readonly", fetch: "readonly", console: "readonly", URL: "readonly", Promise: "readonly" }
+            globals: { self: "readonly", caches: "readonly", fetch: "readonly", console: "readonly", URL: "readonly", Promise: "readonly", Request: "readonly", setTimeout: "readonly" }
+        }
+    },
+    {
+        // ビルド設定（Node.js で実行）
+        files: ["vite.config.js"],
+        languageOptions: {
+            globals: { console: "readonly", process: "readonly" }
+        }
+    },
+    {
+        // Vite でバンドルするモジュール（src/）
+        files: ["src/**/*.js"],
+        languageOptions: {
+            globals: { window: "readonly", Event: "readonly" }
         }
     },
     {
@@ -104,7 +118,11 @@ export default [
                 expandGroupTargets: "readonly",
                 shouldHideImportedArcs: "readonly",
                 expandBulgeVertices: "readonly",
-                evalBSplinePoints: "readonly"
+                evalBSplinePoints: "readonly",
+                // フェーズ1: オフライン対応・エラー記録
+                location: "readonly",
+                MessageChannel: "readonly",
+                sessionStorage: "readonly"
             }
         },
         rules: {
