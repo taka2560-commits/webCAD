@@ -266,12 +266,100 @@ let currentLayerIndex = 0;
 window.ghostLayerMode = false; // 非表示画層をうっすら表示するモード
 window.areaSelectEnabled = false; // 交差・範囲選択を有効化するフラグ（基本OFF）
 let entities = [];
+
+// ===== 図形の固有ID =====
+// 選択状態を「配列の何番目か」で持つと、削除・トリム・元に戻す等で配列が詰まったとき別の図形を指してしまう
+// （例: 長押しで文字を消した後に選択中の図形がずれ、続けて ERASE すると違う図形が消える）。
+// そこで各図形に固有ID(e.id)を付け、選択・ハイライト・移動対象などは内部的にIDで保持する。
+// 既存コードの cmdState.selectedIndices / highlightIdx は「その時点の配列番号」を返すアクセサとして残す。
+let _nextEntityId = 1;
+let _idIndexCache = null; // Map<id, 配列番号>（配列が変わったら参照時に検出して作り直す）
+
+// IDが無い図形・重複したID（JSON 複製で生じる）に新しいIDを付ける。既存の正しいIDは変えない
+function ensureEntityIds() {
+    for(const e of entities) {
+        if(e && typeof e.id === 'number' && isFinite(e.id) && e.id >= _nextEntityId) _nextEntityId = Math.floor(e.id) + 1;
+    }
+    const seen = new Set();
+    let changed = false;
+    for(const e of entities) {
+        if(!e) continue;
+        if(typeof e.id !== 'number' || !isFinite(e.id) || seen.has(e.id)) { e.id = _nextEntityId++; changed = true; }
+        seen.add(e.id);
+    }
+    if(changed) _idIndexCache = null;
+}
+// IDから現在の配列番号を求める（見つからなければ -1）
+function entityIndexById(id) {
+    if(id === null || id === undefined) return -1;
+    if(_idIndexCache) {
+        const i = _idIndexCache.get(id);
+        if(i !== undefined && entities[i] && entities[i].id === id) return i;
+    }
+    _idIndexCache = new Map();
+    entities.forEach((e, i) => { if(e && !_idIndexCache.has(e.id)) _idIndexCache.set(e.id, i); });
+    const j = _idIndexCache.get(id);
+    return (j !== undefined && entities[j] && entities[j].id === id) ? j : -1;
+}
+function getEntityById(id) { const i = entityIndexById(id); return i >= 0 ? entities[i] : null; }
+// 図形のIDを返す（未設定・重複なら先に付け直す）
+function _idOf(e) {
+    if(typeof e.id !== 'number' || entities[entityIndexById(e.id)] !== e) ensureEntityIds();
+    return e.id;
+}
+// obj[prop] を「図形の配列番号」として読み書きできるようにし、内部ではIDで保持する
+function _defineEntityRef(obj, prop, emptyValue) {
+    let id = null;
+    Object.defineProperty(obj, prop, {
+        enumerable: true, configurable: true,
+        get() {
+            if(id === null) return emptyValue;
+            const i = entityIndexById(id);
+            if(i < 0) { id = null; return emptyValue; } // 削除された図形は選択から外す
+            return i;
+        },
+        set(i) { id = (typeof i === 'number' && i >= 0 && entities[i]) ? _idOf(entities[i]) : null; }
+    });
+}
+// 複数選択（配列番号の配列として読み書き。内部はIDの配列）
+function _defineEntityRefList(obj, prop) {
+    let ids = [];
+    Object.defineProperty(obj, prop, {
+        enumerable: true, configurable: true,
+        get() {
+            if(!ids.length) return [];
+            const out = [], keep = [];
+            for(const id of ids) { const i = entityIndexById(id); if(i >= 0) { out.push(i); keep.push(id); } }
+            if(keep.length !== ids.length) ids = keep;
+            return out;
+        },
+        set(arr) {
+            ids = [];
+            if(!Array.isArray(arr)) return;
+            const seen = new Set();
+            for(const i of arr) {
+                if(typeof i !== 'number' || !entities[i]) continue;
+                const id = _idOf(entities[i]);
+                if(!seen.has(id)) { seen.add(id); ids.push(id); }
+            }
+        }
+    });
+}
+function _makeCmdState() {
+    const st = { mode: 'IDLE', startWcs: null, points: [] };
+    _defineEntityRef(st, 'highlightIdx', -1);
+    _defineEntityRefList(st, 'selectedIndices');
+    _defineEntityRef(st, 'moveTarget', undefined);
+    _defineEntityRef(st, 'offsetTarget', undefined);
+    return st;
+}
+
 let view = { x:0, y:0, scale:1, rotation:0 };
 let mouse = { screenX:0, screenY:0, wcsX:0, wcsY:0, ucsX:0, ucsY:0, isPanning:false, isSelecting:false, selStartX:0, selStartY:0 };
 let ucs = { originX:0, originY:0, angle:0 }; // angle: ラジアン（WCSからの回転角）
 let undoStack = [], redoStack = [];
 let savedUCSList = [];
-let cmdState = { mode:'IDLE', startWcs:null, points:[], highlightIdx:-1, selectedIndices:[] };
+let cmdState = _makeCmdState();
 let snapResult = null;
 const SNAP_R = 10, ERASE_R = 5;
 // スナップ・直交状態
@@ -384,7 +472,7 @@ function isMobile() { return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile
 function addCommandLog(t) { const d=document.createElement('div'); d.textContent=t; commandLog.appendChild(d); commandLog.scrollTop=commandLog.scrollHeight; }
 function setPrompt(t) { document.getElementById('command-prompt').textContent=t; updateCommandPill(); }
 function resetCommand() { 
-    cmdState={mode:'IDLE',startWcs:null,points:[],highlightIdx:-1,selectedIndices:[]}; 
+    cmdState=_makeCmdState(); 
     setPrompt('コマンド:'); activeCommandName=''; setActiveTool(null);
     
     // 画層管理・ブロック管理のフローティングパネルは閉じずに内容だけ更新する
@@ -410,7 +498,20 @@ function resetCommand() {
     if(typeof updateSelectionBar === 'function') updateSelectionBar();
     render();
 }
-function issueCommand(cmd) { cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd); }
+// IDLE でタップして選んだ1図形（ハイライト）を、編集コマンドの対象（選択）として採用する。
+// （以前はボタンから編集コマンドを出すとハイライトが先に消され、1つだけ選んだ図形は
+//   選択アクションバーの「削除・移動・複写・回転」で引き継がれず、もう一度タップが必要だった）
+// ※ IDLE 中のハイライトはタップ選択でのみ付く（選択待ちモード中のマウス通過では付かない）
+function _adoptIdleHighlight() {
+    if(cmdState.mode === 'IDLE' && cmdState.highlightIdx >= 0 && !(cmdState.selectedIndices && cmdState.selectedIndices.length)) {
+        cmdState.selectedIndices = [cmdState.highlightIdx];
+    }
+}
+const _SELECTION_EDIT_COMMANDS = ['E', 'ERASE', 'M', 'MOVE', 'CO', 'COPY', 'RO', 'ROTATE'];
+function issueCommand(cmd) {
+    if(_SELECTION_EDIT_COMMANDS.includes(String(cmd).toUpperCase())) _adoptIdleHighlight();
+    cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd);
+}
 function setActiveTool(name) { document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active')); if(name){document.querySelectorAll('.tool-cmd').forEach(el=>{if(el.textContent===name)el.parentElement.classList.add('active');});} updateCommandPill(); }
 
 // === 新UI: ツールバー展開 / コマンドピル ===
@@ -781,15 +882,16 @@ function _undoSnapshot() {
 function _applyUndoSnapshot(s) {
     if(Array.isArray(s)) { entities = s; } // 旧形式（entities配列のみ）との互換
     else { entities = s.entities; layers = s.layers; }
-    // 選択中インデックスが範囲外になった場合をクリア
-    if(cmdState.highlightIdx >= entities.length) cmdState.highlightIdx = -1;
-    if(cmdState.selectedIndices) cmdState.selectedIndices = cmdState.selectedIndices.filter(i => i < entities.length);
+    // 選択はIDで保持しているため、戻した後も同じ図形を指す（存在しなくなった図形は自動で外れる）
+    _idIndexCache = null;
+    ensureEntityIds();
     // 画層UIを同期
     initLayers();
     if(typeof window.updateLayerPanel === 'function') window.updateLayerPanel();
     updatePropertiesPanel();
 }
 function saveUndo() {
+    ensureEntityIds(); // 履歴にもIDを残し、元に戻した後も選択が同じ図形を指すようにする
     undoStack.push(_undoSnapshot());
     if(undoStack.length>50) undoStack.shift();
     redoStack=[];
@@ -852,6 +954,47 @@ function intersectLineLine(x1,y1,x2,y2, x3,y3,x4,y4) {
     const ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom;
     if(ua>=0 && ua<=1 && ub>=0 && ub<=1) return {x: x1+ua*(x2-x1), y: y1+ua*(y2-y1)};
     return null;
+}
+
+// 点(px,py)が円弧 e の描かれている範囲にあるか（円なら常に true）
+function isPointOnArc(e, px, py) {
+    if(e.type !== 'ARC') return true;
+    const a = Math.atan2(py - e.cy, px - e.cx);
+    const ccw = e.counterclockwise;
+    return isAngleBetweenCCW(ccw ? a : -a, ccw ? e.startAngle : -e.startAngle, ccw ? e.endAngle : -e.endAngle);
+}
+// トリム・延長の境界として使える図形の線分（線・長方形・ポリライン）
+function boundarySegmentsOf(e) {
+    if(e.type === 'LINE') return [{ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2 }];
+    if(e.type === 'RECTANG') return [
+        { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y1 }, { x1: e.x2, y1: e.y1, x2: e.x2, y2: e.y2 },
+        { x1: e.x2, y1: e.y2, x2: e.x1, y2: e.y2 }, { x1: e.x1, y1: e.y2, x2: e.x1, y2: e.y1 }
+    ];
+    if(e.type === 'PLINE' && e.points && e.points.length > 1) {
+        const segs = [];
+        for(let i = 1; i < e.points.length; i++) segs.push({ x1: e.points[i-1].x, y1: e.points[i-1].y, x2: e.points[i].x, y2: e.points[i].y });
+        if(e.closed && e.points.length > 2) {
+            const a = e.points[e.points.length - 1], b = e.points[0];
+            segs.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+        }
+        return segs;
+    }
+    return [];
+}
+// 線分(x1,y1)-(x2,y2) と図形 other の交点（線分の範囲内・円弧は描かれている範囲のみ）
+function intersectSegWithEntity(x1, y1, x2, y2, other) {
+    const out = [];
+    if(other.type === 'CIRCLE' || other.type === 'ARC') {
+        intersectSegCircle(x1, y1, x2, y2, other.cx, other.cy, other.radius).forEach(p => {
+            if(isPointOnArc(other, p.x, p.y)) out.push(p);
+        });
+        return out;
+    }
+    boundarySegmentsOf(other).forEach(s => {
+        const p = intersectLineLine(x1, y1, x2, y2, s.x1, s.y1, s.x2, s.y2);
+        if(p) out.push(p);
+    });
+    return out;
 }
 
 function collectSnapPoints(wx, wy, baseWcs) {
@@ -1012,12 +1155,7 @@ function collectSnapPoints(wx, wy, baseWcs) {
             else if((e.type==='CIRCLE'||e.type==='ARC') && circles.length < MAX_CIRCLES) circles.push(e);
         });
         // 円弧なら角度範囲内かをチェック（円なら常にtrue）
-        const onArc = (e, px, py) => {
-            if(e.type!=='ARC') return true;
-            const a = Math.atan2(py-e.cy, px-e.cx);
-            const ccw = e.counterclockwise;
-            return isAngleBetweenCCW(ccw?a:-a, ccw?e.startAngle:-e.startAngle, ccw?e.endAngle:-e.endAngle);
-        };
+        const onArc = isPointOnArc;
         // 2) 線分×線分
         for(let i=0; i<segs.length; i++) {
             for(let j=i+1; j<segs.length; j++) {
@@ -1425,6 +1563,7 @@ function calcBBox(e) {
 function drawEntities() {
     ctx.save();
     const selSet = new Set(cmdState.selectedIndices || []);
+    const hlIdx = cmdState.highlightIdx;
 
     // カリング用の画面の表示範囲 (WCS座標)。100ピクセルずつ余裕をもたせる
     const tl = screenToWcs(-100, -100);
@@ -1462,7 +1601,7 @@ function drawEntities() {
 
         let color = null;
         if (lyrVisible) {
-            if(i === cmdState.highlightIdx) color = '#ff6b6b';
+            if(i === hlIdx) color = '#ff6b6b';
             else if(selSet.has(i)) color = '#ffaa33'; // 複数選択時はオレンジ
         }
         drawOneEntity(e, color);
@@ -1910,12 +2049,15 @@ function isOffsetable(e) { return e.type==='LINE'||e.type==='CIRCLE'||e.type==='
 function createOffsetEntity(e, d, wx, wy) {
     const copy = JSON.parse(JSON.stringify(e));
     delete copy.bbox; // 元図形のbboxを引き継ぐとスナップ/描画カリングが誤判定する
+    // オフセットで作った図形は独立した新しい図形（元のブロックのグループには入れない）
+    delete copy.id; delete copy.gid; delete copy.blockName;
     if(e.type==='CIRCLE'||e.type==='ARC') {
         const dc = dist(e.cx, e.cy, wx, wy);
         if(dc > e.radius) copy.radius += d; else { copy.radius -= d; if(copy.radius<=0) return null; }
         return copy;
     } else if(e.type==='LINE') {
         const dx = e.x2 - e.x1, dy = e.y2 - e.y1, len = Math.sqrt(dx*dx+dy*dy);
+        if(len === 0) return null; // 長さ0の線は方向が決まらない（NaN の図形を作らない）
         const nx = -dy/len, ny = dx/len; // 左側法線
         // クリック点が線分のどちら側か
         const vx = wx - e.x1, vy = wy - e.y1;
@@ -1961,7 +2103,7 @@ function rotateEntity(e, cx, cy, angle) {
         if(e.type === 'ARC') { e.startAngle += angle; e.endAngle += angle; }
         if(e.type === 'ELLIPSE') { e.rotation = (e.rotation || 0) + angle; }
     } else if(e.type === 'PLINE') {
-        e.points.forEach(p => { const np = {x: Math.round(rx(p.x, p.y)*1000)/1000, y: Math.round(ry(p.x, p.y)*1000)/1000}; p.x = np.x; p.y = np.y; });
+        e.points.forEach(p => { const nx = rx(p.x, p.y), ny = ry(p.x, p.y); p.x = nx; p.y = ny; });
     } else if(e.type === 'POINT' || e.type === 'TEXT') {
         const nx = rx(e.x, e.y), ny = ry(e.x, e.y);
         e.x = nx; e.y = ny;
@@ -2042,16 +2184,12 @@ function executeTrim(trimPath) {
 
         // LINEのトリム処理
         if(e.type === 'LINE') {
+            // 境界: 線・長方形・ポリライン・円・円弧（円弧は描かれている範囲のみ）
+            // （以前は線と円だけが境界で、長方形やポリラインと交わる線はトリムすると線ごと消えていた）
             let allIntersections = [];
             entities.forEach(other => {
                 if(e === other || !isVisible(other)) return;
-                if(other.type === 'LINE') {
-                    const pt = intersectLineLine(e.x1, e.y1, e.x2, e.y2, other.x1, other.y1, other.x2, other.y2);
-                    if(pt && isPointOnSegment(pt.x, pt.y, e.x1, e.y1, e.x2, e.y2) && isPointOnSegment(pt.x, pt.y, other.x1, other.y1, other.x2, other.y2)) allIntersections.push(pt);
-                } else if(other.type === 'CIRCLE' || other.type === 'ARC') {
-                    const pts = intersectSegCircle(e.x1, e.y1, e.x2, e.y2, other.cx, other.cy, other.radius);
-                    pts.forEach(pt => allIntersections.push(pt));
-                }
+                intersectSegWithEntity(e.x1, e.y1, e.x2, e.y2, other).forEach(pt => allIntersections.push(pt));
             });
 
             const dx = e.x2 - e.x1, dy = e.y2 - e.y1, len2 = dx*dx + dy*dy;
@@ -2079,8 +2217,14 @@ function executeTrim(trimPath) {
                 }
                 if(t1Idx !== -1) {
                     entitiesToRemove.push(i);
-                    if(t1Idx > 0) newEntities.push({type:'LINE', layer:e.layer, color:e.color, x1:uniqueInts[0].x, y1:uniqueInts[0].y, x2:uniqueInts[t1Idx].x, y2:uniqueInts[t1Idx].y});
-                    if(t2Idx < uniqueInts.length - 1) newEntities.push({type:'LINE', layer:e.layer, color:e.color, x1:uniqueInts[t2Idx].x, y1:uniqueInts[t2Idx].y, x2:uniqueInts[uniqueInts.length-1].x, y2:uniqueInts[uniqueInts.length-1].y});
+                    // 残った部分は元の線の属性（画層・色・ブロックのグループ等）を引き継ぐ
+                    const piece = (a, b) => {
+                        const n = Object.assign({}, e, { x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+                        delete n.bbox; delete n.id;
+                        return n;
+                    };
+                    if(t1Idx > 0) newEntities.push(piece(uniqueInts[0], uniqueInts[t1Idx]));
+                    if(t2Idx < uniqueInts.length - 1) newEntities.push(piece(uniqueInts[t2Idx], uniqueInts[uniqueInts.length-1]));
                     trimmedCount++;
                 } else {
                     // 万が一ヒット位置が特定できなければ単体削除
@@ -2137,27 +2281,25 @@ function executeExtend(extendPath) {
         const dist2 = dist(hitPt.x, hitPt.y, e.x2, e.y2);
         const isP1 = dist1 < dist2;
         const targetPt = isP1 ? {x: e.x1, y: e.y1} : {x: e.x2, y: e.y2};
-        const dx = e.x2 - e.x1; const dy = e.y2 - e.y1;
+        const len = dist(e.x1, e.y1, e.x2, e.y2);
+        if(len === 0) return;
         const dir = isP1 ? -1 : 1; // 延長方向の係数
+        const ux = (e.x2 - e.x1) / len * dir, uy = (e.y2 - e.y1) / len * dir; // 延長方向の単位ベクトル
+        // 端点から延長方向へ十分長い線分（半直線の代わり）。公共座標（数十万m）でも届く長さにする
+        const RAY = 1e8;
+        const rx2 = targetPt.x + ux * RAY, ry2 = targetPt.y + uy * RAY;
+        const minGap = len * 1e-9;
 
         let closestPt = null;
         let minT = Infinity;
 
+        // 境界: 線・長方形・ポリライン・円・円弧（円弧は描かれている範囲のみ）
         entities.forEach(other => {
             if(e === other || !isVisible(other)) return;
-            if(other.type === 'LINE') {
-                const pt = intersectLineLine(e.x1, e.y1, e.x1 + dx * 10000 * dir, e.y1 + dy * 10000 * dir, other.x1, other.y1, other.x2, other.y2);
-                if(pt && isPointOnSegment(pt.x, pt.y, other.x1, other.y1, other.x2, other.y2)) {
-                    const t = dx !== 0 ? (pt.x - targetPt.x) / (dx * dir) : (pt.y - targetPt.y) / (dy * dir);
-                    if(t > 0.001 && t < minT) { minT = t; closestPt = pt; }
-                }
-            } else if(other.type === 'CIRCLE' || other.type === 'ARC') {
-                const pts = intersectSegCircle(e.x1, e.y1, e.x1 + dx * 10000 * dir, e.y1 + dy * 10000 * dir, other.cx, other.cy, other.radius);
-                pts.forEach(pt => {
-                    const t = dx !== 0 ? (pt.x - targetPt.x) / (dx * dir) : (pt.y - targetPt.y) / (dy * dir);
-                    if(t > 0.001 && t < minT) { minT = t; closestPt = pt; }
-                });
-            }
+            intersectSegWithEntity(targetPt.x, targetPt.y, rx2, ry2, other).forEach(pt => {
+                const t = (pt.x - targetPt.x) * ux + (pt.y - targetPt.y) * uy; // 端点からの距離
+                if(t > minGap && t < minT) { minT = t; closestPt = pt; }
+            });
         });
 
         if(closestPt) {
@@ -2306,7 +2448,8 @@ function processCommand(cmdText) {
     }
     else if(cmd==='H'||cmd==='HATCH') { cmdState.mode='WAITING_HATCH_SELECT'; setPrompt('閉じた図形を選択:'); setActiveTool('HATCH'); addCommandLog('-> 塗りつぶす閉じた図形を選択'); }
     else if(cmd==='E'||cmd==='ERASE') {
-        // IDLE時の選択を引き継ぎ
+        // IDLE時の選択を引き継ぎ（タップで選んだ1図形も対象）
+        _adoptIdleHighlight();
         if(cmdState.selectedIndices && cmdState.selectedIndices.length > 0) {
             const si = cmdState.selectedIndices.slice();
             saveUndo();
@@ -3261,6 +3404,7 @@ function updatePropertiesPanel() {
     if(!p) return;
     if(cmdState.mode === 'IDLE' && cmdState.highlightIdx >= 0 && entities[cmdState.highlightIdx]) {
         const e = entities[cmdState.highlightIdx];
+        const eid = _idOf(e); // 入力欄の onchange には配列番号ではなくIDを埋め込む（画面を開いたまま配列が変わっても別の図形を編集しない）
         const layerColor = layers[e.layer] ? layers[e.layer].color : '#ffffff';
         let html = `<div style="font-weight:bold;margin-bottom:10px;color:var(--highlight-color);">${e.type}</div>`;
         if(e.gid) {
@@ -3279,51 +3423,51 @@ function updatePropertiesPanel() {
             </div>
         </div>`;
         html += `<div class="prop-row"><div class="prop-label">色</div><div style="display:flex;align-items:center;gap:5px;">
-            <input class="prop-val" type="color" value="${getEntityColor(e)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'color', this.value)">
-            ${e.color ? `<button class="prop-btn" style="font-size:10px;padding:2px 4px;" onclick="changeEntityProp(${cmdState.highlightIdx}, 'color', null)">ByLayer</button>` : `<span style="font-size:10px;color:#888;">ByLayer</span>`}
+            <input class="prop-val" type="color" value="${getEntityColor(e)}" onchange="changeEntityPropById(${eid}, 'color', this.value)">
+            ${e.color ? `<button class="prop-btn" style="font-size:10px;padding:2px 4px;" onclick="changeEntityPropById(${eid}, 'color', null)">ByLayer</button>` : `<span style="font-size:10px;color:#888;">ByLayer</span>`}
         </div></div>`;
-        html += `<div class="prop-row"><div class="prop-label">表示</div><input class="prop-val" type="checkbox" ${e.hidden?'':'checked'} onchange="changeEntityProp(${cmdState.highlightIdx}, 'hidden', !this.checked)"></div>`;
+        html += `<div class="prop-row"><div class="prop-label">表示</div><input class="prop-val" type="checkbox" ${e.hidden?'':'checked'} onchange="changeEntityPropById(${eid}, 'hidden', !this.checked)"></div>`;
         if(e.type === 'POINT' || e.size !== undefined) {
-            html += `<div class="prop-row"><div class="prop-label">サイズ</div><input class="prop-val" type="number" step="0.1" value="${e.size||10}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'size', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">サイズ</div><input class="prop-val" type="number" step="0.1" value="${e.size||10}" onchange="changeEntityPropById(${eid}, 'size', this.value)"></div>`;
         }
         
         // escapeHtml はグローバル版（cad-core.js 先頭付近で定義）を使う
         
         if(e.type === 'LINE') {
             const p1 = wcsToUcs(e.x1, e.y1); const p2 = wcsToUcs(e.x2, e.y2);
-            html += `<div class="prop-row"><div class="prop-label">始点 X</div><input class="prop-val" type="number" step="1" value="${p1.y.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'y1', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">始点 Y</div><input class="prop-val" type="number" step="1" value="${p1.x.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'x1', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">終点 X</div><input class="prop-val" type="number" step="1" value="${p2.y.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'y2', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">終点 Y</div><input class="prop-val" type="number" step="1" value="${p2.x.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'x2', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">始点 X</div><input class="prop-val" type="number" step="1" value="${p1.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'y1', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">始点 Y</div><input class="prop-val" type="number" step="1" value="${p1.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'x1', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">終点 X</div><input class="prop-val" type="number" step="1" value="${p2.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'y2', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">終点 Y</div><input class="prop-val" type="number" step="1" value="${p2.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'x2', this.value)"></div>`;
         } else if(e.type === 'CIRCLE' || e.type === 'ARC') {
             const c = wcsToUcs(e.cx, e.cy);
-            html += `<div class="prop-row"><div class="prop-label">中心 X</div><input class="prop-val" type="number" step="1" value="${c.y.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'cy', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">中心 Y</div><input class="prop-val" type="number" step="1" value="${c.x.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'cx', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">半径</div><input class="prop-val" type="number" step="1" value="${e.radius.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'radius', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">中心 X</div><input class="prop-val" type="number" step="1" value="${c.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'cy', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">中心 Y</div><input class="prop-val" type="number" step="1" value="${c.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'cx', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">半径</div><input class="prop-val" type="number" step="1" value="${e.radius.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'radius', this.value)"></div>`;
         } else if(e.type === 'RECTANG') {
             const p1 = wcsToUcs(e.x1, e.y1); const p2 = wcsToUcs(e.x2, e.y2);
-            html += `<div class="prop-row"><div class="prop-label">角1 X</div><input class="prop-val" type="number" step="1" value="${p1.y.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'y1', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">角1 Y</div><input class="prop-val" type="number" step="1" value="${p1.x.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'x1', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">角2 X</div><input class="prop-val" type="number" step="1" value="${p2.y.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'y2', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">角2 Y</div><input class="prop-val" type="number" step="1" value="${p2.x.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'x2', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">角1 X</div><input class="prop-val" type="number" step="1" value="${p1.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'y1', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">角1 Y</div><input class="prop-val" type="number" step="1" value="${p1.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'x1', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">角2 X</div><input class="prop-val" type="number" step="1" value="${p2.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'y2', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">角2 Y</div><input class="prop-val" type="number" step="1" value="${p2.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'x2', this.value)"></div>`;
         } else if(e.type === 'ELLIPSE') {
             const c = wcsToUcs(e.cx, e.cy);
-            html += `<div class="prop-row"><div class="prop-label">中心 X</div><input class="prop-val" type="number" step="1" value="${c.y.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'cy', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">中心 Y</div><input class="prop-val" type="number" step="1" value="${c.x.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'cx', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">X半径</div><input class="prop-val" type="number" step="1" value="${e.rx.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'rx', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">Y半径</div><input class="prop-val" type="number" step="1" value="${e.ry.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'ry', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">中心 X</div><input class="prop-val" type="number" step="1" value="${c.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'cy', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">中心 Y</div><input class="prop-val" type="number" step="1" value="${c.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'cx', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">X半径</div><input class="prop-val" type="number" step="1" value="${e.rx.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'rx', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">Y半径</div><input class="prop-val" type="number" step="1" value="${e.ry.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'ry', this.value)"></div>`;
         } else if(e.type === 'TEXT') {
             const p = wcsToUcs(e.x, e.y);
-            html += `<div class="prop-row"><div class="prop-label">始点 X</div><input class="prop-val" type="number" step="1" value="${p.y.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'y', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">始点 Y</div><input class="prop-val" type="number" step="1" value="${p.x.toFixed(1)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'x', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">テキスト</div><input class="prop-val" type="text" value="${escapeHtml(e.text)}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'text', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">高さ</div><input class="prop-val" type="number" step="1" value="${e.height}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'height', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">始点 X</div><input class="prop-val" type="number" step="1" value="${p.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'y', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">始点 Y</div><input class="prop-val" type="number" step="1" value="${p.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'x', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">テキスト</div><input class="prop-val" type="text" value="${escapeHtml(e.text)}" onchange="changeEntityPropById(${eid}, 'text', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">高さ</div><input class="prop-val" type="number" step="1" value="${e.height}" onchange="changeEntityPropById(${eid}, 'height', this.value)"></div>`;
         } else if(e.type === 'HATCH') {
             html += `<div class="prop-row"><div class="prop-label">対象図形</div><input class="prop-val" type="text" value="${e.target.type}" readonly></div>`;
-            html += `<div class="prop-row"><div class="prop-label">透過度</div><input class="prop-val" type="number" step="0.1" min="0" max="1" value="${e.alpha!==undefined?e.alpha:0.5}" onchange="changeEntityProp(${cmdState.highlightIdx}, 'alpha', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">透過度</div><input class="prop-val" type="number" step="0.1" min="0" max="1" value="${e.alpha!==undefined?e.alpha:0.5}" onchange="changeEntityPropById(${eid}, 'alpha', this.value)"></div>`;
         } else if(e.type === 'DIMENSION') {
             html += `<div class="prop-row"><div class="prop-label">種類</div><input class="prop-val" type="text" value="${e.subType}" readonly></div>`;
-            html += `<div class="prop-row"><div class="prop-label">文字上書き</div><input class="prop-val" type="text" value="${escapeHtml(e.textOverride||'')}" placeholder="自動" onchange="changeEntityProp(${cmdState.highlightIdx}, 'textOverride', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">文字上書き</div><input class="prop-val" type="text" value="${escapeHtml(e.textOverride||'')}" placeholder="自動" onchange="changeEntityPropById(${eid}, 'textOverride', this.value)"></div>`;
         }
         p.innerHTML = html;
     } else {
@@ -3332,6 +3476,11 @@ function updatePropertiesPanel() {
     if(typeof updateSelectionBar === 'function') updateSelectionBar();
 }
 
+window.changeEntityPropById = function(id, prop, val) {
+    const idx = entityIndexById(id);
+    if(idx < 0) { if(typeof showToast === 'function') showToast('対象の図形が見つかりません（削除された可能性があります）'); updatePropertiesPanel(); return; }
+    return window.changeEntityProp(idx, prop, val);
+};
 window.changeEntityProp = function(idx, prop, val) {
     if(!entities[idx]) return;
     saveUndo();

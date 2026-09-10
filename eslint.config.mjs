@@ -24,6 +24,23 @@ export default [
         }
     },
     {
+        // 自動テスト（Node.js の node:test で実行する CommonJS）
+        files: ["tests/**/*.cjs"],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: "commonjs",
+            globals: {
+                require: "readonly", module: "writable", __dirname: "readonly", process: "readonly",
+                console: "readonly", setTimeout: "readonly", structuredClone: "readonly",
+                TextEncoder: "readonly", TextDecoder: "readonly", Uint8ClampedArray: "readonly"
+            }
+        },
+        rules: {
+            "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+            "no-undef": "error"
+        }
+    },
+    {
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: "module",
@@ -122,7 +139,12 @@ export default [
                 // フェーズ1: オフライン対応・エラー記録
                 location: "readonly",
                 MessageChannel: "readonly",
-                sessionStorage: "readonly"
+                sessionStorage: "readonly",
+                // フェーズ2: 図形の固有ID（cad-core.js で定義）
+                ensureEntityIds: "readonly",
+                entityIndexById: "readonly",
+                getEntityById: "readonly",
+                _adoptIdleHighlight: "readonly"
             }
         },
         rules: {

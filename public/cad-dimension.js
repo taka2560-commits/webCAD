@@ -241,6 +241,7 @@ function drawDimOrdinate(e, color) {
 // ===== 全寸法描画（cad-core.jsから呼ばれる） =====
 function drawAllDimensions() {
     ctx.save();
+    const hlIdx = cmdState.highlightIdx;
     entities.forEach((e, i) => {
         if(e.type !== 'DIMENSION') return;
 
@@ -255,7 +256,7 @@ function drawAllDimensions() {
             ctx.globalAlpha = 0.15; // 非表示レイヤーの寸法はうっすら表示
         }
 
-        const color = i === cmdState.highlightIdx ? '#ff6b6b' : null;
+        const color = i === hlIdx ? '#ff6b6b' : null;
         if(e.subType === 'LINEAR') drawDimLinear(e, color);
         else if(e.subType === 'ALIGNED') drawDimAligned(e, color);
         else if(e.subType === 'RADIUS') drawDimRadius(e, color);
@@ -660,6 +661,7 @@ function handleDimPointInput(mode, wcs) {
             targets.forEach(i => {
                 if(!entities[i]) return;
                 const copy = JSON.parse(JSON.stringify(entities[i]));
+                delete copy.id; // 複写は新しい図形（固有IDは追加後に新しく付く）
                 if(copy.gid) { if(!gidMap[copy.gid]) gidMap[copy.gid] = (typeof newGroupId === 'function') ? newGroupId('c') : copy.gid + '_c'; copy.gid = gidMap[copy.gid]; }
                 moveEntity(copy, dx, dy);
                 copies.push(copy);
@@ -721,6 +723,7 @@ function processDimCommand(cmd) {
     if(cmd==='DOR'||cmd==='DIMORDINATE') { cmdState.mode='WAITING_DIMORD_P1'; cmdState.points=[]; setPrompt('測定点: (☑️確定)'); setActiveTool('DIMORD'); addCommandLog('-> [座標寸法] 測定点を指定 (XY一括表示)'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
     if(cmd==='M'||cmd==='MOVE') {
         cmdState.moveTarget = undefined;
+        if(typeof _adoptIdleHighlight === 'function') _adoptIdleHighlight(); // タップで選んだ1図形も引き継ぐ
         // IDLE時の複数選択を引き継いで基点指定へ
         if(cmdState.selectedIndices && cmdState.selectedIndices.length > 0) {
             cmdState.mode='WAITING_MOVE_BASE'; setPrompt('基点 (移動の基準点):'); setActiveTool('MOVE');
@@ -731,6 +734,7 @@ function processDimCommand(cmd) {
     }
     if(cmd==='CO'||cmd==='COPY') {
         cmdState.moveTarget = undefined;
+        if(typeof _adoptIdleHighlight === 'function') _adoptIdleHighlight(); // タップで選んだ1図形も引き継ぐ
         // IDLE時の複数選択を引き継いで基点指定へ
         if(cmdState.selectedIndices && cmdState.selectedIndices.length > 0) {
             cmdState.mode='WAITING_COPY_BASE'; setPrompt('基点 (コピーの基準点):'); setActiveTool('COPY');

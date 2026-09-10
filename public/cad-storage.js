@@ -132,6 +132,9 @@ function applyProjectData(data) {
     if (data.savedUCSList) savedUCSList = data.savedUCSList;
     else savedUCSList = [];
 
+    // 固有IDを確認（古い保存データにはIDが無いので付ける。以後の選択はIDで保持される）
+    if (typeof ensureEntityIds === 'function') ensureEntityIds();
+
     // Undo/Redo はリセット
     undoStack = [];
     redoStack = [];

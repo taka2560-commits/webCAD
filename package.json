@@ -1,8 +1,7 @@
 {
   "name": "antigravity-webcad",
   "version": "1.0.0",
-  "description": "**現在のバージョン: v3（2026年7月3日リリース）**",
-  "main": "cad-core.js",
+  "description": "測量・建設現場向けのブラウザ2D CAD（DXF/DWG対応・オフライン動作のPWA）",
   "directories": {
     "doc": "docs",
     "test": "tests"
@@ -11,7 +10,10 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test \"tests/*.test.cjs\" tests/test-text-parse.cjs",
+    "lint": "eslint public src tests vite.config.js",
+    "check": "npm run lint && npm test && npm run build"
   },
   "repository": {
     "type": "git",
@@ -28,6 +30,8 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.1",
     "eslint-config-prettier": "^10.1.8",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^26.1.0",
     "prettier": "^3.9.6",
     "vite": "^8.2.1"
   },

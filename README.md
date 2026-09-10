@@ -1,6 +1,8 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v4.1（2026年9月11日リリース）**
+**現在のバージョン: v4.2（2026年9月11日リリース）**
+
+[![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
 スマートデバイスやPCの両方で利用できるWebブラウザベースの2D CADアプリケーションです。
 測量図面や建設現場での利用に特化した設計となっており、特別なソフトのインストールなしで、ブラウザから即座に図面を開いて確認・編集・計測が可能です。
@@ -92,8 +94,14 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-node tests/test-text-parse.cjs   # 文字列デコードの回帰テスト
+npm test             # 自動テスト（107件。アプリを jsdom 上で実際に動かして確認）
+npm run lint         # 構文・未定義変数のチェック
+npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
+
+* **自動テスト**: `tests/*.test.cjs` は Node.js 標準の `node:test` で動きます。`tests/helpers/load-app.cjs` が index.html と `public/cad-*.js` をブラウザと同じ順序で jsdom 上に読み込むので、テストからアプリの関数・変数をそのまま呼べます（IndexedDB は fake-indexeddb で再現）。不具合を直すときは、先にそれを再現するテストを追加してください。
+* **CI**: GitHub にプッシュすると `.github/workflows/ci.yml` が `npm run lint`・`npm test`・`npm run build` を実行します。
+* **図形の固有ID**: 各図形は `e.id`（数値）を持ちます。選択状態（`cmdState.selectedIndices` / `highlightIdx` など）は内部ではIDで保持し、読み出すとその時点の配列番号を返します。図形を複製するときは `id` を消してから追加してください（重複しても `ensureEntityIds()` が後ろ側に新しいIDを付けます）。
 
 * **構成**: `index.html` と `public/cad-*.js`（通常のスクリプト）が本体です。外部ライブラリは `src/vendor.js` から Vite で同梱し、`window.DxfParser` / `window.Drawing` / `window.loadLibreDwg()` として公開しています。
 * **キャッシュの版管理は自動**: `vite.config.js` のプラグインがビルド時に、`cad-*.js` へ内容ハッシュ（`?v=`）を付け、`dist/sw.js` にビルドIDとプリキャッシュ一覧を書き込みます。**`CACHE_NAME` を手で上げる必要はありません。**
@@ -103,6 +111,11 @@ node tests/test-text-parse.cjs   # 文字列デコードの回帰テスト
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
 
+* **2026-09-11: バージョン4.2（品質強化）** 🧪
+  * 自動テスト107件と GitHub Actions による自動チェックを導入。
+  * テストで見つかった不具合を修正: DXFの円弧が欠片になる、トリムで長方形・ポリラインと交わる線が丸ごと消える、円弧の描かれていない部分でトリム・延長される、選択アクションバーで1つ選んだ図形を操作できない、など。
+  * 図形に固有IDを付け、削除・トリム・元に戻す後に選択が別の図形にずれる問題を根本解決。
+  * DXF書き出しでポリライン・楕円・文字の揃え・図形ごとの色を保持。
 * **2026-09-11: バージョン4.1（基盤強化）** 🛡
   * **完全オフライン対応**: DXF/DWGの読み書きライブラリをアプリに同梱。DWG読込エンジンの取得量を約16MB→約2.3MBに削減し、アプリ更新後も保持。
   * **自動保存の強化**: 変更の15秒後（最長60秒）とアプリを裏に回した瞬間に保存。保存失敗の通知、永続ストレージの要求、復元時の図面名の引き継ぎ。

@@ -1,0 +1,45 @@
+# プッシュ・プルリクエストごとに「lint → 自動テスト → 本番ビルド」を実行する。
+# ここが失敗した版は、Vercel に自動デプロイされる前に GitHub 上で気付ける。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint / test / build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 依存関係のインストール
+        run: npm ci
+
+      - name: lint（構文・未定義変数のチェック）
+        run: npm run lint
+
+      - name: 自動テスト（取り込み・幾何・スナップ・トリム/延長・保存・固有ID）
+        run: npm test
+
+      - name: 本番ビルド
+        run: npm run build
+
+      - name: ビルド結果の確認（Service Worker にビルドIDが入っているか）
+        run: |
+          test -f dist/index.html
+          test -f dist/sw.js
+          ! grep -q "__WEBCAD_" dist/sw.js
+          grep -q 'name="webcad-build"' dist/index.html

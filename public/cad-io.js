@@ -243,6 +243,7 @@ function importDxfData(dxf, opts) {
         }
     }
 
+    if(typeof ensureEntityIds === 'function') ensureEntityIds();
     if(typeof updateLayerPanel === 'function') updateLayerPanel();
     zoomExtents();
     render();
@@ -445,7 +446,10 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
     if(e.type === 'ARC') {
         if(!e.center) return null;
         const r = e.radius || 0;
-        const sa = (e.startAngle || 0) * D2R, ea = (e.endAngle === undefined ? 360 : e.endAngle) * D2R;
+        // dxf-parser は ARC の角度（code 50/51）を既にラジアンへ変換して返す。
+        // 以前はここでさらに度→ラジアン変換しており、0°〜90°の円弧が約1.6°の欠片になっていた
+        // （既定で円弧を非表示にしていたため気付かれにくかった）。文字の回転角は度のまま返る点に注意。
+        const sa = e.startAngle || 0, ea = (e.endAngle === undefined ? Math.PI * 2 : e.endAngle);
         const c = { x: tx(e.center.x, e.center.y), y: ty(e.center.x, e.center.y) };
         const sx0 = e.center.x + r * Math.cos(sa), sy0 = e.center.y + r * Math.sin(sa);
         const ex0 = e.center.x + r * Math.cos(ea), ey0 = e.center.y + r * Math.sin(ea);
@@ -601,7 +605,19 @@ function hexToAci(hex) {
     for(let i = 1; i < 256; i++) {
         if(aciToHex(i).toUpperCase() === target) return i;
     }
-    return 7; // default white
+    // 色番号表に完全一致が無い色（色選択で選んだ任意の色など）は、最も近い色番号にする
+    // （以前は常に白(7)になり、書き出すと色が失われていた）
+    const rgb = (h) => { const m = /^#?([0-9A-F]{6})$/i.exec(h || ''); if(!m) return null; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+    const t = rgb(target);
+    if(!t) return 7;
+    let best = 7, bestD = Infinity;
+    for(let i = 1; i < 256; i++) {
+        const c = rgb(aciToHex(i));
+        if(!c) continue;
+        const dd = (c[0]-t[0])**2 + (c[1]-t[1])**2 + (c[2]-t[2])**2;
+        if(dd < bestD) { bestD = dd; best = i; }
+    }
+    return best;
 }
 
 // 図面の取り込み失敗を知らせる（コマンドログはスマホでは畳まれていて見えないため、トーストでも表示）
@@ -627,33 +643,75 @@ function exportDxf() {
         if(!layers.find(l => l.name === '寸法')) {
             try { d.addLayer('寸法', 4, 'CONTINUOUS'); } catch(e){}
         }
+        // 図形ごとの色（ByLayer 以外）。dxf-writer は図形単位の色に対応していないため、
+        // 直前に追加した図形の出力時に「画層(8)の直後に色(62)」を差し込む（既定の 62=256 は置き換え）
+        const applyEntityColor = (hex) => {
+            if(!hex) return;
+            const shapes = d.activeLayer && d.activeLayer.shapes;
+            const shape = shapes && shapes[shapes.length - 1];
+            if(!shape || typeof shape.tags !== 'function') return;
+            const aci = hexToAci(hex);
+            const origTags = shape.tags.bind(shape);
+            shape.tags = (manager) => {
+                const hadOwn = Object.prototype.hasOwnProperty.call(manager, 'push');
+                const origPush = manager.push;
+                let injected = false;
+                manager.push = function(code, value) {
+                    if(code === 62 && injected) return;
+                    origPush.call(manager, code, value);
+                    if(code === 8 && !injected) { origPush.call(manager, 62, aci); injected = true; }
+                };
+                try { origTags(manager); }
+                finally { if(hadOwn) manager.push = origPush; else delete manager.push; }
+            };
+        };
+        const H_ALIGN = { left: 'left', center: 'center', right: 'right' };
+        const V_ALIGN = { bottom: 'baseline', middle: 'middle', top: 'top' };
+        let skipped = 0;
+
         // エンティティ出力
         entities.forEach(e => {
             const layerName = layers[e.layer]?.name || '0';
             d.setActiveLayer(layerName);
-            const opts = e.color ? { color: hexToAci(e.color) } : {};
+            let drawn = true;
 
-            if(e.type === 'LINE') { d.drawLine(e.x1, e.y1, e.x2, e.y2, opts); }
-            else if(e.type === 'CIRCLE') { d.drawCircle(e.cx, e.cy, e.radius, opts); }
+            if(e.type === 'LINE') { d.drawLine(e.x1, e.y1, e.x2, e.y2); }
+            else if(e.type === 'CIRCLE') { d.drawCircle(e.cx, e.cy, e.radius); }
             else if(e.type === 'ARC') {
                 // DXFのARCは常に反時計回り。時計回りの弧は開始/終了角を入れ替えて出力する
                 let sa = e.startAngle*180/Math.PI, ea = e.endAngle*180/Math.PI;
                 if(e.counterclockwise === false) { const t = sa; sa = ea; ea = t; }
-                d.drawArc(e.cx, e.cy, e.radius, sa, ea, opts);
+                d.drawArc(e.cx, e.cy, e.radius, sa, ea);
             }
+            // 長方形・ポリラインは1つのポリライン（LWPOLYLINE）として出力する
+            // （以前は線分に分解しており、他のCADで境界を1図形として扱えなかった）
             else if(e.type === 'RECTANG') {
-                d.drawLine(e.x1,e.y1,e.x2,e.y1, opts); d.drawLine(e.x2,e.y1,e.x2,e.y2, opts);
-                d.drawLine(e.x2,e.y2,e.x1,e.y2, opts); d.drawLine(e.x1,e.y2,e.x1,e.y1, opts);
+                d.drawPolyline([[e.x1, e.y1], [e.x2, e.y1], [e.x2, e.y2], [e.x1, e.y2]], true);
             }
-            else if(e.type === 'PLINE' && e.points.length >= 2) {
-                for(let i = 1; i < e.points.length; i++) d.drawLine(e.points[i-1].x, e.points[i-1].y, e.points[i].x, e.points[i].y, opts);
-                if(e.closed) d.drawLine(e.points[e.points.length-1].x, e.points[e.points.length-1].y, e.points[0].x, e.points[0].y, opts);
+            else if(e.type === 'PLINE' && e.points && e.points.length >= 2) {
+                d.drawPolyline(e.points.map(p => [p.x, p.y]), !!e.closed);
             }
-            else if(e.type === 'POINT') { d.drawPoint(e.x, e.y, opts); }
-            else if(e.type === 'TEXT') { d.drawText(e.x, e.y, e.height || 2.5, (e.rotation || 0) * 180 / Math.PI, String(e.text || '').replace(/\n/g, ' '), opts); }
+            else if(e.type === 'POINT') { d.drawPoint(e.x, e.y); }
+            else if(e.type === 'ELLIPSE') {
+                // 長い方の軸を長軸として出力（rx < ry のときは90°回した ry 側が長軸）
+                const rot = e.rotation || 0;
+                const majorIsX = (e.rx || 0) >= (e.ry || 0);
+                const major = majorIsX ? e.rx : e.ry;
+                const ang = majorIsX ? rot : rot + Math.PI / 2;
+                const ratio = major > 0 ? (majorIsX ? e.ry : e.rx) / major : 1;
+                d.drawEllipse(e.cx, e.cy, major * Math.cos(ang), major * Math.sin(ang), ratio);
+            }
+            else if(e.type === 'TEXT') {
+                d.drawText(e.x, e.y, e.height || 2.5, (e.rotation || 0) * 180 / Math.PI, String(e.text || '').replace(/\n/g, ' '),
+                    H_ALIGN[e.halign] || 'left', V_ALIGN[e.valign] || 'baseline');
+            }
             // 寸法は補助線+テキストとして出力
-            else if(e.type === 'DIMENSION') { exportDimAsDxf(d, e); }
+            else if(e.type === 'DIMENSION') { exportDimAsDxf(d, e); drawn = false; }
+            else { drawn = false; if(e.type !== 'HATCH') skipped++; }
+
+            if(drawn) applyEntityColor(e.color);
         });
+        if(skipped > 0) addCommandLog(`  注意: 書き出しに未対応の図形 ${skipped}個 を省略しました`);
         const blob = new Blob([d.toDxfString()], {type:'application/dxf'});
         downloadBlob(blob, exportFileName('dxf'));
         addCommandLog('-> DXFエクスポート完了');
@@ -762,6 +820,7 @@ async function loadDwgFile(file) {
         // エンティティをインポート（画層は変換時に layers へ直接追加済み）
         initLayers();
         importResult.entities.forEach(e => entities.push(e));
+        if(typeof ensureEntityIds === 'function') ensureEntityIds();
         setDrawingName(file.name);
         addCommandLog(`-> DWGファイル読み込み完了: ${file.name} (${importResult.entities.length}個のオブジェクト)`);
         if(importResult.warnings.length > 0) {
