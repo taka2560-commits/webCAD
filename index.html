@@ -675,12 +675,28 @@
                 if (window.caches) caches.keys().then(ks => ks.filter(k => k.startsWith('webcad-')).forEach(k => caches.delete(k)));
                 return;
             }
-            // 起動中に新しい版が有効になったら、再読み込みを案内する（初回インストール時は除く）
+            // 起動中に新しい版が有効になったら、再読み込みを案内する。
+            // HTML はネットワーク優先で取得するため、デプロイ後に開いた画面は既に最新のことが多い。
+            // そこで「この画面のビルド番号」と「新しい SW のビルド番号」が違うときだけ案内する。
             let hadController = !!navigator.serviceWorker.controller;
             navigator.serviceWorker.addEventListener('controllerchange', () => {
                 if (!hadController) { hadController = true; return; }
-                showUpdateNotice();
+                const meta = document.querySelector('meta[name="webcad-build"]');
+                const pageBuild = meta ? meta.content : '';
+                askSwBuild()
+                    .then(swBuild => { if (!pageBuild || !swBuild || swBuild !== pageBuild) showUpdateNotice(); })
+                    .catch(() => showUpdateNotice());
             });
+            function askSwBuild() {
+                return new Promise((resolve, reject) => {
+                    const ctrl = navigator.serviceWorker.controller;
+                    if (!ctrl) { reject(new Error('no-sw')); return; }
+                    const ch = new MessageChannel();
+                    const timer = setTimeout(() => reject(new Error('timeout')), 3000);
+                    ch.port1.onmessage = (ev) => { clearTimeout(timer); resolve((ev.data || {}).build); };
+                    ctrl.postMessage({ type: 'get-build' }, [ch.port2]);
+                });
+            }
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
                     .then(reg => {

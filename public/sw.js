@@ -57,6 +57,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   const msg = event.data || {};
   const reply = (data) => event.ports[0] && event.ports[0].postMessage(data);
+  if (msg.type === 'get-build') {
+    reply({ build: BUILD_ID });
+    return;
+  }
   if (msg.type === 'lazy-status' || msg.type === 'lazy-cache') {
     event.waitUntil((async () => {
       const assets = await caches.open(ASSET_CACHE);
