@@ -244,6 +244,7 @@ function importDxfData(dxf, opts) {
     }
 
     if(typeof ensureEntityIds === 'function') ensureEntityIds();
+    if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
     if(typeof updateLayerPanel === 'function') updateLayerPanel();
     zoomExtents();
     render();
@@ -821,6 +822,7 @@ async function loadDwgFile(file) {
         initLayers();
         importResult.entities.forEach(e => entities.push(e));
         if(typeof ensureEntityIds === 'function') ensureEntityIds();
+        if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
         setDrawingName(file.name);
         addCommandLog(`-> DWGファイル読み込み完了: ${file.name} (${importResult.entities.length}個のオブジェクト)`);
         if(importResult.warnings.length > 0) {

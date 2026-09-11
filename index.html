@@ -885,6 +885,7 @@
             const wb = screenToWcs(cx, cy);
             const targetScale = Math.pow(10, parseFloat(val));
             _applyRotZoom(cx, cy, wb, Math.max(0.001, Math.min(1000, targetScale)));
+            if(typeof noteViewGesture === 'function') noteViewGesture(); // スライダー操作中は軽い描画にする
             render();
         }
 

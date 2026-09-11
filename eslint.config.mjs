@@ -144,7 +144,11 @@ export default [
                 ensureEntityIds: "readonly",
                 entityIndexById: "readonly",
                 getEntityById: "readonly",
-                _adoptIdleHighlight: "readonly"
+                _adoptIdleHighlight: "readonly",
+                // フェーズ3: 軽量化（変更世代・履歴キャッシュ・計時）
+                performance: "readonly",
+                _bumpGeomEpoch: "readonly",
+                _undoStrCache: "writable"
             }
         },
         rules: {

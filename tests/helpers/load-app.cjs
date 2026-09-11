@@ -107,6 +107,9 @@ async function loadApp(options = {}) {
     if (window.document.readyState !== 'complete') {
         await new Promise((resolve) => window.addEventListener('load', resolve, { once: true }));
     }
+    // 起動直後の遅延処理（100ms後の画面サイズ調整、500ms後の自動保存の復元確認）が
+    // テストの途中に割り込まないよう、済むまで待つ
+    await new Promise((resolve) => setTimeout(resolve, options.settleMs !== undefined ? options.settleMs : 650));
 
     const app = {
         window,

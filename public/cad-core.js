@@ -273,6 +273,10 @@ let entities = [];
 // そこで各図形に固有ID(e.id)を付け、選択・ハイライト・移動対象などは内部的にIDで保持する。
 // 既存コードの cmdState.selectedIndices / highlightIdx は「その時点の配列番号」を返すアクセサとして残す。
 let _nextEntityId = 1;
+// 図形データの変更世代。編集（saveUndo）・元に戻す・読込・外形の更新のたびに増やし、
+// 空間索引（タップ判定・スナップ用）や描画キャッシュを作り直す合図にする
+let _geomEpoch = 0;
+function _bumpGeomEpoch() { _geomEpoch++; }
 let _idIndexCache = null; // Map<id, 配列番号>（配列が変わったら参照時に検出して作り直す）
 
 // IDが無い図形・重複したID（JSON 複製で生じる）に新しいIDを付ける。既存の正しいIDは変えない
@@ -873,14 +877,57 @@ function zoomExtents() {
 
 // ===== Undo/Redo =====
 // 画層の表示/非表示・色などもUndo対象にするため、entitiesとlayersをセットで記録する
+// ===== 元に戻す（Undo）の履歴 =====
+// 以前は編集のたびに全図形を丸ごと複製していたため、3万図形の図面では20回の編集で約200MBを使い、
+// 50回分の履歴でスマホのブラウザが落ちる恐れがあった。
+// 今は図形を1つずつ文字列（JSON）にして保存し、前の履歴から変わっていない図形は同じ文字列を共有する。
+// → メモリは「図面1枚分 ＋ 変更した図形の分」だけで済む。
+let _undoStrCache = null; // Map<図形ID, 文字列>: 直近の履歴（重複排除の比較用）
+
+// 履歴に残す文字列。bbox（外形）と _hits（寸法の画面上の当たり判定）は描画時に作り直す派生データなので含めない
+function _serializeEntity(e) {
+    const bb = e.bbox, hh = e._hits;
+    if(bb === undefined && hh === undefined) return JSON.stringify(e);
+    if(bb !== undefined) e.bbox = undefined; // JSON.stringify は値が undefined のキーを出力しない
+    if(hh !== undefined) e._hits = undefined;
+    try { return JSON.stringify(e); }
+    finally { if(bb !== undefined) e.bbox = bb; if(hh !== undefined) e._hits = hh; }
+}
 function _undoSnapshot() {
-    return {
-        entities: JSON.parse(JSON.stringify(entities)),
-        layers: JSON.parse(JSON.stringify(layers))
-    };
+    ensureEntityIds();
+    const n = entities.length;
+    const ids = new Array(n), strs = new Array(n);
+    const prev = _undoStrCache;
+    const next = new Map();
+    for(let i = 0; i < n; i++) {
+        const e = entities[i];
+        let s = _serializeEntity(e);
+        const old = prev ? prev.get(e.id) : undefined;
+        if(old === s) s = old; // 内容が同じなら前の履歴の文字列を共有（新しい文字列はすぐ捨てられる）
+        ids[i] = e.id; strs[i] = s; next.set(e.id, s);
+    }
+    _undoStrCache = next;
+    return { v: 2, ids, strs, layers: JSON.stringify(layers) };
 }
 function _applyUndoSnapshot(s) {
     if(Array.isArray(s)) { entities = s; } // 旧形式（entities配列のみ）との互換
+    else if(s.v === 2) {
+        // 直前に _undoSnapshot() した「今の状態」と同じ内容の図形は、オブジェクトをそのまま使う（外形の再計算も不要）
+        const curStr = _undoStrCache || new Map();
+        const curObj = new Map();
+        for(const e of entities) if(e && !curObj.has(e.id)) curObj.set(e.id, e);
+        const next = new Array(s.ids.length);
+        const cache = new Map();
+        for(let i = 0; i < s.ids.length; i++) {
+            const id = s.ids[i], str = s.strs[i];
+            const keep = curObj.get(id);
+            next[i] = (keep && curStr.get(id) === str) ? keep : JSON.parse(str);
+            cache.set(id, str);
+        }
+        entities = next;
+        layers = JSON.parse(s.layers);
+        _undoStrCache = cache;
+    }
     else { entities = s.entities; layers = s.layers; }
     // 選択はIDで保持しているため、戻した後も同じ図形を指す（存在しなくなった図形は自動で外れる）
     _idIndexCache = null;
@@ -892,14 +939,15 @@ function _applyUndoSnapshot(s) {
 }
 function saveUndo() {
     ensureEntityIds(); // 履歴にもIDを残し、元に戻した後も選択が同じ図形を指すようにする
+    _bumpGeomEpoch();
     undoStack.push(_undoSnapshot());
     if(undoStack.length>50) undoStack.shift();
     redoStack=[];
     // 自動保存トリガー
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
-function undo() { if(!undoStack.length){addCommandLog('元に戻す操作がありません');return;} redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
-function redo() { if(!redoStack.length){addCommandLog('やり直す操作がありません');return;} undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
+function undo() { if(!undoStack.length){addCommandLog('元に戻す操作がありません');return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
+function redo() { if(!redoStack.length){addCommandLog('やり直す操作がありません');return;} _bumpGeomEpoch(); undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
 
 // ===== 数学ユーティリティ =====
 function dist(x1,y1,x2,y2) { return Math.sqrt((x2-x1)**2+(y2-y1)**2); }
@@ -1019,9 +1067,9 @@ function collectSnapPoints(wx, wy, baseWcs) {
         wyMin = wy - searchRad; wyMax = wy + searchRad;
     }
 
-    entities.forEach(e => {
+    _forEachCandidate(wxMin, wyMin, wxMax, wyMax, e => {
         if(!isVisible(e)) return;
-        
+
         // スナップ検索のカリング
         if(e.bbox && wxMin !== undefined) {
             if(e.bbox.maxX < wxMin || e.bbox.minX > wxMax || e.bbox.maxY < wyMin || e.bbox.minY > wyMax) return;
@@ -1138,7 +1186,7 @@ function collectSnapPoints(wx, wy, baseWcs) {
             if(!inWin(Math.min(x1,x2), Math.min(y1,y2), Math.max(x1,x2), Math.max(y1,y2))) return;
             segs.push({x1,y1,x2,y2});
         };
-        entities.forEach(e => {
+        _forEachCandidate(wxMin, wyMin, wxMax, wyMax, e => {
             if(!isVisible(e)) return;
             if(e.bbox && wxMin !== undefined) {
                 if(e.bbox.maxX < wxMin || e.bbox.minX > wxMax || e.bbox.maxY < wyMin || e.bbox.minY > wyMax) return;
@@ -1232,7 +1280,7 @@ function hitTestEntity(sx,sy) {
     const wcs = screenToWcs(sx, sy);
     const tolWcs = ERASE_R / view.scale;
 
-    entities.forEach((e,i) => {
+    _forEachCandidate(wcs.x - tolWcs, wcs.y - tolWcs, wcs.x + tolWcs, wcs.y + tolWcs, (e,i) => {
         if(!isVisible(e)) return;
 
         // BBoxカリング
@@ -1296,13 +1344,101 @@ function hitTestCircleArc(sx,sy) {
 
 // ===== 描画 =====
 let _renderPending = false;
-function render() {
+let _renderFull = false; // 次のフレームで図形も描き直す必要があるか
+function _requestFrame() {
     if(_renderPending) return;
     _renderPending = true;
     requestAnimationFrame(() => {
         _renderPending = false;
+        const full = _renderFull;
+        _renderFull = false;
+        _drawFrame(!full);
+    });
+}
+// 画面全体（図形を含む）を描き直す
+function render() {
+    _renderFull = true;
+    _requestFrame();
+}
+// カーソル・スナップ記号・ルーペ・範囲選択枠など「上に重ねる表示」だけが変わったときの描画要求。
+// 図形の描画に時間がかかる図面では、前回描いた図形の画面をそのまま使い、重ね表示だけ描き直す。
+// （マウスや指を動かすたびに全図形を描き直していたのを避ける。図形・表示位置・選択が変わったら render() を使う）
+function renderOverlay() {
+    _requestFrame();
+}
+// ===== 画面操作中の描画キャッシュ =====
+// 大きな図面では全図形の描画に時間がかかり、ピンチやホイールで画面を動かすとカクつく。
+// そこで、描画に GESTURE_CACHE_MIN_MS 以上かかる図面に限り、図形を描き終えた時点の画面を保存しておき、
+// 画面操作中はそれを拡大縮小・移動して見せる（地図アプリと同じ方式）。操作が終わったら正確に描き直す。
+// 軽い図面では従来どおり毎回すべて描く。
+const GESTURE_CACHE_MIN_MS = 12;
+let _frameCache = null;   // { canvas, x, y, scale, rot, w, h, epoch, bg }
+let _lastBaseMs = 0;      // 直近のフル描画で図形の描画にかかった時間
+let _viewGestureUntil = 0;
+let _viewGestureTimer = null;
+// 画面操作（ホイール・ズームスライダー等）の途中であることを知らせる。最後の操作から holdMs 後に正確に描き直す
+function noteViewGesture(holdMs) {
+    const hold = holdMs || 160;
+    _viewGestureUntil = performance.now() + hold;
+    clearTimeout(_viewGestureTimer);
+    _viewGestureTimer = setTimeout(() => { _viewGestureTimer = null; render(); }, hold + 20);
+}
+window.noteViewGesture = noteViewGesture;
+function _isViewGestureActive() {
+    return !!(touchState.isPinch || mouse.isPanning || performance.now() < _viewGestureUntil);
+}
+// 図形の見た目に影響する状態（選択・ハイライト・画層の表示/色・薄表示・UCS）の要約
+function _baseSignature() {
+    let s = cmdState.highlightIdx + '|' + (cmdState.selectedIndices || []).join(',') + '|' + (window.ghostLayerMode ? 1 : 0) +
+        '|' + ucs.originX + ',' + ucs.originY + ',' + ucs.angle + '|';
+    for(let i = 0; i < layers.length; i++) s += (layers[i].visible ? '1' : '0') + layers[i].color + ';';
+    return s;
+}
+function _canUseFrameCache() {
+    const fc = _frameCache;
+    return !!(fc && _lastBaseMs >= GESTURE_CACHE_MIN_MS && fc.rot === view.rotation && fc.w === canvas.width && fc.h === canvas.height &&
+        fc.epoch === _geomEpoch && fc.bg === canvasBg && fc.scale > 0 && fc.sig === _baseSignature());
+}
+// 表示位置も含めて前回と同じ画面か（重ね表示だけの描き直しに使えるか）
+function _canReuseStaticFrame() {
+    const fc = _frameCache;
+    return _canUseFrameCache() && fc.x === view.x && fc.y === view.y && fc.scale === view.scale;
+}
+function _saveFrameCache() {
+    let fc = _frameCache;
+    if(!fc) {
+        const c = document.createElement('canvas');
+        fc = _frameCache = { canvas: c, cctx: c.getContext('2d') };
+    }
+    if(fc.canvas.width !== canvas.width || fc.canvas.height !== canvas.height) { fc.canvas.width = canvas.width; fc.canvas.height = canvas.height; }
+    if(!fc.cctx) return;
+    fc.cctx.clearRect(0, 0, canvas.width, canvas.height);
+    fc.cctx.drawImage(canvas, 0, 0);
+    fc.x = view.x; fc.y = view.y; fc.scale = view.scale; fc.rot = view.rotation;
+    fc.w = canvas.width; fc.h = canvas.height; fc.epoch = _geomEpoch; fc.bg = canvasBg; fc.sig = _baseSignature();
+}
+
+// 1フレーム分の描画（同期）。render() が requestAnimationFrame から呼ぶ。計測・テストからも直接呼べる
+// overlayOnly: 重ね表示だけが変わった描画要求（renderOverlay）。前回と同じ画面なら図形を描き直さない
+function _drawFrame(overlayOnly) {
+        if(overlayOnly && _canReuseStaticFrame()) {
+            // 図形・表示位置が前回と同じ: 保存した画面を貼るだけ（背景・軸・図形・寸法を含む）
+            ctx.drawImage(_frameCache.canvas, 0, 0);
+        } else if(_isViewGestureActive() && _canUseFrameCache()) {
+            // 画面操作中: 保存した画面を今の拡大率・位置に合わせて貼る（見えていなかった部分は操作後に描かれる）
+            const fc = _frameCache, k = view.scale / fc.scale;
+            ctx.fillStyle=canvasBg; ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.drawImage(fc.canvas, view.x - fc.x * k, view.y - fc.y * k, canvas.width * k, canvas.height * k);
+            drawAxes();
+        } else {
         ctx.fillStyle=canvasBg; ctx.fillRect(0,0,canvas.width,canvas.height);
-        drawAxes(); drawEntities(); drawDimensions(); drawRubberBand(); drawSnapMarker(); drawCrosshair();
+        const _t0 = performance.now();
+        drawAxes(); drawEntities(); drawDimensions();
+        _lastBaseMs = performance.now() - _t0;
+        if(_lastBaseMs >= GESTURE_CACHE_MIN_MS) _saveFrameCache();
+        else if(_frameCache) _frameCache = null; // 軽い図面ではキャッシュ用のメモリを持たない
+        }
+        drawRubberBand(); drawSnapMarker(); drawCrosshair();
         
         // 範囲選択矩形描画
         drawSelectionRect();
@@ -1328,7 +1464,6 @@ function render() {
 
         // ズームスライダーの位置同期
         if(window.updateZoomSlider) window.updateZoomSlider();
-    });
 }
 function renderImmediate() {
     render();
@@ -1363,7 +1498,18 @@ function drawLoupe() {
 
     ctx.lineWidth = 0.5;
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
-    entities.forEach((e, i) => { if(!isVisible(e)) return; if(e.type !== 'DIMENSION') drawOneEntity(e, i === cmdState.highlightIdx ? '#ff6b6b' : null); });
+    const hl = cmdState.highlightIdx;
+    // ルーペに映るのは指の周り（画面上で半径 loupeR/zoom）だけなので、その範囲の図形に絞る
+    const half = loupeR / zoom + 4;
+    const corners = [screenToWcs(lx - half, ly - half), screenToWcs(lx + half, ly - half), screenToWcs(lx - half, ly + half), screenToWcs(lx + half, ly + half)];
+    const qMinX = Math.min(...corners.map(p => p.x)), qMaxX = Math.max(...corners.map(p => p.x));
+    const qMinY = Math.min(...corners.map(p => p.y)), qMaxY = Math.max(...corners.map(p => p.y));
+    _forEachCandidate(qMinX, qMinY, qMaxX, qMaxY, (e, i) => {
+        if(!isVisible(e) || e.type === 'DIMENSION') return;
+        const b = e.bbox;
+        if(b && (b.maxX < qMinX || b.minX > qMaxX || b.maxY < qMinY || b.minY > qMaxY)) return;
+        drawOneEntity(e, i === hl ? '#ff6b6b' : null);
+    });
 
     if(snapResult && osnapState.main) {
         const s = wcsToScreen(snapResult.wcsX, snapResult.wcsY);
@@ -1526,7 +1672,98 @@ function drawOneEntity(e, color) {
 }
 
 // 図形のバウンディングボックスを計算 (初回のみ実行される)
+// ===== 空間索引（タップ判定・スナップ・ルーペの候補を素早く絞る） =====
+// 図面全体を格子に区切り、各図形を外形（bbox）が重なる格子に登録しておく。
+// 以前は1回のタップ判定・スナップ探索のたびに全図形を調べており、3万図形でタップ判定1.2ms・
+// スナップ2.1ms（スマホでは約4〜5倍）かかっていた。
+// 索引は「図形データの変更世代」「外形の再計算回数」「配列の入れ替え・件数」が変わったら次の問い合わせ時に作り直す。
+let _bboxGen = 0;         // calcBBox が呼ばれた回数（編集で外形が消され、描画時に再計算されると増える）
+let _spIndex = null;
+let _spQueryStamp = null; // 候補の重複除去用
+let _spQueryCounter = 0;
+const SP_MAX_CELLS_PER_ENTITY = 64; // これより広い図形は「常に調べる」一覧へ
+
+function _spatialIndexIsValid(ix) {
+    return ix && ix.epoch === _geomEpoch && ix.bboxGen === _bboxGen && ix.arr === entities && ix.n === entities.length;
+}
+function _buildSpatialIndex() {
+    const n = entities.length;
+    const boxes = new Array(n);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for(let i = 0; i < n; i++) {
+        const e = entities[i];
+        if(!e || e.type === 'DIMENSION' || e.type === 'HATCH') continue; // 画面上の当たり判定・塗りの対象図形で判定するもの
+        const b = e.bbox || (e.bbox = calcBBox(e));
+        if(!b || !isFinite(b.minX) || !isFinite(b.maxX) || !isFinite(b.minY) || !isFinite(b.maxY)) continue;
+        boxes[i] = b;
+        if(b.minX < minX) minX = b.minX; if(b.minY < minY) minY = b.minY;
+        if(b.maxX > maxX) maxX = b.maxX; if(b.maxY > maxY) maxY = b.maxY;
+    }
+    const ix = { epoch: _geomEpoch, arr: entities, n, cells: new Map(), always: [], cell: 1, minX: 0, minY: 0, cols: 1, rows: 1 };
+    if(minX === Infinity) {
+        for(let i = 0; i < n; i++) if(entities[i]) ix.always.push(i);
+    } else {
+        const w = Math.max(maxX - minX, 1e-9), h = Math.max(maxY - minY, 1e-9);
+        // 1マスあたり平均2〜3図形になる大きさ（マス数の上限あり）
+        const target = Math.max(1, Math.min(n / 2, 250000));
+        const cell = Math.max(Math.sqrt((w * h) / target), Math.max(w, h) / 4096, 1e-9);
+        ix.cell = cell; ix.minX = minX; ix.minY = minY;
+        ix.cols = Math.max(1, Math.ceil(w / cell) + 1); ix.rows = Math.max(1, Math.ceil(h / cell) + 1);
+        for(let i = 0; i < n; i++) {
+            const e = entities[i];
+            if(!e) continue;
+            const b = boxes[i];
+            if(!b) { ix.always.push(i); continue; }
+            const c0 = Math.floor((b.minX - minX) / cell), c1 = Math.floor((b.maxX - minX) / cell);
+            const r0 = Math.floor((b.minY - minY) / cell), r1 = Math.floor((b.maxY - minY) / cell);
+            if((c1 - c0 + 1) * (r1 - r0 + 1) > SP_MAX_CELLS_PER_ENTITY) { ix.always.push(i); continue; }
+            for(let r = r0; r <= r1; r++) for(let c = c0; c <= c1; c++) {
+                const key = r * ix.cols + c;
+                const list = ix.cells.get(key);
+                if(list) list.push(i); else ix.cells.set(key, [i]);
+            }
+        }
+    }
+    ix.bboxGen = _bboxGen; // 構築中の calcBBox 呼び出し分は含めて記録する
+    return ix;
+}
+function _getSpatialIndex() {
+    if(!_spatialIndexIsValid(_spIndex)) _spIndex = _buildSpatialIndex();
+    return _spIndex;
+}
+// WCS の矩形に外形が重なりうる図形の番号を、配列順（小さい順）で返す。広すぎる範囲なら null（＝全図形を調べる）
+function _spatialCandidates(qMinX, qMinY, qMaxX, qMaxY) {
+    if(window.__disableSpatialIndex) return null; // テストで索引なしの結果と比較するためのスイッチ
+    const ix = _getSpatialIndex();
+    const n = ix.n;
+    if(n < 500) return null; // 小さい図面は全件を調べた方が速い
+    const c0 = Math.max(0, Math.floor((qMinX - ix.minX) / ix.cell)), c1 = Math.min(ix.cols - 1, Math.floor((qMaxX - ix.minX) / ix.cell));
+    const r0 = Math.max(0, Math.floor((qMinY - ix.minY) / ix.cell)), r1 = Math.min(ix.rows - 1, Math.floor((qMaxY - ix.minY) / ix.cell));
+    const span = (c1 >= c0 && r1 >= r0) ? (c1 - c0 + 1) * (r1 - r0 + 1) : 0;
+    if(span > Math.max(64, ix.cells.size / 3)) return null;
+    if(!_spQueryStamp || _spQueryStamp.length < n) _spQueryStamp = new Uint32Array(Math.max(n, 1024));
+    _spQueryCounter++;
+    if(_spQueryCounter >= 0xFFFFFFFF) { _spQueryStamp.fill(0); _spQueryCounter = 1; }
+    const stamp = _spQueryStamp, q = _spQueryCounter;
+    const out = [];
+    for(const i of ix.always) if(stamp[i] !== q) { stamp[i] = q; out.push(i); }
+    for(let r = r0; r <= r1; r++) for(let c = c0; c <= c1; c++) {
+        const list = ix.cells.get(r * ix.cols + c);
+        if(!list) continue;
+        for(let k = 0; k < list.length; k++) { const i = list[k]; if(stamp[i] !== q) { stamp[i] = q; out.push(i); } }
+    }
+    out.sort((a, b) => a - b); // 同じ距離のときは配列の前の図形を優先する従来の動作を保つ
+    return out;
+}
+// 候補（または全図形）について fn(e, i) を配列順に呼ぶ
+function _forEachCandidate(qMinX, qMinY, qMaxX, qMaxY, fn) {
+    const cand = (qMinX === undefined) ? null : _spatialCandidates(qMinX, qMinY, qMaxX, qMaxY);
+    if(!cand) { entities.forEach(fn); return; }
+    for(let k = 0; k < cand.length; k++) { const i = cand[k]; const e = entities[i]; if(e) fn(e, i); }
+}
+
 function calcBBox(e) {
+    _bboxGen++;
     let minX, minY, maxX, maxY;
     if(e.type==='LINE') {
         minX = Math.min(e.x1, e.x2); maxX = Math.max(e.x1, e.x2);
@@ -1560,10 +1797,34 @@ function calcBBox(e) {
     return { minX, minY, maxX, maxY };
 }
 
+// ===== 図形の描画（大きな図面向けに軽量化） =====
+// ・同じ色・同じ透明度で続く線系の図形は1本のパスにまとめて stroke する（stroke 回数が図形数→色の切替回数に減る）
+// ・画面上で1ピクセルに満たない図形は点として描く（全体表示で細かい図形を1つずつ描かない）
+// ・ポリラインは画面上で0.5ピクセル未満しか動かない頂点を省く
+// ・文字は小さすぎて読めない大きさでは点・線で簡略表示する（fillText は重い）
+// ・背景に合わせた色の補正結果は色ごとに覚えておく
+const _strokeColorCache = new Map();
+let _strokeColorCacheBg = null;
+function _strokeColorFor(col) {
+    if(_strokeColorCacheBg !== canvasBg) { _strokeColorCache.clear(); _strokeColorCacheBg = canvasBg; }
+    let c = _strokeColorCache.get(col);
+    if(c === undefined) { c = adjustColorForBg(col); _strokeColorCache.set(col, c); }
+    return c;
+}
+const TEXT_DOT_PX = 1;    // これ未満の文字は点
+const TEXT_GREEK_PX = 3;  // これ未満の文字は文字列の長さの線（読めない大きさ）
+function _approxTextWidth(text, px) {
+    let w = 0;
+    for(let k = 0; k < text.length; k++) w += text.charCodeAt(k) > 0xff ? 1.0 : 0.6;
+    return w * px;
+}
 function drawEntities() {
     ctx.save();
+    ctx.lineWidth = 1;
     const selSet = new Set(cmdState.selectedIndices || []);
     const hlIdx = cmdState.highlightIdx;
+    const ghost = !!window.ghostLayerMode;
+    const baseTransform = ctx.getTransform();
 
     // カリング用の画面の表示範囲 (WCS座標)。100ピクセルずつ余裕をもたせる
     const tl = screenToWcs(-100, -100);
@@ -1575,41 +1836,141 @@ function drawEntities() {
     const viewMinY = Math.min(tl.y, tr.y, bl.y, br.y);
     const viewMaxY = Math.max(tl.y, tr.y, bl.y, br.y);
 
-    entities.forEach((e,i) => {
-        const lyrVisible = e.layer === undefined || !layers[e.layer] || layers[e.layer].visible;
-        const entityVisible = !e.hidden;
+    // WCS→画面の変換（wcsToScreen と同じ式。頂点の多いポリライン用にオブジェクトを作らず計算する）
+    const sc = view.scale, vx = view.x, vy = view.y;
+    const rot = view.rotation, rc = Math.cos(rot), rs = Math.sin(rot), rotated = rot !== 0;
+    const TX = rotated ? (x, y) => (x * rc - y * rs) * sc + vx : (x) => x * sc + vx;
+    const TY = rotated ? (x, y) => -(x * rs + y * rc) * sc + vy : (x, y) => -y * sc + vy;
 
-        if (!entityVisible) return;
-        if (!lyrVisible && !window.ghostLayerMode) return; // ghostLayerModeがOFFで画層非表示なら描画をスキップ
-        if (e.type === 'DIMENSION') return;
+    let batchOpen = false, batchColor = null, batchAlpha = 1;
+    const flush = () => { if(batchOpen) { ctx.stroke(); batchOpen = false; } };
+    const begin = (color, alpha) => {
+        if(batchOpen && color === batchColor && alpha === batchAlpha) return;
+        flush();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = color;
+        batchColor = color; batchAlpha = alpha;
+        ctx.beginPath();
+        batchOpen = true;
+    };
+    let lastFont = null, lastAlign = null, lastBaseline = null;
+
+    const n = entities.length;
+    for(let i = 0; i < n; i++) {
+        const e = entities[i];
+        if(!e || e.hidden) continue;
+        const lyrVisible = e.layer === undefined || !layers[e.layer] || layers[e.layer].visible;
+        if(!lyrVisible && !ghost) continue; // ghostLayerModeがOFFで画層非表示なら描画をスキップ
+        if(e.type === 'DIMENSION') continue;
 
         // BBoxカリング（事前計算＆画面外をスキップ）
-        if(e.bbox === undefined && e.type !== 'HATCH') {
-            e.bbox = calcBBox(e);
+        if(e.bbox === undefined && e.type !== 'HATCH') e.bbox = calcBBox(e);
+        const bb = e.bbox;
+        if(bb && (bb.maxX < viewMinX || bb.minX > viewMaxX || bb.maxY < viewMinY || bb.minY > viewMaxY)) continue;
+
+        const alpha = lyrVisible ? 1 : 0.15; // 非表示レイヤーはうっすら（15%不透明度）表示
+        let raw = null;
+        if(lyrVisible) {
+            if(i === hlIdx) raw = '#ff6b6b';
+            else if(selSet.has(i)) raw = '#ffaa33'; // 複数選択時はオレンジ
         }
-        if(e.bbox) {
-            if(e.bbox.maxX < viewMinX || e.bbox.minX > viewMaxX || 
-               e.bbox.maxY < viewMinY || e.bbox.minY > viewMaxY) {
-                return; // 画面内にないためスキップ
+        const color = _strokeColorFor(raw || getEntityColor(e));
+        const t = e.type;
+
+        // 画面上で1ピクセルに満たない図形（全体表示時の細かい記号など）は点として描く（POINT は画面上で一定の大きさの記号なので対象外）
+        if(bb && t !== 'TEXT' && t !== 'HATCH' && t !== 'POINT' && (bb.maxX - bb.minX) * sc < 1 && (bb.maxY - bb.minY) * sc < 1) {
+            const mx = (bb.minX + bb.maxX) / 2, my = (bb.minY + bb.maxY) / 2;
+            const px = TX(mx, my), py = TY(mx, my);
+            begin(color, alpha); ctx.moveTo(px, py); ctx.lineTo(px + 1, py);
+            continue;
+        }
+
+        if(t === 'LINE') {
+            begin(color, alpha);
+            ctx.moveTo(TX(e.x1, e.y1), TY(e.x1, e.y1)); ctx.lineTo(TX(e.x2, e.y2), TY(e.x2, e.y2));
+        } else if(t === 'CIRCLE') {
+            begin(color, alpha);
+            const cx = TX(e.cx, e.cy), cy = TY(e.cx, e.cy), r = e.radius * sc;
+            ctx.moveTo(cx + r, cy); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        } else if(t === 'ARC') {
+            begin(color, alpha);
+            const cx = TX(e.cx, e.cy), cy = TY(e.cx, e.cy), r = e.radius * sc;
+            const a0 = -e.startAngle + rot, a1 = -e.endAngle + rot;
+            ctx.moveTo(cx + r * Math.cos(a0), cy + r * Math.sin(a0));
+            ctx.arc(cx, cy, r, a0, a1, !e.counterclockwise);
+        } else if(t === 'RECTANG') {
+            begin(color, alpha);
+            ctx.moveTo(TX(e.x1, e.y1), TY(e.x1, e.y1)); ctx.lineTo(TX(e.x2, e.y1), TY(e.x2, e.y1));
+            ctx.lineTo(TX(e.x2, e.y2), TY(e.x2, e.y2)); ctx.lineTo(TX(e.x1, e.y2), TY(e.x1, e.y2)); ctx.closePath();
+        } else if(t === 'PLINE') {
+            const pts = e.points;
+            if(!pts || pts.length < 2) continue;
+            begin(color, alpha);
+            let lx = TX(pts[0].x, pts[0].y), ly = TY(pts[0].x, pts[0].y);
+            ctx.moveTo(lx, ly);
+            const last = pts.length - 1;
+            for(let k = 1; k <= last; k++) {
+                const p = pts[k];
+                const x = TX(p.x, p.y), y = TY(p.x, p.y);
+                const dx = x - lx, dy = y - ly;
+                if(k < last && dx * dx + dy * dy < 0.25) continue; // 0.5px 未満の移動は省く（最後の頂点は必ず描く）
+                ctx.lineTo(x, y); lx = x; ly = y;
             }
+            if(e.closed) ctx.closePath();
+        } else if(t === 'ELLIPSE') {
+            begin(color, alpha);
+            const cx = TX(e.cx, e.cy), cy = TY(e.cx, e.cy), th = -(e.rotation || 0);
+            ctx.moveTo(cx + e.rx * sc * Math.cos(th), cy + e.rx * sc * Math.sin(th));
+            ctx.ellipse(cx, cy, e.rx * sc, e.ry * sc, th, 0, Math.PI * 2);
+        } else if(t === 'POINT') {
+            begin(color, alpha);
+            const r = 4, px = TX(e.x, e.y), py = TY(e.x, e.y);
+            ctx.moveTo(px + r * 0.4, py); ctx.arc(px, py, r * 0.4, 0, Math.PI * 2);
+            ctx.moveTo(px - r, py); ctx.lineTo(px + r, py); ctx.moveTo(px, py - r); ctx.lineTo(px, py + r);
+        } else if(t === 'TEXT') {
+            const px = (e.height || 10) * sc;
+            const ax = TX(e.x, e.y), ay = TY(e.x, e.y);
+            if(px < TEXT_DOT_PX) { begin(color, alpha); ctx.moveTo(ax, ay); ctx.lineTo(ax + 1, ay); continue; }
+            const text = String(e.text);
+            const ang = -(rot + (e.rotation || 0)); // 画面上の文字の向き（drawOneEntity と同じ回転）
+            if(px < TEXT_GREEK_PX) {
+                // 読めない大きさの文字は、文字列の長さの線で表す（CADの簡易文字表示と同じ考え方）
+                const firstLine = text.split('\n')[0];
+                const w = _approxTextWidth(firstLine, px);
+                const off = e.halign === 'center' ? -w / 2 : e.halign === 'right' ? -w : 0;
+                const ux = Math.cos(ang), uy = Math.sin(ang);
+                begin(color, alpha);
+                ctx.moveTo(ax + ux * off, ay + uy * off); ctx.lineTo(ax + ux * (off + w), ay + uy * (off + w));
+                continue;
+            }
+            flush();
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = color;
+            const font = px + 'px sans-serif';
+            if(font !== lastFont) { ctx.font = font; lastFont = font; }
+            // DXF/DWGインポート時の文字整列を反映（未指定なら従来通り左・ベースライン基準）
+            const align = (e.halign === 'center' || e.halign === 'right') ? e.halign : 'left';
+            const baseline = (e.valign === 'top') ? 'top' : (e.valign === 'middle') ? 'middle' : 'alphabetic';
+            if(align !== lastAlign) { ctx.textAlign = align; lastAlign = align; }
+            if(baseline !== lastBaseline) { ctx.textBaseline = baseline; lastBaseline = baseline; }
+            ctx.translate(ax, ay);
+            if(ang !== 0) ctx.rotate(ang);
+            if(text.indexOf('\n') < 0) ctx.fillText(text, 0, 0);
+            else text.split('\n').forEach((line, li) => ctx.fillText(line, 0, li * px * 1.4)); // MTEXT由来の改行
+            ctx.setTransform(baseTransform);
+        } else {
+            // 塗り（HATCH）など: 個別に描く
+            flush();
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            drawOneEntity(e, raw);
+            ctx.restore();
+            lastFont = lastAlign = lastBaseline = null;
         }
-
-        ctx.save();
-        if (!lyrVisible) {
-            ctx.globalAlpha = 0.15; // 非表示レイヤーはうっすら（15%不透明度）表示
-        }
-
-        let color = null;
-        if (lyrVisible) {
-            if(i === hlIdx) color = '#ff6b6b';
-            else if(selSet.has(i)) color = '#ffaa33'; // 複数選択時はオレンジ
-        }
-        drawOneEntity(e, color);
-        ctx.restore();
-    });
+    }
+    flush();
     ctx.restore();
 }
-
 // 寸法描画は cad-dimension.js の drawDimensions() へ委譲
 function drawDimensions() { if(typeof drawAllDimensions==='function') drawAllDimensions(); }
 
@@ -2082,6 +2443,7 @@ function createOffsetEntity(e, d, wx, wy) {
 // ===== 回転処理 =====
 function rotateEntity(e, cx, cy, angle) {
     delete e.bbox; // 座標変更後は次回描画時に再計算させる
+    _bumpGeomEpoch();
     const rx = (x, y) => (x - cx) * Math.cos(angle) - (y - cy) * Math.sin(angle) + cx;
     const ry = (x, y) => (x - cx) * Math.sin(angle) + (y - cy) * Math.cos(angle) + cy;
     if(e.type === 'LINE' || e.type === 'RECTANG') {
@@ -2305,6 +2667,8 @@ function executeExtend(extendPath) {
         if(closestPt) {
             if(isP1) { e.x1 = closestPt.x; e.y1 = closestPt.y; }
             else { e.x2 = closestPt.x; e.y2 = closestPt.y; }
+            delete e.bbox;
+            _bumpGeomEpoch();
             extendedCount++;
         }
     });
@@ -2524,8 +2888,9 @@ function setupEventListeners() {
         }
         if(mouse.isTrimming) {
             if(cmdState.trimPath) cmdState.trimPath.push({x: mouse.wcsX, y: mouse.wcsY});
-            render(); return;
+            renderOverlay(); return; // なぞった線は重ね表示
         }
+        const hlBefore = cmdState.highlightIdx;
         // コマンドモード中のみスナップ計算（IDLE時は軽量化のためスキップ）
         const isSelectMode = ['WAITING_ERASE_SELECT','WAITING_MOVE_SELECT','WAITING_COPY_SELECT','WAITING_OFFSET_SELECT','WAITING_OFFSET_SIDE'].includes(cmdState.mode);
         if(cmdState.mode !== 'IDLE' && !isSelectMode && !mouse.isSelecting) {
@@ -2536,7 +2901,8 @@ function setupEventListeners() {
         if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') {
             if(!mouse.isSelecting) cmdState.highlightIdx=hitTestEntity(mouse.screenX,mouse.screenY);
         }
-        render();
+        // 図形の強調表示が変わったときだけ図形ごと描き直す（それ以外はカーソル・スナップ記号などの重ね表示だけ）
+        if(cmdState.highlightIdx !== hlBefore) render(); else renderOverlay();
     });
     canvas.addEventListener('mousedown', (e) => {
         if(Date.now() - lastTouchTime < 500) return; // タッチイベントに起因する疑似マウスイベントを無視
@@ -2591,7 +2957,7 @@ function setupEventListeners() {
         }
     });
     window.addEventListener('mouseup',(e)=>{
-        if(e.button===1)mouse.isPanning=false;
+        if(e.button===1){ mouse.isPanning=false; render(); }
         if(e.button===0 && mouse.isTrimming) {
             if(cmdState.mode === 'WAITING_EXTEND') executeExtend(cmdState.trimPath);
             else executeTrim(cmdState.trimPath);
@@ -2619,6 +2985,7 @@ function setupEventListeners() {
         e.preventDefault(); const zf=e.deltaY>0?0.9:1.1; const wb=screenToWcs(mouse.screenX,mouse.screenY);
         view.scale=Math.max(0.0001,Math.min(view.scale*zf,10000));
         _reanchorView(mouse.screenX, mouse.screenY, wb);
+        noteViewGesture();
         render();
     },{passive:false});
 
@@ -2813,7 +3180,7 @@ function setupEventListeners() {
 
             if(touchState.isTrimming) {
                 if(cmdState.trimPath) cmdState.trimPath.push({x: mouse.wcsX, y: mouse.wcsY});
-                render(); return;
+                renderOverlay(); return; // なぞった線は重ね表示
             }
 
             if(touchState.isDragging) {
@@ -2843,7 +3210,8 @@ function setupEventListeners() {
                 if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, mouse.ucsX, mouse.ucsY, null);
             }
 
-            render();
+            // ルーペ・スナップ記号・範囲選択枠などの重ね表示だけが変わる（図形・表示位置は変わらない）
+            renderOverlay();
         } else if(e.touches.length === 2) {
             touchState.showLoupe = false;
             const t1 = e.touches[0], t2 = e.touches[1];
@@ -2917,9 +3285,11 @@ function setupEventListeners() {
         }
 
         if(e.touches.length < 2) {
+            const wasPinch = touchState.isPinch;
             touchState.isPinch = false;
             touchState.lastDist = 0;
             touchState.lastMid = null;
+            if(wasPinch) render(); // 操作中はキャッシュを見せていたので正確に描き直す
         }
     }, {passive:false});
 
@@ -3508,6 +3878,7 @@ window.changeEntityProp = function(idx, prop, val) {
         }
     }
     delete entities[idx].bbox; // 座標・寸法が変わった可能性があるのでbboxを再計算させる
+    _bumpGeomEpoch();
     render();
 };
 

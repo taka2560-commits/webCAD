@@ -88,6 +88,7 @@ function _buildSaveData(name) {
     const cleanEntities = entities.map(e => {
         const copy = Object.assign({}, e);
         delete copy.bbox;
+        delete copy._hits; // 寸法の画面上の当たり判定（描画時に作り直す）
         return copy;
     });
     return {
@@ -134,6 +135,8 @@ function applyProjectData(data) {
 
     // 固有IDを確認（古い保存データにはIDが無いので付ける。以後の選択はIDで保持される）
     if (typeof ensureEntityIds === 'function') ensureEntityIds();
+    if (typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
+    if (typeof _undoStrCache !== 'undefined') _undoStrCache = null;
 
     // Undo/Redo はリセット
     undoStack = [];

@@ -685,6 +685,7 @@ function _getMoveTargets() {
 // ===== エンティティ移動ヘルパー =====
 function moveEntity(e, dx, dy) {
     delete e.bbox; // 座標変更後は次回描画時に再計算させる
+    if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
     if(e.type === 'LINE') { e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; }
     else if(e.type === 'CIRCLE' || e.type === 'ARC' || e.type === 'ELLIPSE') { e.cx+=dx; e.cy+=dy; }
     else if(e.type === 'RECTANG') { e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; }

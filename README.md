@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v4.2（2026年9月11日リリース）**
+**現在のバージョン: v4.3（2026年9月11日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -94,13 +94,14 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（107件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（134件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
 
 * **自動テスト**: `tests/*.test.cjs` は Node.js 標準の `node:test` で動きます。`tests/helpers/load-app.cjs` が index.html と `public/cad-*.js` をブラウザと同じ順序で jsdom 上に読み込むので、テストからアプリの関数・変数をそのまま呼べます（IndexedDB は fake-indexeddb で再現）。不具合を直すときは、先にそれを再現するテストを追加してください。
 * **CI**: GitHub にプッシュすると `.github/workflows/ci.yml` が `npm run lint`・`npm test`・`npm run build` を実行します。
+* **描画と変更の合図**: 図形や表示位置・選択が変わったら `render()`、カーソル・スナップ記号・ルーペなど重ね表示だけが変わるときは `renderOverlay()` を呼びます（重い図面では前回の画面を再利用します）。図形の座標を変えたら `delete e.bbox` と `_bumpGeomEpoch()` を行ってください（空間索引・描画キャッシュの作り直しの合図。編集前の `saveUndo()` でも進みます）。
 * **図形の固有ID**: 各図形は `e.id`（数値）を持ちます。選択状態（`cmdState.selectedIndices` / `highlightIdx` など）は内部ではIDで保持し、読み出すとその時点の配列番号を返します。図形を複製するときは `id` を消してから追加してください（重複しても `ensureEntityIds()` が後ろ側に新しいIDを付けます）。
 
 * **構成**: `index.html` と `public/cad-*.js`（通常のスクリプト）が本体です。外部ライブラリは `src/vendor.js` から Vite で同梱し、`window.DxfParser` / `window.Drawing` / `window.loadLibreDwg()` として公開しています。
@@ -111,6 +112,11 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
 
+* **2026-09-11: バージョン4.3（大きな図面の軽量化）** ⚡
+  * 「元に戻す」の履歴を図形ごとに記録し、変わらない図形は共有（3万図形・20回の編集で約200MB → 約4MB）。スマホでブラウザが落ちる恐れを解消。
+  * 空間索引でタップ判定・スナップを高速化（タップ判定 1.2ms → 0.01ms未満、スナップ 2.1ms → 0.13ms）。
+  * 描画の軽量化（同色の線をまとめて描画・小さい図形/文字の簡略表示・ルーペは映る範囲だけ・ピンチ中は直前の画面を拡大縮小・カーソル移動では図形を描き直さない）。
+  * 「延長」した線の外形が古いまま残る不具合を修正。
 * **2026-09-11: バージョン4.2（品質強化）** 🧪
   * 自動テスト107件と GitHub Actions による自動チェックを導入。
   * テストで見つかった不具合を修正: DXFの円弧が欠片になる、トリムで長方形・ポリラインと交わる線が丸ごと消える、円弧の描かれていない部分でトリム・延長される、選択アクションバーで1つ選んだ図形を操作できない、など。
