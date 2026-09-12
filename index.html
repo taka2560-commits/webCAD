@@ -235,6 +235,17 @@
         /* トースト通知（読み込み結果などの一時メッセージ） */
         #cad-toast { position:fixed; left:50%; top:64px; transform:translateX(-50%); background:rgba(18,22,28,0.94); color:#e0e0e0; border:1px solid rgba(0,255,136,0.4); border-radius:12px; padding:10px 16px; font-size:13px; font-weight:600; z-index:200001; opacity:0; pointer-events:none; transition:opacity .25s; max-width:90vw; text-align:center; white-space:pre-line; box-shadow:0 6px 20px rgba(0,0,0,0.5); }
         #cad-toast.show { opacity:1; }
+        /* 現在地（GNSS）バー: 座標系の役割色（青） */
+        /* 左ツールバー（44pxレール）を隠さないよう、その右側に置く。狭い画面では座標とボタンを2行にする */
+        #gnss-bar { display:none; position:fixed; top:60px; left:64px; right:8px; z-index:36; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:6px; padding:5px 6px 5px 10px; border-radius:var(--r-card); border:1px solid rgba(82,139,255,0.5); }
+        @media (min-width: 700px) { #gnss-bar { left:auto; max-width:calc(100vw - 80px); } }
+        #gnss-text { color:#528bff; font:700 12px Consolas,'Segoe UI',monospace; flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        @media (max-width: 699px) { #gnss-text { flex-basis:100%; } }
+        .gnss-btn { flex-shrink:0; height:30px; padding:0 10px; border-radius:var(--r-pill); background:rgba(255,255,255,0.06); border:1px solid var(--border-3); color:var(--text-color); font:600 12px 'Segoe UI',sans-serif; cursor:pointer; }
+        .gnss-btn.on { border-color:#528bff; color:#528bff; background:rgba(82,139,255,0.12); }
+        .gnss-btn.gnss-x { width:30px; padding:0; color:#aaa; }
+        .gnss-btn:active { transform:scale(0.92); }
+        body.fullscreen-mode #gnss-bar { top:12px; }
         #cad-update-notice { position:fixed; left:50%; top:64px; transform:translateX(-50%); z-index:200001; display:flex; align-items:center; gap:8px; padding:6px 6px 6px 14px; background:rgba(18,22,28,0.96); border:1px solid rgba(0,255,136,0.45); border-radius:12px; color:#e0e0e0; font:600 12px 'Segoe UI',sans-serif; box-shadow:0 6px 20px rgba(0,0,0,0.5); max-width:92vw; }
         #cad-update-notice .upd-btn { height:32px; padding:0 12px; border-radius:8px; background:rgba(0,255,136,0.12); border:1px solid rgba(0,255,136,0.5); color:#00ff88; font:700 12px 'Segoe UI',sans-serif; cursor:pointer; }
         #cad-update-notice .upd-x { width:32px; height:32px; border-radius:8px; background:none; border:1px solid #3a4049; color:#aaa; cursor:pointer; }
@@ -389,6 +400,16 @@
                 <button class="menu-item-btn" onclick="exportDxf(); toggleTopMenu();">DXF 出力</button>
                 <button class="menu-item-btn" onclick="exportDwg(); toggleTopMenu();">DWG 出力</button>
                 <button class="menu-item-btn danger" onclick="closeDrawing(); toggleTopMenu();">✕ 図面を閉じる</button>
+            </div>
+        </div>
+
+        <div>
+            <div class="menu-section-title">測量</div>
+            <div class="menu-btn-grid">
+                <button class="menu-item-btn" onclick="showCoordListPanel(); toggleTopMenu();">📍 座標一覧</button>
+                <button class="menu-item-btn" onclick="toggleGnss(); toggleTopMenu();">🛰 現在地</button>
+                <button class="menu-item-btn" onclick="exportSima(); toggleTopMenu();">SIMA 出力</button>
+                <button class="menu-item-btn" onclick="exportCoordCsv(); toggleTopMenu();">座標CSV 出力</button>
             </div>
         </div>
 
@@ -588,6 +609,10 @@
                     </div>
                     <button class="fsd-btn green" onclick="toggleBlockManagerPanel(); autoCloseDrawer();">🧩 ブロック管理</button>
                     <div class="fsd-row">
+                        <button class="fsd-btn flex" onclick="showCoordListPanel(); autoCloseDrawer();">📍 座標一覧</button>
+                        <button class="fsd-btn flex blue" onclick="toggleGnss(); autoCloseDrawer();">🛰 現在地</button>
+                    </div>
+                    <div class="fsd-row">
                         <button class="fsd-btn flex" onclick="saveUCS(); autoCloseDrawer();">💾 保存</button>
                         <button class="fsd-btn flex red" onclick="deleteUCS(); autoCloseDrawer();">🗑 消去</button>
                     </div>
@@ -661,6 +686,7 @@
     <script src="cad-dimension.js"></script>
     <script src="cad-io.js"></script>
     <script src="cad-core.js"></script>
+    <script src="cad-survey.js"></script>
     <script src="cad-storage.js"></script>
 
     <!-- Service Worker Registration -->

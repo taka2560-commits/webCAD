@@ -148,7 +148,13 @@ export default [
                 // フェーズ3: 軽量化（変更世代・履歴キャッシュ・計時）
                 performance: "readonly",
                 _bumpGeomEpoch: "readonly",
-                _undoStrCache: "writable"
+                _undoStrCache: "writable",
+                // フェーズ5: 測量（cad-survey.js と他ファイルの相互参照）
+                canvas: "readonly", renderOverlay: "readonly", showPropertyPanel: "readonly", showOptionsPanel: "readonly",
+                updatePropertiesPanel: "readonly", downloadBlob: "readonly", reportImportFailure: "readonly",
+                loadSimaFile: "readonly", loadCoordCsvFile: "readonly", processSurveyCommand: "readonly",
+                drawSurveyOverlays: "readonly", getSurveyUnit: "readonly", getGnssZone: "readonly", ROMAN: "readonly",
+                polygonArea: "readonly", surveyUnitFactor: "readonly"
             }
         },
         rules: {

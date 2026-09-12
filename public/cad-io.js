@@ -186,26 +186,33 @@ function importDxfData(dxf, opts) {
     };
 
     // エンティティは元の順序で処理する（ATTRIB は直前の INSERT に属する属性文字のため）
-    let lastInsertGid = null, lastInsertBlock = null;
+    let lastInsertGid = null, lastInsertBlock = null, lastInsertPos = null;
     (dxf.entities || []).forEach(e => {
-        if(e.inPaperSpace || e.paperSpace) { noteSkip('ペーパー空間'); lastInsertGid = null; return; }
+        if(e.inPaperSpace || e.paperSpace) { noteSkip('ペーパー空間'); lastInsertGid = null; lastInsertPos = null; return; }
         try {
             if(e.type === 'INSERT') {
                 const gid = newGroupId('b');
                 const expanded = expandInsert(e, blocks, 0, gid, e.name);
                 if(expanded.length === 0) noteSkip('INSERT:' + (e.name || '?'));
+                // 挿入点を各図形に記録（移動・回転で一緒に動く。図形ごとに別オブジェクトにする）
+                const ip = e.position ? { x: e.position.x || 0, y: e.position.y || 0 } : null;
+                if(ip) expanded.forEach(m => { m.ins = { x: ip.x, y: ip.y }; });
                 expanded.forEach(addEntity);
-                lastInsertGid = gid; lastInsertBlock = e.name;
+                lastInsertGid = gid; lastInsertBlock = e.name; lastInsertPos = ip;
                 return;
             }
             if(e.type === 'ATTRIB') {
                 if(e.invisible) return; // 不可視属性は描画しない
                 const t = convertDxfEntity(e);
-                if(t) { if(lastInsertGid) { t.gid = lastInsertGid; t.blockName = lastInsertBlock; } addEntity(t); }
+                if(t) {
+                    if(lastInsertGid) { t.gid = lastInsertGid; t.blockName = lastInsertBlock; if(lastInsertPos) t.ins = { x: lastInsertPos.x, y: lastInsertPos.y }; }
+                    if(e.tag) t.attTag = String(e.tag);
+                    addEntity(t);
+                }
                 else noteSkip('ATTRIB');
                 return; // 属性の並びは INSERT の続きなので lastInsertGid を維持
             }
-            lastInsertGid = null; lastInsertBlock = null;
+            lastInsertGid = null; lastInsertBlock = null; lastInsertPos = null;
             if(e.type === 'DIMENSION') {
                 const dimEnts = expandDimension(e, blocks);
                 if(dimEnts.length === 0) noteSkip('DIMENSION');
@@ -891,6 +898,8 @@ function convertDwgDatabaseToApp(db) {
                 const b = blocks[ent.name];
                 const gidHere = gid || newGroupId('b');
                 const bnHere = blockName || ent.name;
+                const topLevel = !gid;
+                const startCount = result.entities.length;
                 if (b && b.entities && Array.isArray(b.entities)) {
                     const insX = ent.insertionPoint ? ent.insertionPoint.x : 0;
                     const insY = ent.insertionPoint ? ent.insertionPoint.y : 0;
@@ -910,6 +919,12 @@ function convertDwgDatabaseToApp(db) {
                 // 属性（測点名など）が INSERT に付随している場合
                 const attrs = ent.attributes || ent.attribs || ent.attribList;
                 if (Array.isArray(attrs)) attrs.forEach(a => processDwgEntity(Object.assign({ type: 'ATTRIB' }, a), depth + 1, pX, pY, sX, sY, rot, gidHere, bnHere));
+                // 最上位の挿入点を記録（座標一覧・SIMA出力でブロックの測点を扱うため）
+                if (topLevel && ent.insertionPoint) {
+                    const ix = pX + (ent.insertionPoint.x * sX * Math.cos(rot) - ent.insertionPoint.y * sY * Math.sin(rot));
+                    const iy = pY + (ent.insertionPoint.x * sX * Math.sin(rot) + ent.insertionPoint.y * sY * Math.cos(rot));
+                    for (let k = startCount; k < result.entities.length; k++) result.entities[k].ins = { x: ix, y: iy };
+                }
                 return;
             }
 
@@ -1090,7 +1105,7 @@ function processIOCommand(cmd) {
 // ===== ファイル入力イベント =====
 function setupFileIO() {
     const fileInput = document.getElementById('dxf-file-input');
-    fileInput.setAttribute('accept', '.dxf,.dwg');
+    fileInput.setAttribute('accept', '.dxf,.dwg,.sim,.csv,.txt');
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if(!file) return;
@@ -1099,7 +1114,12 @@ function setupFileIO() {
             _prepareImportTarget(); // 置き換え/追加の確認（Undo 1回分を保存）
             if(ext === 'dxf') loadDxfFile(file); else loadDwgFile(file);
         }
-        else addCommandLog(`未対応の形式です: .${ext}`);
+        else if(ext === 'sim' && typeof loadSimaFile === 'function') { _prepareImportTarget(); loadSimaFile(file); }
+        else if((ext === 'csv' || ext === 'txt') && typeof loadCoordCsvFile === 'function') { _prepareImportTarget(); loadCoordCsvFile(file); }
+        else {
+            addCommandLog(`未対応の形式です: .${ext}`);
+            if(typeof showToast === 'function') showToast(`未対応の形式です（.${ext}）\nDXF・DWG・SIMA（.sim）・座標CSVを開けます`, 4000);
+        }
         fileInput.value = ''; // リセット
     });
     // DXFボタンにイベント

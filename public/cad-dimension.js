@@ -686,6 +686,7 @@ function _getMoveTargets() {
 function moveEntity(e, dx, dy) {
     delete e.bbox; // 座標変更後は次回描画時に再計算させる
     if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
+    if(e.ins) { e.ins.x += dx; e.ins.y += dy; } // ブロックの挿入点（測点の座標）
     if(e.type === 'LINE') { e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; }
     else if(e.type === 'CIRCLE' || e.type === 'ARC' || e.type === 'ELLIPSE') { e.cx+=dx; e.cy+=dy; }
     else if(e.type === 'RECTANG') { e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; }

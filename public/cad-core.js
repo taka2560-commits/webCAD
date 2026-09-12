@@ -55,6 +55,18 @@ function showOptionsPanel(){
             <button class="prop-btn btn-warn" onclick="if(window.cadErrors) window.cadErrors.show()">⚠ エラーログ（<span class="cad-err-count">${window.cadErrors ? window.cadErrors.count() : 0}</span>件）</button>
             <div id="opt-build-info" style="font-size:10px;color:#666;"></div>
         </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
+            <div style="font-size:11px;color:#aaa;font-weight:700;">測量（SIMA・座標CSV・現在地）</div>
+            <div style="font-size:11px;color:#ddd;">図面の1単位の長さ:</div>
+            <div id="opt-survey-unit" style="display:flex;gap:6px;">
+                <button class="prop-btn opt-bg-btn ${(typeof getSurveyUnit === 'function' && getSurveyUnit() === 'm') ? 'active' : ''}" style="flex:1;" onclick="setSurveyUnit('m')">1 = 1m</button>
+                <button class="prop-btn opt-bg-btn ${(typeof getSurveyUnit === 'function' && getSurveyUnit() === 'mm') ? 'active' : ''}" style="flex:1;" onclick="setSurveyUnit('mm')">1 = 1mm</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#ddd;">
+                <span style="flex:1;">現在地の座標系: ${(typeof getGnssZone === 'function' && getGnssZone()) ? ROMAN[getGnssZone()] + '系' : '未設定'}</span>
+                <button class="prop-btn btn-sub" style="margin-top:0;" onclick="showGnssZonePanel(false)">系番号を選ぶ</button>
+            </div>
+        </div>
     `;
     showPropertyPanel('オプション', html);
     refreshOfflineStatus();
@@ -1439,6 +1451,7 @@ function _drawFrame(overlayOnly) {
         else if(_frameCache) _frameCache = null; // 軽い図面ではキャッシュ用のメモリを持たない
         }
         drawRubberBand(); drawSnapMarker(); drawCrosshair();
+        if(typeof drawSurveyOverlays === 'function') drawSurveyOverlays(); // 現在地（GNSS）・一覧で選んだ点の目印
         
         // 範囲選択矩形描画
         drawSelectionRect();
@@ -2446,6 +2459,7 @@ function rotateEntity(e, cx, cy, angle) {
     _bumpGeomEpoch();
     const rx = (x, y) => (x - cx) * Math.cos(angle) - (y - cy) * Math.sin(angle) + cx;
     const ry = (x, y) => (x - cx) * Math.sin(angle) + (y - cy) * Math.cos(angle) + cy;
+    if(e.ins) { const ix = rx(e.ins.x, e.ins.y), iy = ry(e.ins.x, e.ins.y); e.ins.x = ix; e.ins.y = iy; } // ブロックの挿入点（測点の座標）
     if(e.type === 'LINE' || e.type === 'RECTANG') {
         const nx1 = rx(e.x1, e.y1), ny1 = ry(e.x1, e.y1);
         const nx2 = rx(e.x2, e.y2), ny2 = ry(e.x2, e.y2);
@@ -2866,6 +2880,7 @@ function processCommand(cmdText) {
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
     else if(cmd==='CANCEL') { resetCommand(); }
     else if(cmd==='ERRORS'||cmd==='ERRLOG') { if(window.cadErrors) window.cadErrors.show(); }
+    else if(typeof processSurveyCommand === 'function' && processSurveyCommand(cmd)) { /* 測量コマンド（座標一覧・SIMA/CSV出力・GNSS）処理済み */ }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
     else { addCommandLog(`不明なコマンドです "${cmdText}"`); resetCommand(); }
 }
@@ -3800,6 +3815,22 @@ function updatePropertiesPanel() {
         if(e.type === 'POINT' || e.size !== undefined) {
             html += `<div class="prop-row"><div class="prop-label">サイズ</div><input class="prop-val" type="number" step="0.1" value="${e.size||10}" onchange="changeEntityPropById(${eid}, 'size', this.value)"></div>`;
         }
+        if(e.type === 'POINT') {
+            // 測点の情報（SIMA・座標CSV・座標一覧で使う）。座標は画面表示と同じ X＝北・Y＝東
+            const pu = wcsToUcs(e.x, e.y);
+            html += `<div class="prop-row"><div class="prop-label">点名</div><input class="prop-val" type="text" value="${escapeHtml(e.name || '')}" onchange="changeEntityPropById(${eid}, 'name', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">点番号</div><input class="prop-val" type="text" value="${escapeHtml(e.num || '')}" onchange="changeEntityPropById(${eid}, 'num', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">X</div><input class="prop-val" type="number" step="0.001" value="${pu.y.toFixed(3)}" onchange="changeEntityPropById(${eid}, 'y', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">Y</div><input class="prop-val" type="number" step="0.001" value="${pu.x.toFixed(3)}" onchange="changeEntityPropById(${eid}, 'x', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">標高</div><input class="prop-val" type="number" step="0.001" value="${typeof e.z === 'number' ? e.z : ''}" placeholder="なし" onchange="changeEntityPropById(${eid}, 'z', this.value)"></div>`;
+        }
+        if(e.type === 'PLINE' && e.closed && e.points && e.points.length >= 3 && typeof polygonArea === 'function') {
+            // 閉じたポリライン（区画など）の面積。図面の単位（オプションの測量座標の単位）を m に直して ㎡ で表示
+            const uf = (typeof surveyUnitFactor === 'function') ? surveyUnitFactor() : 1;
+            const area = polygonArea(e.points) / (uf * uf);
+            if(e.lotName) html += `<div class="prop-row"><div class="prop-label">区画名</div><div style="flex:1;color:#e0e0e0;">${escapeHtml(e.lotName)}</div></div>`;
+            html += `<div class="prop-row"><div class="prop-label">面積</div><div style="flex:1;color:var(--green);font-family:Consolas,monospace;">${area.toFixed(3)} ㎡</div></div>`;
+        }
         
         // escapeHtml はグローバル版（cad-core.js 先頭付近で定義）を使う
         
@@ -3858,6 +3889,18 @@ window.changeEntityProp = function(idx, prop, val) {
         entities[idx].color = (val === '' || val === 'null' || val === null) ? null : val;
     }
     else if(prop==='text') entities[idx].text = val;
+    else if(prop==='name' || prop==='num') {
+        const e0 = entities[idx];
+        e0[prop] = String(val === null || val === undefined ? '' : val).trim();
+        if(prop === 'name' && e0.gid) {
+            const lbl = entities.find(t => t && t.gid === e0.gid && t.ptLabel);
+            if(lbl) { lbl.text = e0.name; delete lbl.bbox; }
+        }
+    }
+    else if(prop==='z') {
+        const zv = parseFloat(val);
+        entities[idx].z = (val === '' || val === null || !isFinite(zv)) ? null : zv;
+    }
     else if(prop==='textOverride') entities[idx].textOverride = val===''?null:val;
     else if(prop==='hidden') entities[idx].hidden = (val === 'true' || val === true);
     else {
