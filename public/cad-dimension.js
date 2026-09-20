@@ -177,8 +177,8 @@ function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
 }
 
 // ===== 寸法タイプ別描画（エンティティから呼ばれる） =====
-function drawDimLinear(e, color) { _drawDimLinearCore(e.p1, e.p2, e.offset||30, e.dimDir, color||e.color, e.textOverride, e); }
-function drawDimAligned(e, color) { _drawDimAlignedCore(e.p1, e.p2, e.offset||30, color||e.color, e.textOverride, e); }
+function drawDimLinear(e, color) { _drawDimLinearCore(e.p1, e.p2, e.offset ?? 30, e.dimDir, color||e.color, e.textOverride, e); }
+function drawDimAligned(e, color) { _drawDimAlignedCore(e.p1, e.p2, e.offset ?? 30, color||e.color, e.textOverride, e); }
 function drawDimRadius(e, color) { _drawDimRadiusCore(e.center, e.radius, e.angle, color||e.color, e.textOverride, e); }
 function drawDimDiameter(e, color) { _drawDimDiameterCore(e.center, e.radius, e.angle, color||e.color, e.textOverride, e); }
 
@@ -441,13 +441,16 @@ function drawMovePreview(e, dx, dy) {
 function drawDimMovePreview(e, dx, dy) {
     if(e.subType === 'LINEAR' || e.subType === 'ALIGNED') {
         const p1m = {x:e.p1.x+dx, y:e.p1.y+dy}, p2m = {x:e.p2.x+dx, y:e.p2.y+dy};
-        if(e.subType === 'LINEAR') _drawDimLinearCore(p1m, p2m, e.offset||30, e.dimDir, '#ffff00', e.textOverride);
-        else _drawDimAlignedCore(p1m, p2m, e.offset||30, '#ffff00', e.textOverride);
+        if(e.subType === 'LINEAR') _drawDimLinearCore(p1m, p2m, e.offset ?? 30, e.dimDir, '#ffff00', e.textOverride);
+        else _drawDimAlignedCore(p1m, p2m, e.offset ?? 30, '#ffff00', e.textOverride);
     }
 }
 
 // ===== 寸法コマンドの入力処理 =====
 function handleDimPointInput(mode, wcs) {
+    // -- 基点測定 --
+    if(mode === 'WAITING_DIMMEAS_BASE') { _measureStartFrom(wcs); return; }
+    if(mode === 'WAITING_DIMMEAS_TO') { _measureLog(); return; } // 測定中は基点を動かさず、読み取った値を記録する
     // -- DIMLINEAR --
     if(mode === 'WAITING_DIMLIN_P1') {
         cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMLIN_P2'; setPrompt('2点目: (☑️確定)');
@@ -715,6 +718,171 @@ function _showDimActionBar(isContinuous) {
     if(dirBtn) dirBtn.style.display = isContinuous ? 'inline-block' : 'none';
 }
 
+// ===== 基点測定 =====
+// 基点を1つ決めると、そこから指（カーソル）やスナップ点までの
+//   ・X距離（北方向 ＝ 図面の縦方向）
+//   ・Y距離（東方向 ＝ 図面の横方向）
+//   ・直線距離
+// を画面に出したままにする。画面を動かしても基点は図面上の同じ場所に残る。
+// 指を離した位置（スナップ点）に表示が残るので、そのまま読み取れる。
+const MEAS_COLOR = '#00FFFF';      // 寸法と同じ水色
+const MEAS_BASE_COLOR = '#00ff88'; // 基点は緑（確定した点）
+const MEAS_TEXT_SIZE = 15;
+
+// 測る相手の点（スナップがあればスナップ点、なければカーソル位置）
+function _measTargetPoint() {
+    if(typeof getInputPoint === 'function') return getInputPoint();
+    return { x: mouse.wcsX, y: mouse.wcsY };
+}
+// 長さの表示。図面の1単位＝1m の設定なら m で小数3桁、1mm なら従来どおり mm の整数
+function _measIsMeter() { return (typeof getSurveyUnit !== 'function') || getSurveyUnit() === 'm'; }
+function measFormatLength(v) { return _measIsMeter() ? v.toFixed(3) : Math.round(v).toString(); }
+function _measUnitLabel() { return _measIsMeter() ? 'm' : 'mm'; }
+
+// 読み取りやすいように、背景の帯つきで文字を描く
+function _measLabel(text, x, y, angle) {
+    ctx.save();
+    ctx.translate(x, y);
+    let a = angle || 0;
+    if(a > Math.PI/2 || a < -Math.PI/2) a += Math.PI; // 文字が逆さまにならないように
+    ctx.rotate(a);
+    ctx.font = 'bold ' + MEAS_TEXT_SIZE + 'px sans-serif';
+    const w = ctx.measureText(text).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(-w/2 - 5, -MEAS_TEXT_SIZE/2 - 4, w + 10, MEAS_TEXT_SIZE + 8);
+    ctx.fillStyle = MEAS_COLOR;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+}
+
+// 基点の印（十字つきの丸）
+function _measDrawBaseMark(s) {
+    ctx.strokeStyle = MEAS_BASE_COLOR; ctx.lineWidth = 2; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(s.x, s.y, 6, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(s.x - 12, s.y); ctx.lineTo(s.x + 12, s.y);
+    ctx.moveTo(s.x, s.y - 12); ctx.lineTo(s.x, s.y + 12);
+    ctx.stroke();
+}
+
+// 基点測定の重ね表示（1フレームごとに描き直す）
+function drawMeasureOverlay() {
+    const m = cmdState.mode;
+    if(m !== 'WAITING_DIMMEAS_BASE' && m !== 'WAITING_DIMMEAS_TO') return;
+    const b = cmdState.measBase;
+    if(!b) return;
+
+    const t = _measTargetPoint();
+    const c = { x: t.x, y: b.y };             // 直角に曲がる点（X距離とY距離の折れ点）
+    const sb = wcsToScreen(b.x, b.y), st = wcsToScreen(t.x, t.y), sc = wcsToScreen(c.x, c.y);
+    const dX = Math.abs(t.y - b.y);            // 測量X（北）＝ 図面のy方向
+    const dY = Math.abs(t.x - b.x);            // 測量Y（東）＝ 図面のx方向
+    const dL = dist(b.x, b.y, t.x, t.y);
+
+    ctx.save();
+    _measDrawBaseMark(sb);
+
+    // 折れ線（X方向・Y方向）は破線
+    ctx.strokeStyle = MEAS_COLOR; ctx.lineWidth = 1; ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(sb.x, sb.y); ctx.lineTo(sc.x, sc.y); ctx.lineTo(st.x, st.y); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 直線距離は実線＋両端矢印（寸法と同じ見た目）
+    const ang = Math.atan2(st.y - sb.y, st.x - sb.x);
+    if(Math.hypot(st.x - sb.x, st.y - sb.y) > 1) {
+        ctx.beginPath(); ctx.moveTo(sb.x, sb.y); ctx.lineTo(st.x, st.y); ctx.stroke();
+        drawArrowHead(sb.x, sb.y, ang, DIM_ARROW_SIZE);
+        drawArrowHead(st.x, st.y, ang + Math.PI, DIM_ARROW_SIZE);
+    }
+
+    // 測る先の点の印
+    ctx.strokeRect(st.x - 4, st.y - 4, 8, 8);
+
+    // それぞれの値を、線から少し離して置く
+    const u = _measUnitLabel();
+    if(Math.hypot(sc.x - sb.x, sc.y - sb.y) > 24) {
+        const a1 = Math.atan2(sc.y - sb.y, sc.x - sb.x);
+        _measLabel('Y ' + measFormatLength(dY) + u, (sb.x + sc.x)/2 - Math.sin(a1)*14, (sb.y + sc.y)/2 + Math.cos(a1)*14, a1);
+    }
+    if(Math.hypot(st.x - sc.x, st.y - sc.y) > 24) {
+        const a2 = Math.atan2(st.y - sc.y, st.x - sc.x);
+        _measLabel('X ' + measFormatLength(dX) + u, (sc.x + st.x)/2 + Math.sin(a2)*14, (sc.y + st.y)/2 - Math.cos(a2)*14, a2);
+    }
+    if(dL > 0) _measLabel(measFormatLength(dL) + u, (sb.x + st.x)/2 - Math.sin(ang)*18, (sb.y + st.y)/2 + Math.cos(ang)*18, ang);
+
+    ctx.restore();
+}
+
+// 画面下のボタンの出し分け（BASE: 基点待ち / TO: 測定中）
+function _showMeasureBar(stage) {
+    const ab = document.getElementById('fs-dim-actionbar');
+    if(ab) ab.style.display = 'flex';
+    const confirmBtn = ab && ab.querySelector('button[onclick="dimConfirmPoint()"]');
+    if(confirmBtn) confirmBtn.style.display = (stage === 'BASE') ? '' : 'none';
+    const modeBtn = document.getElementById('dim-mode-toggle'); if(modeBtn) modeBtn.style.display = 'none';
+    const dirBtn = document.getElementById('dim-dir-toggle'); if(dirBtn) dirBtn.style.display = 'none';
+    const writeBtn = document.getElementById('dim-meas-write'); if(writeBtn) writeBtn.style.display = (stage === 'TO') ? '' : 'none';
+    const baseBtn = document.getElementById('dim-meas-base'); if(baseBtn) baseBtn.style.display = (stage === 'TO') ? '' : 'none';
+}
+
+// いま表示している測定値を、図面の寸法として記入する
+// （X方向の平行寸法・Y方向の平行寸法・直線の整列寸法の3つを1つのまとまりとして入れる）
+window.measureWriteDims = function() {
+    if(cmdState.mode !== 'WAITING_DIMMEAS_TO' || !cmdState.measBase) return;
+    const b = cmdState.measBase, t = _measTargetPoint();
+    if(dist(b.x, b.y, t.x, t.y) < 1e-9) { addCommandLog('-> 基点と同じ位置のため記入しませんでした'); return; }
+    const sb = wcsToScreen(b.x, b.y), st = wcsToScreen(t.x, t.y);
+    const px = 24 / (view.scale || 1);                  // 寸法線を図形から24px離す
+    const gid = (typeof newGroupId === 'function') ? newGroupId('meas') : undefined;
+    const meter = _measIsMeter();
+    const mk = (props) => Object.assign({ type:'DIMENSION', layer:currentLayerIndex, color:null, gid:gid, blockName:'測定', p1:{x:b.x,y:b.y}, p2:{x:t.x,y:t.y} }, props);
+
+    saveUndo();
+    // Y距離（東西・図面の横方向）
+    entities.push(mk({ subType:'LINEAR', dimDir:'H', offset:(st.y > sb.y ? px : -px),
+        textOverride: meter ? measFormatLength(Math.abs(t.x - b.x)) : null }));
+    // X距離（南北・図面の縦方向）
+    entities.push(mk({ subType:'LINEAR', dimDir:'V', offset:(t.x - b.x) + (st.x > sb.x ? px : -px),
+        textOverride: meter ? measFormatLength(Math.abs(t.y - b.y)) : null }));
+    // 直線距離
+    entities.push(mk({ subType:'ALIGNED', offset:0,
+        textOverride: meter ? measFormatLength(dist(b.x, b.y, t.x, t.y)) : null }));
+
+    const u = _measUnitLabel();
+    addCommandLog(`-> 寸法を記入: X ${measFormatLength(Math.abs(t.y - b.y))}${u} / Y ${measFormatLength(Math.abs(t.x - b.x))}${u} / 直線 ${measFormatLength(dist(b.x,b.y,t.x,t.y))}${u}`);
+    if(typeof showToast === 'function') showToast('寸法を記入しました');
+    if(navigator.vibrate) navigator.vibrate(20);
+    if(typeof render === 'function') render();
+};
+
+// いま測っている点を、次の基点にする（続けて測るとき）
+window.measureSetBase = function() {
+    if(cmdState.mode !== 'WAITING_DIMMEAS_TO') return;
+    const t = _measTargetPoint();
+    _measureStartFrom(t);
+    if(navigator.vibrate) navigator.vibrate(20);
+};
+
+// いまの測定値をコマンドログに残す
+function _measureLog() {
+    const b = cmdState.measBase;
+    if(!b) return;
+    const t = _measTargetPoint(), u = _measUnitLabel();
+    addCommandLog(`-> 測定: X ${measFormatLength(Math.abs(t.y - b.y))}${u} / Y ${measFormatLength(Math.abs(t.x - b.x))}${u} / 直線 ${measFormatLength(dist(b.x, b.y, t.x, t.y))}${u}`);
+    if(typeof render === 'function') render();
+}
+
+function _measureStartFrom(pt) {
+    cmdState.measBase = { x: pt.x, y: pt.y };
+    cmdState.mode = 'WAITING_DIMMEAS_TO';
+    const u = wcsToUcs(pt.x, pt.y);
+    setPrompt('測る点をなぞる → 📐記入 / 📍基点で基点を移動');
+    addCommandLog(`-> 基点: X${dimFormat(u.y)} Y${dimFormat(u.x)} — 測る点をなぞってください`);
+    _showMeasureBar('TO');
+    if(typeof render === 'function') render();
+}
+
 // ===== 寸法コマンドのディスパッチ =====
 function processDimCommand(cmd) {
     if(cmd==='DLI'||cmd==='DIMLINEAR') { cmdState.mode='WAITING_DIMLIN_P1'; cmdState.points=[]; setPrompt('1点目: (☑️確定)'); setActiveTool('DIMLIN'); addCommandLog('-> [平行寸法] 1点目を指定'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
@@ -722,6 +890,14 @@ function processDimCommand(cmd) {
     if(cmd==='DRA'||cmd==='DIMRADIUS') { cmdState.mode='WAITING_DIMRAD_SELECT'; cmdState.dimTarget=null; setPrompt('円/弧を選択: (☑️確定)'); setActiveTool('DIMRAD'); addCommandLog('-> [半径寸法] 円または弧を選択'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
     if(cmd==='DDI'||cmd==='DIMDIAMETER') { cmdState.mode='WAITING_DIMDIA_SELECT'; cmdState.dimTarget=null; setPrompt('円/弧を選択: (☑️確定)'); setActiveTool('DIMDIA'); addCommandLog('-> [直径寸法] 円または弧を選択'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
     if(cmd==='DAN'||cmd==='DIMANGULAR') { cmdState.mode='WAITING_DIMANG_P1'; cmdState.points=[]; setPrompt('頂点: (☑️確定)'); setActiveTool('DIMANG'); addCommandLog('-> [角度寸法] 頂点を指定'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
+    if(cmd==='MEASURE'||cmd==='MEA'||cmd==='DIST'||cmd==='DI') {
+        cmdState.mode='WAITING_DIMMEAS_BASE'; cmdState.measBase=null; cmdState.points=[];
+        setPrompt('基点をなぞって「☑️確定」:'); setActiveTool('MEASURE');
+        addCommandLog('-> [基点測定] 基点を指定すると、そこからのX距離・Y距離・直線距離を出したままにします');
+        if(ucs.angle) addCommandLog('-> ※ UCSを回転しているため、X・Yは図面本来の軸で測ります');
+        _showMeasureBar('BASE');
+        if(typeof render==='function') render(); return true;
+    }
     if(cmd==='DOR'||cmd==='DIMORDINATE') { cmdState.mode='WAITING_DIMORD_P1'; cmdState.points=[]; setPrompt('測定点: (☑️確定)'); setActiveTool('DIMORD'); addCommandLog('-> [座標寸法] 測定点を指定 (XY一括表示)'); _showDimActionBar(false); if(typeof render==='function') render(); return true; }
     if(cmd==='M'||cmd==='MOVE') {
         cmdState.moveTarget = undefined;

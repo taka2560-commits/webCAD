@@ -154,7 +154,9 @@ export default [
                 updatePropertiesPanel: "readonly", downloadBlob: "readonly", reportImportFailure: "readonly",
                 loadSimaFile: "readonly", loadCoordCsvFile: "readonly", processSurveyCommand: "readonly",
                 drawSurveyOverlays: "readonly", getSurveyUnit: "readonly", getGnssZone: "readonly", ROMAN: "readonly",
-                polygonArea: "readonly", surveyUnitFactor: "readonly"
+                polygonArea: "readonly", surveyUnitFactor: "readonly",
+                // 基点測定（cad-dimension.js と cad-core.js の相互参照）
+                getInputPoint: "readonly", drawMeasureOverlay: "readonly", findSnap: "readonly"
             }
         },
         rules: {

@@ -189,6 +189,10 @@
         #fs-controls button.fs-active { border-color: #00ff88; color: #00ff88; box-shadow: 0 0 12px rgba(0,255,136,0.25); }
 
         /* ズームスライダー（案C: 左下固定・幅広操作性向上） */
+        /* 寸法・測定のアクションバー（画面下の操作ボタン） */
+        #fs-dim-actionbar { width:max-content; max-width:calc(100vw - 16px); flex-wrap:wrap; justify-content:center; }
+        #fs-dim-actionbar button { white-space:nowrap; flex:0 0 auto; }
+
         #fs-zoom-panel {
             position: fixed; bottom: 20px; left: 14px; z-index: 100001;
             display: flex; flex-direction: column; align-items: center; gap: 8px;
@@ -305,6 +309,13 @@
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid rgba(255,255,255,0.1);
+            cursor: move;                 /* 見出しをつまんでパネルを移動できる */
+            touch-action: none;           /* 指でドラッグしたときに画面がスクロールしないように */
+            user-select: none; -webkit-user-select: none;
+        }
+        #property-panel-header::before {
+            content: '⠿';                 /* つまめることを示す印 */
+            color: #777; font-size: 13px; margin-right: 8px; line-height: 1;
         }
         #property-panel-title {
             font-weight: bold;
@@ -466,6 +477,7 @@
         <button class="tool-btn" onclick="toggleCommand('DIMDIAMETER')" title="直径寸法 (DDI)"><div class="tool-icon" style="color:#00ffff;">⌀</div><span class="tool-lbl">直径</span><div class="tool-cmd">DIMDIA</div></button>
         <button class="tool-btn" onclick="toggleCommand('DIMANGULAR')" title="角度寸法 (DAN)"><div class="tool-icon" style="color:#00ffff;">∠</div><span class="tool-lbl">角度</span><div class="tool-cmd">DIMANG</div></button>
         <button class="tool-btn" onclick="toggleCommand('DIMORDINATE')" title="座標寸法 (DOR)"><div class="tool-icon" style="color:#00ffff;">XY</div><span class="tool-lbl">座標</span><div class="tool-cmd">DIMORD</div></button>
+        <button class="tool-btn" onclick="toggleCommand('MEASURE')" title="基点測定 (MEASURE) - 基点からのX・Y・直線距離を出したまま見る"><div class="tool-icon" style="color:#00ffff;">📐</div><span class="tool-lbl">測定</span><div class="tool-cmd">MEASURE</div></button>
     </div>
 
     <!-- ステータスバー (案B: 整理＆座標表示) -->
@@ -516,6 +528,7 @@
             <div>Web CADシステム v2.0 初期化完了。</div>
             <div>・作図: LINE(L), CIRCLE(C), RECTANG(REC), ARC(A), PLINE(PL)</div>
             <div>・寸法: DIMLIN(DLI), DIMALN(DAL), DIMRAD(DRA), DIMDIA(DDI), DIMANG(DAN), DIMORD(DOR)</div>
+            <div>・測定: MEASURE(MEA) 基点からのX・Y・直線距離を出したまま見る</div>
             <div>・ファイル: DXF/DWG読み込み・エクスポート対応</div>
         </div>
         <div id="command-input-wrapper"><span id="command-prompt">コマンド:</span><input type="text" id="command-input" autocomplete="off"><button id="cmd-collapse" onclick="toggleCommandLine()" title="コマンドラインを閉じる">▼</button></div>
@@ -588,6 +601,7 @@
                     <span class="fsd-label">計測</span>
                     <button class="fsd-btn green on" onclick="issueCommand('DIMORDINATE'); autoCloseDrawer();" title="引出線でXY両方の座標を配置します"><span style="font-size:14px;">📍</span>座標</button>
                     <button class="fsd-btn yellow" onclick="issueCommand('DIMCONT'); autoCloseDrawer();" title="連続した寸法を記入"><span style="font-size:14px;">📏</span>連続寸法</button>
+                    <button class="fsd-btn" onclick="issueCommand('MEASURE'); autoCloseDrawer();" title="基点からのX距離・Y距離・直線距離を出したまま見る"><span style="font-size:14px;">📐</span>基点測定</button>
                 </div>
 
                 <!-- グループ2: 座標系・画層 -->
@@ -651,6 +665,8 @@
         <button onclick="dimConfirmPoint()" style="background:#00ff88; color:#000; border:none; padding:8px 16px; border-radius:16px; font-weight:bold; font-size:14px;">☑️ 確定</button>
         <button id="dim-mode-toggle" onclick="dimToggleMode()" style="background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">📏 直列 (変更)</button>
         <button id="dim-dir-toggle" onclick="dimToggleDir()" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⚙ 自動 (X/Y)</button>
+        <button id="dim-meas-write" onclick="measureWriteDims()" style="display:none; background:#00ff88; color:#000; border:none; padding:8px 16px; border-radius:16px; font-weight:bold; font-size:14px;">📐 記入</button>
+        <button id="dim-meas-base" onclick="measureSetBase()" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">📍 基点</button>
         <button id="dim-cancel-btn" onclick="issueCommand('CANCEL')" style="background:transparent; color:#ff6b6b; border:1px solid #ff6b6b; padding:6px 12px; border-radius:12px; font-size:12px;">❌ 終了</button>
     </div>
 

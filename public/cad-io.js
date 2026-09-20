@@ -735,7 +735,7 @@ function exportDimAsDxf(d, e) {
     if(e.subType === 'LINEAR' || e.subType === 'ALIGNED') {
         d.drawLine(e.p1.x, e.p1.y, e.p2.x, e.p2.y);
         const val = dist(e.p1.x, e.p1.y, e.p2.x, e.p2.y);
-        d.drawText((e.p1.x+e.p2.x)/2, (e.p1.y+e.p2.y)/2 + (e.offset||5), 3, 0, e.textOverride || val.toFixed(2));
+        d.drawText((e.p1.x+e.p2.x)/2, (e.p1.y+e.p2.y)/2 + (e.offset ?? 5), 3, 0, e.textOverride || val.toFixed(2));
     }
     else if(e.subType === 'RADIUS') { d.drawText(e.center.x, e.center.y, 3, 0, e.textOverride || 'R'+e.radius.toFixed(2)); }
     else if(e.subType === 'DIAMETER') { d.drawText(e.center.x, e.center.y, 3, 0, e.textOverride || '⌀'+(e.radius*2).toFixed(2)); }

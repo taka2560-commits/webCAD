@@ -510,6 +510,8 @@ function resetCommand() {
         if (confirmBtn) confirmBtn.style.display = '';
         const cancelBtn = document.getElementById('dim-cancel-btn');
         if (cancelBtn) { cancelBtn.textContent = '❌ 終了'; cancelBtn.style.background = 'transparent'; cancelBtn.style.padding = ''; cancelBtn.style.borderRadius = ''; }
+        const writeBtn = document.getElementById('dim-meas-write'); if (writeBtn) writeBtn.style.display = 'none';
+        const measBaseBtn = document.getElementById('dim-meas-base'); if (measBaseBtn) measBaseBtn.style.display = 'none';
     }
     if(typeof updateSelectionBar === 'function') updateSelectionBar();
     render();
@@ -567,9 +569,88 @@ function showPropertyPanel(title, htmlContent) {
     document.getElementById('property-panel-title').textContent = title;
     document.getElementById('property-panel-content').innerHTML = htmlContent;
     p.style.display = 'flex';
+    applyPanelPosition(p); // 前に動かした位置を覚えている場合はそこに出す
 }
 
-// プロパティパネルは画面中央(モバイル対応)で固定するため、ドラッグ機能は廃止しました。
+// ===== フローティングパネルの移動 =====
+// パネルが図面の見たい場所を隠すことがあるため、見出し部分をつまんで動かせるようにする。
+// ・パネル全体が必ず画面の中に収まるように位置を制限する（画面外に出て見失わない）
+// ・置いた場所は次に開いたときも覚えている（端末に保存。保存できない環境でも動く）
+// ・画面の回転やサイズ変更のときは、はみ出した分だけ画面内に戻す
+const PANEL_POS_KEY = 'cad_panel_pos';
+function _panelSavedPos() {
+    try { const v = JSON.parse(localStorage.getItem(PANEL_POS_KEY) || 'null'); return (v && isFinite(v.left) && isFinite(v.top)) ? v : null; } catch { return null; }
+}
+// 指定した位置をパネルが画面内に収まる範囲へ丸める
+function _panelClampPos(panel, left, top) {
+    const w = panel.offsetWidth || 320, h = panel.offsetHeight || 100;
+    const maxL = Math.max(0, window.innerWidth - w), maxT = Math.max(0, window.innerHeight - h);
+    return { left: Math.min(Math.max(0, left), maxL), top: Math.min(Math.max(0, top), maxT) };
+}
+function _panelApplyPos(panel, left, top) {
+    const p = _panelClampPos(panel, left, top);
+    panel.style.left = p.left + 'px';
+    panel.style.top = p.top + 'px';
+    panel.style.right = 'auto';
+    panel.style.transform = 'none';   // 既定の「中央寄せ(translateX(-50%))」を解除する
+    panel.style.animation = 'none';   // 表示アニメーションも中央寄せを使うため切る
+    panel.dataset.moved = '1';
+    return p;
+}
+// 動かしたパネルを、いまの画面サイズに合わせて置き直す（表示時・画面サイズ変更時）
+function applyPanelPosition(panel) {
+    if(!panel) return;
+    const pos = (panel.dataset.moved === '1') ? { left: parseFloat(panel.style.left) || 0, top: parseFloat(panel.style.top) || 0 } : _panelSavedPos();
+    if(!pos) return;
+    _panelApplyPos(panel, pos.left, pos.top);
+}
+// パネルを画面中央の初期位置へ戻す
+function resetPanelPosition(panel) {
+    if(!panel) return;
+    panel.style.left = ''; panel.style.top = ''; panel.style.right = ''; panel.style.transform = ''; panel.style.animation = '';
+    delete panel.dataset.moved;
+    try { localStorage.removeItem(PANEL_POS_KEY); } catch { /* 保存できなくても続行 */ }
+}
+// handle をつまんで panel を動かせるようにする（マウス・指・ペン共通）
+function makePanelDraggable(panel, handle) {
+    if(!panel || !handle || handle.dataset.dragReady === '1') return;
+    handle.dataset.dragReady = '1';
+    let drag = null;
+    handle.addEventListener('pointerdown', (e) => {
+        if(e.button !== undefined && e.button !== 0) return;
+        if(e.target.closest('button, input, select, textarea, a')) return; // 閉じるボタンなどの操作を邪魔しない
+        const r = panel.getBoundingClientRect();
+        drag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false };
+        _panelApplyPos(panel, r.left, r.top); // つまんだ瞬間の見た目の位置をそのまま引き継ぐ
+        try { handle.setPointerCapture(e.pointerId); } catch { /* 取得できなくても続行 */ }
+        e.preventDefault();
+    });
+    handle.addEventListener('pointermove', (e) => {
+        if(!drag || e.pointerId !== drag.id) return;
+        drag.moved = true;
+        _panelApplyPos(panel, e.clientX - drag.dx, e.clientY - drag.dy);
+        e.preventDefault();
+    });
+    const end = (e) => {
+        if(!drag || e.pointerId !== drag.id) return;
+        if(drag.moved) {
+            const pos = _panelClampPos(panel, parseFloat(panel.style.left) || 0, parseFloat(panel.style.top) || 0);
+            try { localStorage.setItem(PANEL_POS_KEY, JSON.stringify(pos)); } catch { /* 保存できなくても続行 */ }
+        }
+        try { handle.releasePointerCapture(drag.id); } catch { /* 解放できなくても続行 */ }
+        drag = null;
+    };
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+    // 見出しのダブルタップで元の位置（画面中央）に戻す
+    handle.addEventListener('dblclick', (e) => {
+        if(e.target.closest('button')) return;
+        resetPanelPosition(panel);
+        showToast('パネルの位置を戻しました');
+    });
+}
+window.makePanelDraggable = makePanelDraggable;
+window.resetPanelPosition = resetPanelPosition;
 
 // アクションバー表示制御ヘルパー
 function showActionbarControls(options = {}) {
@@ -582,6 +663,9 @@ function showActionbarControls(options = {}) {
     if(confirmBtn) confirmBtn.style.display = options.hideConfirm ? 'none' : '';
     if(modeToggle) modeToggle.style.display = options.showMode ? '' : 'none';
     if(dirToggle) dirToggle.style.display = options.showDir ? '' : 'none';
+    // 基点測定のボタンは他のコマンドでは出さない
+    const writeBtn = document.getElementById('dim-meas-write'); if(writeBtn) writeBtn.style.display = 'none';
+    const measBaseBtn = document.getElementById('dim-meas-base'); if(measBaseBtn) measBaseBtn.style.display = 'none';
 }
 
 // テキスト用パネル開始関数
@@ -615,7 +699,8 @@ const CMD_TO_TOOL = {
     'ERASE':'ERASE','MOVE':'MOVE','COPY':'COPY','OFFSET':'OFFSET','ROTATE':'ROTATE','RO':'ROTATE',
     'TRIM':'TRIM','TR':'TRIM','EXTEND':'EXTEND','EX':'EXTEND',
     'DIMLINEAR':'DIMLIN','DIMALIGNED':'DIMALN','DIMRADIUS':'DIMRAD',
-    'DIMDIAMETER':'DIMDIA','DIMANGULAR':'DIMANG','DIMORDINATE':'DIMORD'
+    'DIMDIAMETER':'DIMDIA','DIMANGULAR':'DIMANG','DIMORDINATE':'DIMORD',
+    'MEASURE':'MEASURE'
 };
 
 // トグルコマンド: 同じコマンドを再押しでキャンセル（エスケープ動作）
@@ -672,6 +757,9 @@ function resizeCanvas() {
 function init() {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
+    // フローティングパネルは見出しをつまんで移動できる
+    makePanelDraggable(document.getElementById('property-panel'), document.getElementById('property-panel-header'));
+    window.addEventListener('resize', () => applyPanelPosition(document.getElementById('property-panel')));
     if(view.x === 0 && view.y === 0) {
         view.x = (canvas.width || window.innerWidth) / 2;
         view.y = (canvas.height || window.innerHeight) / 2;
@@ -1452,6 +1540,7 @@ function _drawFrame(overlayOnly) {
         }
         drawRubberBand(); drawSnapMarker(); drawCrosshair();
         if(typeof drawSurveyOverlays === 'function') drawSurveyOverlays(); // 現在地（GNSS）・一覧で選んだ点の目印
+        if(typeof drawMeasureOverlay === 'function') drawMeasureOverlay(); // 基点測定（基点からのX・Y・直線距離）
         
         // 範囲選択矩形描画
         drawSelectionRect();
@@ -3107,6 +3196,12 @@ function setupEventListeners() {
             mouse.wcsX = wcs.x; mouse.wcsY = wcs.y;
             const uc = wcsToUcs(wcs.x, wcs.y);
             mouse.ucsX = uc.x; mouse.ucsY = uc.y;
+
+            // 指を置いた位置でスナップを取り直す（動かさずにタップしたときに前の点が残らないように）
+            const isFullscreenStart = document.body.classList.contains('fullscreen-mode');
+            const isSelectModeStart = cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT'||cmdState.mode==='WAITING_OFFSET_SIDE';
+            if(isFullscreenStart || (cmdState.mode !== 'IDLE' && !isSelectModeStart)) snapResult = findSnap(tx, ty, mouse.wcsX, mouse.wcsY);
+            else snapResult = null;
 
             // スワイプモード優先
             if(cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
