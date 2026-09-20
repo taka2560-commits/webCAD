@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v4.5（2026年9月20日リリース）**
+**現在のバージョン: v4.6（2026年9月20日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -109,7 +109,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（182件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（187件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -120,6 +120,27 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 * **図形の固有ID**: 各図形は `e.id`（数値）を持ちます。選択状態（`cmdState.selectedIndices` / `highlightIdx` など）は内部ではIDで保持し、読み出すとその時点の配列番号を返します。図形を複製するときは `id` を消してから追加してください（重複しても `ensureEntityIds()` が後ろ側に新しいIDを付けます）。
 
 * **構成**: `index.html` と `public/cad-*.js`（通常のスクリプト）が本体です。外部ライブラリは `src/vendor.js` から Vite で同梱し、`window.DxfParser` / `window.Drawing` / `window.loadLibreDwg()` として公開しています。
+
+  スクリプトは **すべて同じスコープ** に読み込まれるため、ファイルをまたいで関数・変数をそのまま呼び合います。**読み込み順（index.html の並び）と、名前が重ならないこと** が動作の前提です（`tests/structure.test.cjs` で自動確認）。
+
+  | ファイル | 役割 |
+  |---|---|
+  | `cad-errors.js` | 未捕捉エラーの記録・通知（最初に読み込む） |
+  | `cad-text-parse.js` | DXF文字列のデコード・MTEXT書式の除去 |
+  | `cad-dimension.js` | 寸法（6種類）の作成・描画・編集、基点測定の表示 |
+  | `cad-io.js` | DXF/DWG の読み込み・書き出し、ファイル選択 |
+  | `cad-core.js` | 図形・画層・表示位置などの状態、図形の固有ID、グループ、共通UI、初期化、元に戻す/やり直し |
+  | `cad-view.js` | 画面座標とWCS/UCSの変換、UCSの設定・保存、画面の向き合わせとズーム |
+  | `cad-geom.js` | 数学・交点計算、オブジェクトスナップ、タップ判定、外形と空間索引 |
+  | `cad-render.js` | 描画の呼び出し管理、描画キャッシュ、ルーペ、図形・軸・補助表示の描画 |
+  | `cad-command.js` | 点入力の補正と各コマンドの処理、オフセット・回転・トリム・延長、コマンド解釈 |
+  | `cad-input.js` | マウス・タッチ・キーボードのイベント、パン/ピンチ/範囲選択 |
+  | `cad-panels.js` | ブロック管理、画層の一括管理、プロパティパネル、選択アクションバー |
+  | `cad-survey.js` | 測量（SIMA・座標CSV、座標一覧、現在地GNSS） |
+  | `cad-storage.js` | 図面の保存・読込（IndexedDB）、自動保存 |
+  | `cad-boot.js` | 起動処理とキー割り当て（**一番最後に読み込む**） |
+
+  `eslint.config.mjs` は `public/*.js` のトップレベル宣言を自動で集めて `globals` にします。ファイルを増やしても登録の追加は不要で、どこにも無い名前（打ち間違い）は今までどおり `no-undef` で見つかります。
 * **キャッシュの版管理は自動**: `vite.config.js` のプラグインがビルド時に、`cad-*.js` へ内容ハッシュ（`?v=`）を付け、`dist/sw.js` にビルドIDとプリキャッシュ一覧を書き込みます。**`CACHE_NAME` を手で上げる必要はありません。**
 * **エラー記録**: `public/cad-errors.js` が最初に読み込まれ、未捕捉のエラーを画面通知・端末内に記録します。任意の箇所から `window.cadErrors.record(種別, メッセージ, 詳細)` で記録できます。
 
@@ -127,6 +148,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
 
+* **2026-09-20: バージョン4.6（ファイル構成の整理）** 🧱
+  * 4200行あった `cad-core.js` を役割ごとに7ファイルへ分割（処理内容は変更なし）。
+  * eslint の globals をファイルから自動収集するようにし、未使用の警告も実態に合わせて整理。
+  * 読み込み順・名前の重複・ファイルの大きさを自動テストで確認するようにしました。
 * **2026-09-20: バージョン4.5（基点測定・パネルの移動）** 📐
   * 基点からの X距離・Y距離・直線距離を出したまま確認できる **基点測定**（`MEASURE`）。「記入」で寸法として残せます。
   * フローティングパネルを見出しのドラッグで移動（位置を記憶・ダブルタップで中央に戻る）。
