@@ -2827,6 +2827,7 @@ function processCommand(cmdText) {
             if (confirmBtn) confirmBtn.style.display = 'none'; // 確定ボタンは不要
             const toggleBtn = document.getElementById('dim-mode-toggle');
             if (toggleBtn) toggleBtn.style.display = 'none'; // 設定ボタンも不要
+            if (typeof _hideMeasureButtons === 'function') _hideMeasureButtons();
             
             const cancelBtn = document.getElementById('dim-cancel-btn');
             if (cancelBtn) {

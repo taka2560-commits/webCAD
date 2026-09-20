@@ -712,6 +712,7 @@ function moveEntity(e, dx, dy) {
 function _showDimActionBar(isContinuous) {
     const actionbar = document.getElementById('fs-dim-actionbar');
     if(actionbar) actionbar.style.display = 'flex';
+    _hideMeasureButtons(); // 基点測定用のボタンは他の寸法コマンドでは出さない
     const toggleBtn = document.getElementById('dim-mode-toggle');
     if(toggleBtn) toggleBtn.style.display = isContinuous ? 'inline-block' : 'none';
     const dirBtn = document.getElementById('dim-dir-toggle');
@@ -813,6 +814,13 @@ function drawMeasureOverlay() {
 
     ctx.restore();
 }
+
+// 基点測定用のボタンを隠す（他のコマンドへ切り替えたとき）
+function _hideMeasureButtons() {
+    const writeBtn = document.getElementById('dim-meas-write'); if(writeBtn) writeBtn.style.display = 'none';
+    const baseBtn = document.getElementById('dim-meas-base'); if(baseBtn) baseBtn.style.display = 'none';
+}
+window._hideMeasureButtons = _hideMeasureButtons;
 
 // 画面下のボタンの出し分け（BASE: 基点待ち / TO: 測定中）
 function _showMeasureBar(stage) {

@@ -126,6 +126,15 @@ describe('基点測定', () => {
         assert.equal(app.eval(`measFormatLength(12.3456)`), '12.346');
     });
 
+    it('別のコマンドに切り替えると測定用のボタンが消える', () => {
+        measureFrom([0, 0], [3, 4]);
+        app.eval(`processCommand('DIMLINEAR')`);
+        assert.equal(app.eval(`document.getElementById('dim-meas-write').style.display`), 'none');
+        assert.equal(app.eval(`document.getElementById('dim-meas-base').style.display`), 'none');
+        app.eval(`resetCommand(); processCommand('MEASURE'); handlePointInput({x:0,y:0}, true); processCommand('LAYOFF');`);
+        assert.equal(app.eval(`document.getElementById('dim-meas-write').style.display`), 'none');
+    });
+
     it('コマンドを終了すると測定表示が消える', () => {
         measureFrom([0, 0], [3, 4]);
         app.eval(`resetCommand()`);

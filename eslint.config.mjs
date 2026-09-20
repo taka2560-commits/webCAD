@@ -156,7 +156,8 @@ export default [
                 drawSurveyOverlays: "readonly", getSurveyUnit: "readonly", getGnssZone: "readonly", ROMAN: "readonly",
                 polygonArea: "readonly", surveyUnitFactor: "readonly",
                 // 基点測定（cad-dimension.js と cad-core.js の相互参照）
-                getInputPoint: "readonly", drawMeasureOverlay: "readonly", findSnap: "readonly"
+                getInputPoint: "readonly", drawMeasureOverlay: "readonly", findSnap: "readonly",
+                _hideMeasureButtons: "readonly"
             }
         },
         rules: {
