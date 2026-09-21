@@ -46,6 +46,7 @@ function showOptionsPanel(){
     const html = `
         <div class="prop-row"><label>背景色:</label></div>
         <div style="display:flex;gap:6px;">${btns}</div>
+        ${(typeof displayPrefsSectionHtml === 'function') ? displayPrefsSectionHtml() : ''}
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" ${window.groupSelectEnabled?'checked':''} onchange="setGroupSelectEnabled(this.checked)" style="width:16px;height:16px;"> タップでブロック全体を選択</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" ${hideArcs?'checked':''} onchange="setImportHideArcs(this.checked)" style="width:16px;height:16px;"> 取り込み時に円弧を非表示にする</label>

@@ -301,8 +301,8 @@ function findSnap(sx, sy, wx, wy) {
         pts = pts.filter(p => p.t !== '近接点');
     }
 
-    // タッチ操作は指の位置精度が低いため吸着半径を少し広げる
-    const radius = (typeof isMobile === 'function' && isMobile()) ? SNAP_R * 1.4 : SNAP_R;
+    // 吸着半径（タッチ操作では少し広げる。オプション「吸着の範囲」で倍率を変えられる）
+    const radius = snapRadiusPx();
 
     // スナップ優先順位（AutoCAD準拠の2段階）:
     //   1) 幾何スナップ（端点・中点・中心・交点・垂線）: 範囲内で最もカーソルに近いもの

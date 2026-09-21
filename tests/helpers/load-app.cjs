@@ -17,7 +17,7 @@ const { IDBFactory, IDBKeyRange } = require('fake-indexeddb');
 const ROOT = path.resolve(__dirname, '..', '..');
 // index.html と同じ読み込み順（cad-errors.js は head、残りは body 末尾）
 const APP_SCRIPTS = ['cad-errors.js', 'cad-text-parse.js', 'cad-dimension.js', 'cad-io.js', 'cad-core.js',
-    'cad-view.js', 'cad-geom.js', 'cad-render.js', 'cad-command.js', 'cad-input.js', 'cad-panels.js',
+    'cad-prefs.js', 'cad-view.js', 'cad-geom.js', 'cad-render.js', 'cad-command.js', 'cad-input.js', 'cad-panels.js',
     'cad-survey.js', 'cad-storage.js', 'cad-boot.js'];
 
 // Canvas 2D の代用品。描画命令は何もしないが、文字幅の計測（measureText）は概算値を返す。

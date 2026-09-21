@@ -29,8 +29,8 @@ function setupEventListeners() {
         if(cmdState.mode !== 'IDLE' && !isSelectMode && !mouse.isSelecting) {
             snapResult = findSnap(mouse.screenX, mouse.screenY, mouse.wcsX, mouse.wcsY);
         } else { snapResult = null; }
-        if(snapResult){ const su=wcsToUcs(snapResult.wcsX,snapResult.wcsY); coordsDisplay.textContent=`X:${su.y.toFixed(0)}  Y:${su.x.toFixed(0)}`; if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, su.x, su.y, snapResult.type); }
-        else { coordsDisplay.textContent=`X:${mouse.ucsY.toFixed(0)}  Y:${mouse.ucsX.toFixed(0)}`; if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, mouse.ucsX, mouse.ucsY, null); }
+        if(snapResult){ const su=wcsToUcs(snapResult.wcsX,snapResult.wcsY); setCoordsDisplay(su.x, su.y); if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, su.x, su.y, snapResult.type); }
+        else { setCoordsDisplay(mouse.ucsX, mouse.ucsY); if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, mouse.ucsX, mouse.ucsY, null); }
         if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') {
             if(!mouse.isSelecting) cmdState.highlightIdx=hitTestEntity(mouse.screenX,mouse.screenY);
         }
@@ -342,10 +342,10 @@ function setupEventListeners() {
             // 座標表示更新
             if(snapResult && osnapState.main) {
                 const su = wcsToUcs(snapResult.wcsX, snapResult.wcsY);
-                coordsDisplay.textContent = `X:${su.y.toFixed(0)}  Y:${su.x.toFixed(0)}`;
+                setCoordsDisplay(su.x, su.y);
                 if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, su.x, su.y, snapResult.type);
             } else {
-                coordsDisplay.textContent = `X:${mouse.ucsY.toFixed(0)}  Y:${mouse.ucsX.toFixed(0)}`;
+                setCoordsDisplay(mouse.ucsX, mouse.ucsY);
                 if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, mouse.ucsX, mouse.ucsY, null);
             }
 

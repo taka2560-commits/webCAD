@@ -124,6 +124,7 @@ function _drawFrame(overlayOnly) {
 
         // ルーペ（拡大鏡）描画
         drawLoupe();
+        if(typeof drawPrefPreview === 'function') drawPrefPreview(); // 設定を変えた直後の見本（ルーペ・吸着範囲）
 
         // ズームスライダーの位置同期
         if(window.updateZoomSlider) window.updateZoomSlider();
@@ -132,15 +133,16 @@ function renderImmediate() {
     render();
 }
 
-// ルーペ（拡大鏡）描画
+// ルーペ（拡大鏡）描画。大きさ・倍率はオプションの「表示・操作」で変えられる
 function drawLoupe() {
-    if(!touchState.showLoupe) return;
-    const lx = touchState.loupeX, ly = touchState.loupeY;
-    const loupeR = 70; // ルーペの半径
-    const loupeY = ly - 140; // 指の140px上に表示
-    const loupeX = Math.max(loupeR + 5, Math.min(canvas.width - loupeR - 5, lx));
-    const finalY = Math.max(loupeR + 5, loupeY);
-    const zoom = 3; // 拡大倍率
+    if(touchState.showLoupe) _drawLoupeAt(touchState.loupeX, touchState.loupeY, null);
+}
+// (lx, ly) の周りを拡大して描く。box（ルーペの中心）を省略すると指の上に出す
+function _drawLoupeAt(lx, ly, box) {
+    const loupeR = displayPref('loupeSize') || 70; // ルーペの半径（既定 70px）
+    const zoom = displayPref('loupeZoom') || 3;    // 拡大倍率（既定 3倍）
+    const loupeX = box ? box.x : Math.max(loupeR + 5, Math.min(canvas.width - loupeR - 5, lx));
+    const finalY = box ? box.y : Math.max(loupeR + 5, ly - loupeR * 2); // 指で隠れないよう、半径の2倍だけ上に表示
 
     ctx.save();
     ctx.beginPath();
@@ -207,14 +209,22 @@ function drawLoupe() {
     ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.strokeRect(loupeX - loupeR, finalY - loupeR, loupeR * 2, loupeR * 2);
 
-    const ucsCoord = wcsToUcs(mouse.wcsX, mouse.wcsY);
+    // ルーペの下の座標。スナップしているときは、確定で入力される点（スナップ点）の座標を出す
+    const snapping = !box && snapResult && osnapState.main;
+    const p = snapping ? { x: snapResult.wcsX, y: snapResult.wcsY } : screenToWcs(lx, ly);
+    const ucsCoord = wcsToUcs(p.x, p.y);
+    const fs = Math.max(8, Math.round(11 * (displayPref('coordFont') || 1))); // 座標の文字（既定 11px）
+    const lineH = fs + 5;
+    const text = `X:${formatCoordValue(ucsCoord.y, 'loupe')}  Y:${formatCoordValue(ucsCoord.x, 'loupe')}`;
+    ctx.font = fs + 'px monospace';
+    const tw = Math.max(loupeR * 2, ctx.measureText(text).width + 12); // 桁が多いときは帯を広げる
     ctx.fillStyle = 'rgba(0,0,0,0.8)';
-    ctx.fillRect(loupeX - loupeR, finalY + loupeR + 2, loupeR * 2, snapResult && osnapState.main ? 32 : 18);
-    ctx.fillStyle = '#00ff88'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(`X:${ucsCoord.y.toFixed(2)}  Y:${ucsCoord.x.toFixed(2)}`, loupeX, finalY + loupeR + 14);
-    if(snapResult && osnapState.main) {
-        ctx.fillStyle = '#ffff00'; ctx.font = 'bold 11px monospace';
-        ctx.fillText(`SNAP: ${snapResult.type}`, loupeX, finalY + loupeR + 28);
+    ctx.fillRect(loupeX - tw / 2, finalY + loupeR + 2, tw, snapping ? lineH * 2 + 4 : lineH + 4);
+    ctx.fillStyle = '#00ff88'; ctx.textAlign = 'center';
+    ctx.fillText(text, loupeX, finalY + loupeR + lineH);
+    if(snapping) {
+        ctx.fillStyle = '#ffff00'; ctx.font = 'bold ' + fs + 'px monospace';
+        ctx.fillText(`SNAP: ${snapResult.type}`, loupeX, finalY + loupeR + lineH * 2);
     }
     ctx.restore();
 }

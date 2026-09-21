@@ -122,7 +122,8 @@
         #cmd-collapse { width:28px;height:28px;margin-left:6px;background:#ddd;color:#333;border:none;border-radius:var(--r-sub);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
         
         /* ステータスバー (案B: 整理＆座標大型化) */
-        #status-bar { position:absolute; bottom:8px; left:8px; right:8px; z-index:10; height:38px; display:flex; align-items:center; padding:0 10px; font-size:12px; justify-content:space-between; gap:6px; border-radius:var(--r-pill); }
+        #status-bar { position:absolute; bottom:8px; left:8px; right:8px; z-index:10; height:auto; min-height:38px; display:flex; align-items:center; padding:0 10px; font-size:12px; justify-content:space-between; gap:6px; border-radius:var(--r-pill); }
+        #status-bar > div:last-child { flex-shrink:1 !important; min-width:0; }  /* 座標が長いときは座標を折り返して収める */
         
         .status-btn { background:rgba(255,255,255,0.06);border:1px solid transparent;color:var(--dim);cursor:pointer;padding:0 10px;height:26px;font:600 11px 'Segoe UI',sans-serif;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:4px; transition:all 0.2s cubic-bezier(0.25,1,0.5,1); white-space:nowrap; }
         .status-btn:active { transform:scale(0.9); }
@@ -133,7 +134,9 @@
         #osnap-panel label { display:flex; align-items:center; margin-bottom:12px; font-size:14px; cursor:pointer; min-width:130px; color:#fff; }
         #osnap-panel input { transform:scale(1.3); margin-right:12px; cursor:pointer; }
         
-        #coords-display { font-family:'Consolas',monospace; min-width:110px; text-align:right; font-size:12px; font-weight:700; color:#00ff88; }
+        #coords-display { font-family:'Consolas',monospace; min-width:110px; text-align:right; font-size:calc(12px * var(--coord-scale, 1)); font-weight:700; color:#00ff88;
+            display:inline-flex; flex-wrap:wrap; justify-content:flex-end; column-gap:0.8em; line-height:1.1; flex:0 1 auto; }
+        #coords-display > span { white-space:nowrap; }
         
         /* 非表示クラス */
         body.fullscreen-mode #top-bar,
@@ -159,19 +162,19 @@
             display: flex; align-items: center; gap: 14px; font-family: 'Consolas', monospace;
             white-space: nowrap;
         }
-        #fs-hud-coords .hud-label { color: #888; font-size: 11px; font-weight: 700; margin-right: 2px; }
-        #fs-hud-coords .hud-val { color: #00ff88; font-size: 17px; font-weight: 700; letter-spacing: 0.02em; }
-        #fs-hud-coords .hud-snap { color: #ffcc00; font-size: 11px; font-weight: 600; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.2); }
+        #fs-hud-coords .hud-label { color: #888; font-size: calc(11px * var(--coord-scale, 1)); font-weight: 700; margin-right: 2px; }
+        #fs-hud-coords .hud-val { color: #00ff88; font-size: calc(17px * var(--coord-scale, 1)); font-weight: 700; letter-spacing: 0.02em; }
+        #fs-hud-coords .hud-snap { color: #ffcc00; font-size: calc(11px * var(--coord-scale, 1)); font-weight: 600; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.2); }
 
         /* フローティング座標ツールチップ (指追従) */
         #fs-coord-tooltip {
             position: fixed; display: none; pointer-events: none; z-index: 100000;
             background: rgba(0,0,0,0.88); border: 1.5px solid rgba(0,255,136,0.65); border-radius: 12px;
-            padding: 10px 16px; font-family: 'Consolas', monospace; font-size: 22px; font-weight: 700; line-height: 1.3;
+            padding: 10px 16px; font-family: 'Consolas', monospace; font-size: calc(22px * var(--coord-scale, 1)); font-weight: 700; line-height: 1.3;
             color: #00ff88; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,0.7), 0 0 24px rgba(0,255,136,0.15);
             -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
         }
-        #fs-coord-tooltip .snap-label { color: #ffcc00; font-size: 11px; font-weight: 600; display: block; margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.12); }
+        #fs-coord-tooltip .snap-label { color: #ffcc00; font-size: calc(11px * var(--coord-scale, 1)); font-weight: 600; display: block; margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.12); }
 
         /* 全画面コントロールパネル（案C: 右下固定・間隔拡大） */
         #fs-controls {
@@ -192,6 +195,10 @@
         /* 寸法・測定のアクションバー（画面下の操作ボタン） */
         #fs-dim-actionbar { width:max-content; max-width:calc(100vw - 16px); flex-wrap:wrap; justify-content:center; }
         #fs-dim-actionbar button { white-space:nowrap; flex:0 0 auto; }
+        /* 通常画面ではステータスバー（座標）の上に出す。重なると測りながら座標が読めないため */
+        body:not(.fullscreen-mode) #fs-dim-actionbar { bottom:56px !important; }
+        /* スナップの種類（端点など）は折り返さない */
+        #snap-indicator { flex-shrink:0; white-space:nowrap; }
 
         #fs-zoom-panel {
             position: fixed; bottom: 20px; left: 14px; z-index: 100001;
@@ -266,9 +273,11 @@
 
         /* レスポンシブ調整 */
         @media screen and (max-width: 430px) {
-            #status-bar { padding: 0 6px; font-size: 11px; height: 34px; gap: 4px; }
+            #status-bar { padding: 0 6px; font-size: 11px; height: auto; min-height: 34px; gap: 4px; }
+            #status-bar > div { gap: 4px !important; }
+            #status-bar .paper-space-label { display: none; }  /* 常に「モデル」なので、狭い画面では座標に場所を譲る */
             .status-btn { padding: 0 6px; font-size: 10px; }
-            #coords-display { min-width: 90px; font-size: 10px; }
+            #coords-display { min-width: 0; font-size: min(calc(10px * var(--coord-scale, 1)), 15px); }
             #snap-indicator { width: 24px !important; font-size: 9px; }
             #command-line-area:not(.collapsed) { left: 62px; height: 120px; }
         }
@@ -289,6 +298,8 @@
             transform: translateX(-50%);
             width: 320px;
             max-width: 90vw;
+            max-height: calc(85vh - 12px);
+            max-height: calc(85dvh - 12px);  /* スマホのアドレスバー分を除いた高さ */
             background: var(--panel-bg);
             border: 1px solid var(--border-color);
             border-radius: var(--r-card);
@@ -326,6 +337,8 @@
         }
         #property-panel-close:hover { color: #fff; }
         #property-panel-content {
+            overflow-y: auto;             /* 画面より長いときは中身をスクロール */
+            min-height: 0;
             padding: 12px;
             display: flex;
             flex-direction: column;
@@ -364,6 +377,11 @@
             background: #00cc66;
         }
         .opt-bg-btn { background:#2a2e35 !important; color:#e0e0e0 !important; border:1px solid var(--border-3) !important; }
+        /* オプション「表示・操作」: 項目名＋切り替えボタンを1行に */
+        .opt-pref-row { display:flex; align-items:center; gap:8px; }
+        .opt-pref-label { flex:0 0 84px; font-size:11px; color:#ddd; }
+        .opt-pref-seg { flex:1; display:flex; gap:4px; min-width:0; }
+        .opt-pref-seg .prop-btn { flex:1; min-width:0; margin-top:0; padding:6px 0; font-size:11px; font-weight:600; border-radius:6px; white-space:nowrap; }
         .opt-bg-btn:hover { background:#3a4049 !important; }
         .opt-bg-btn.active { border-color:var(--green) !important; color:var(--green) !important; background:rgba(0,255,136,0.10) !important; }
         /* 主ボタン(緑)以外のパネル内ボタン: 通常操作=btn-sub、警告・エラー関連=btn-warn（黄） */
@@ -495,7 +513,7 @@
                 <button class="status-btn" style="padding:0 3px;margin-left:-4px;" onclick="toggleOsnapPanel(event)">▼</button>
             </div>
             <span id="snap-indicator" style="color:#00ff00;width:30px;font-size:10px;"></span>
-            <span id="coords-display">0.000, 0.000</span>
+            <span id="coords-display"><span class="coord-x">X:0</span><span class="coord-y">Y:0</span></span>
         </div>
     </div>
 
@@ -702,6 +720,7 @@
     <script src="cad-dimension.js"></script>
     <script src="cad-io.js"></script>
     <script src="cad-core.js"></script>
+    <script src="cad-prefs.js"></script>
     <script src="cad-view.js"></script>
     <script src="cad-geom.js"></script>
     <script src="cad-render.js"></script>
@@ -973,8 +992,8 @@
             const hudY = document.getElementById('fs-hud-y');
             const hudSnap = document.getElementById('fs-hud-snap');
             if(hudX && hudY) {
-                hudX.textContent = ucsY.toFixed(0);
-                hudY.textContent = ucsX.toFixed(0);
+                hudX.textContent = formatCoordValue(ucsY, 'bar');
+                hudY.textContent = formatCoordValue(ucsX, 'bar');
                 if(hudSnap) {
                     if(snapType) {
                         hudSnap.textContent = '[' + snapType + ']';
@@ -995,16 +1014,17 @@
             window._lastFsCoord = { ucsX, ucsY, snapType };
 
             tt.style.display = 'block';
-            document.getElementById('fs-coord-x').textContent = 'X: ' + ucsY.toFixed(0);
-            document.getElementById('fs-coord-y').textContent = 'Y: ' + ucsX.toFixed(0);
+            document.getElementById('fs-coord-x').textContent = 'X: ' + formatCoordValue(ucsY, 'bar');
+            document.getElementById('fs-coord-y').textContent = 'Y: ' + formatCoordValue(ucsX, 'bar');
             const snapLabel = document.getElementById('fs-snap-label');
             snapLabel.textContent = snapType ? '[' + snapType + ']' : '';
 
             // カーソルの右上に表示（画面端からはみ出す場合は反転）
             const margin = 20;
+            const tipW = tt.offsetWidth || 150, tipH = tt.offsetHeight || 60;
             let tipX = screenX + margin;
-            let tipY = screenY - 60;
-            if(tipX + 150 > window.innerWidth) tipX = screenX - 170;
+            let tipY = screenY - tipH;
+            if(tipX + tipW > window.innerWidth) tipX = screenX - tipW - margin;
             if(tipY < 45) tipY = screenY + margin;
             tt.style.left = tipX + 'px';
             tt.style.top = tipY + 'px';

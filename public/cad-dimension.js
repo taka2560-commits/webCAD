@@ -2,8 +2,8 @@
 // cad-dimension.js - 6種類の寸法コマンドと描画 + 寸法編集
 
 const DIM_COLOR = '#00FFFF';
-const DIM_TEXT_SIZE = 16;   // スクリーンピクセル
-const DIM_ARROW_SIZE = 10;   // スクリーンピクセル
+const DIM_TEXT_SIZE = 16;   // スクリーンピクセル（オプション「寸法の文字」で倍率を掛ける: dimSizePx）
+const DIM_ARROW_SIZE = 10;   // スクリーンピクセル（同上）
 const DIM_EXT_OVERSHOOT = 5; // 補助線のオーバーシュート(px)
 const DIM_EXT_GAP = 3;      // 補助線の測定点からの隙間(px)
 
@@ -21,7 +21,7 @@ function drawArrowHead(cx, cy, angle, size) {
 
 // ===== 寸法テキスト描画 =====
 function drawDimText(text, x, y, angle, color) {
-    ctx.save(); ctx.fillStyle = color || ctx.strokeStyle || DIM_COLOR; ctx.font = DIM_TEXT_SIZE+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.save(); ctx.fillStyle = color || ctx.strokeStyle || DIM_COLOR; ctx.font = dimSizePx(DIM_TEXT_SIZE)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
     ctx.translate(x, y);
     let a = angle || 0;
     if(a > Math.PI/2 || a < -Math.PI/2) a += Math.PI;
@@ -60,8 +60,8 @@ function _drawDimLinearCore(p1, p2, offset, dimDir, color, textOverride, e) {
     ctx.beginPath(); ctx.moveTo(dl1.x, dl1.y); ctx.lineTo(dl2.x, dl2.y); ctx.stroke();
     _addHitSeg(e, dl1, dl2);
     const ang = Math.atan2(dl2.y - dl1.y, dl2.x - dl1.x);
-    drawArrowHead(dl1.x, dl1.y, ang, DIM_ARROW_SIZE);
-    drawArrowHead(dl2.x, dl2.y, ang + Math.PI, DIM_ARROW_SIZE);
+    drawArrowHead(dl1.x, dl1.y, ang, dimSizePx(DIM_ARROW_SIZE));
+    drawArrowHead(dl2.x, dl2.y, ang + Math.PI, dimSizePx(DIM_ARROW_SIZE));
     const val = isHoriz ? Math.abs(p2.x - p1.x) : Math.abs(p2.y - p1.y);
     const text = textOverride || dimFormat(val);
     const tx = (dl1.x+dl2.x)/2, ty = (dl1.y+dl2.y)/2;
@@ -86,8 +86,8 @@ function _drawDimAlignedCore(p1, p2, offset, color, textOverride, e) {
     ctx.beginPath(); ctx.moveTo(dl1.x, dl1.y); ctx.lineTo(dl2.x, dl2.y); ctx.stroke();
     _addHitSeg(e, dl1, dl2);
     const ang = Math.atan2(dl2.y - dl1.y, dl2.x - dl1.x);
-    drawArrowHead(dl1.x, dl1.y, ang, DIM_ARROW_SIZE);
-    drawArrowHead(dl2.x, dl2.y, ang + Math.PI, DIM_ARROW_SIZE);
+    drawArrowHead(dl1.x, dl1.y, ang, dimSizePx(DIM_ARROW_SIZE));
+    drawArrowHead(dl2.x, dl2.y, ang + Math.PI, dimSizePx(DIM_ARROW_SIZE));
     const val = dist(p1.x, p1.y, p2.x, p2.y);
     const tx = (dl1.x+dl2.x)/2, ty = (dl1.y+dl2.y)/2;
     drawDimText(textOverride || dimFormat(val), tx, ty, ang, resolvedColor);
@@ -105,7 +105,7 @@ function _drawDimRadiusCore(center, radius, angle, color, textOverride, e) {
     ctx.beginPath(); ctx.moveTo(sc.x, sc.y); ctx.lineTo(ep.x, ep.y); ctx.stroke();
     _addHitSeg(e, sc, ep);
     const ang = Math.atan2(ep.y - sc.y, ep.x - sc.x);
-    drawArrowHead(ep.x, ep.y, ang + Math.PI, DIM_ARROW_SIZE);
+    drawArrowHead(ep.x, ep.y, ang + Math.PI, dimSizePx(DIM_ARROW_SIZE));
     const tx = (sc.x+ep.x)/2, ty = (sc.y+ep.y)/2;
     drawDimText(textOverride || ('R' + dimFormat(radius)), tx, ty, ang, resolvedColor);
     _addHitText(e, {x:tx, y:ty});
@@ -124,8 +124,8 @@ function _drawDimDiameterCore(center, radius, angle, color, textOverride, e) {
     ctx.beginPath(); ctx.moveTo(ep1.x, ep1.y); ctx.lineTo(ep2.x, ep2.y); ctx.stroke();
     _addHitSeg(e, ep1, ep2);
     const ang = Math.atan2(ep1.y - ep2.y, ep1.x - ep2.x);
-    drawArrowHead(ep1.x, ep1.y, ang + Math.PI, DIM_ARROW_SIZE);
-    drawArrowHead(ep2.x, ep2.y, ang, DIM_ARROW_SIZE);
+    drawArrowHead(ep1.x, ep1.y, ang + Math.PI, dimSizePx(DIM_ARROW_SIZE));
+    drawArrowHead(ep2.x, ep2.y, ang, dimSizePx(DIM_ARROW_SIZE));
     drawDimText(textOverride || ('⌀' + dimFormat(radius*2)), sc.x, sc.y, ang, resolvedColor);
     _addHitText(e, {x:sc.x, y:sc.y});
 }
@@ -142,8 +142,9 @@ function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
 
     // 引出線の描画（sp から sl まで行き、そこから水平な下線を引く）
     // 文字が右に配置されるか左に配置されるかを決定
-    const textSide = (sl.x >= sp.x) ? 1 : -1; 
-    const lineEnd = {x: sl.x + textSide * 80, y: sl.y}; // 下線の長さ: 80px
+    const textSide = (sl.x >= sp.x) ? 1 : -1;
+    const dk = dimSizePx(DIM_TEXT_SIZE) / DIM_TEXT_SIZE; // 文字の大きさの設定（倍率）
+    const lineEnd = {x: sl.x + textSide * 80 * dk, y: sl.y}; // 下線の長さ: 80px（文字に合わせて伸縮）
 
     ctx.beginPath(); 
     ctx.moveTo(sp.x, sp.y); 
@@ -160,20 +161,20 @@ function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
 
     ctx.save();
     // テキストは下線の中央、少し上に配置
-    ctx.translate(sl.x + textSide * 40, sl.y - 4);
+    ctx.translate(sl.x + textSide * 40 * dk, sl.y - 4);
 
     // もし view.rotation がかかっていれば、文字自体は画面に対して水平になるよう逆回転させるか？
     // wcsToScreenで既に回転したスクリーン座標が出ているので、このままで文字は画面水平に描画される
     ctx.save();
-    ctx.font = DIM_TEXT_SIZE + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    
+    ctx.font = dimSizePx(DIM_TEXT_SIZE) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+
     // 現場で読みやすいように色分け
-    ctx.fillStyle = '#00ff88'; ctx.fillText(txtX, 0, -14); // 上段 (X)
+    ctx.fillStyle = '#00ff88'; ctx.fillText(txtX, 0, -Math.round(14 * dk)); // 上段 (X)
     ctx.fillStyle = '#00ffff'; ctx.fillText(txtY, 0, 0);   // 下段 (Y)
     
     ctx.restore();
 
-    _addHitText(e, {x: sl.x + textSide * 40, y: sl.y - 10});
+    _addHitText(e, {x: sl.x + textSide * 40 * dk, y: sl.y - 10});
 }
 
 // ===== 寸法タイプ別描画（エンティティから呼ばれる） =====
@@ -194,8 +195,8 @@ function drawDimAngular(e, color) {
     const angle2 = Math.atan2(-(e.arm2.y - e.vertex.y), e.arm2.x - e.vertex.x);
     const arcR = (e.arcRadius || 40) * view.scale;
     ctx.beginPath(); ctx.arc(sv.x, sv.y, arcR, angle1, angle2, false); ctx.stroke();
-    drawArrowHead(sv.x + arcR*Math.cos(angle1), sv.y + arcR*Math.sin(angle1), angle1 - Math.PI/2, DIM_ARROW_SIZE);
-    drawArrowHead(sv.x + arcR*Math.cos(angle2), sv.y + arcR*Math.sin(angle2), angle2 + Math.PI/2, DIM_ARROW_SIZE);
+    drawArrowHead(sv.x + arcR*Math.cos(angle1), sv.y + arcR*Math.sin(angle1), angle1 - Math.PI/2, dimSizePx(DIM_ARROW_SIZE));
+    drawArrowHead(sv.x + arcR*Math.cos(angle2), sv.y + arcR*Math.sin(angle2), angle2 + Math.PI/2, dimSizePx(DIM_ARROW_SIZE));
     const a1w = Math.atan2(e.arm1.y - e.vertex.y, e.arm1.x - e.vertex.x);
     const a2w = Math.atan2(e.arm2.y - e.vertex.y, e.arm2.x - e.vertex.x);
     let angleDeg = Math.abs(a2w - a1w) * 180 / Math.PI;
@@ -747,10 +748,11 @@ function _measLabel(text, x, y, angle) {
     let a = angle || 0;
     if(a > Math.PI/2 || a < -Math.PI/2) a += Math.PI; // 文字が逆さまにならないように
     ctx.rotate(a);
-    ctx.font = 'bold ' + MEAS_TEXT_SIZE + 'px sans-serif';
+    const ts = dimSizePx(MEAS_TEXT_SIZE); // オプション「寸法の文字」の大きさ
+    ctx.font = 'bold ' + ts + 'px sans-serif';
     const w = ctx.measureText(text).width;
     ctx.fillStyle = 'rgba(0,0,0,0.65)';
-    ctx.fillRect(-w/2 - 5, -MEAS_TEXT_SIZE/2 - 4, w + 10, MEAS_TEXT_SIZE + 8);
+    ctx.fillRect(-w/2 - 5, -ts/2 - 4, w + 10, ts + 8);
     ctx.fillStyle = MEAS_COLOR;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(text, 0, 0);
@@ -793,8 +795,8 @@ function drawMeasureOverlay() {
     const ang = Math.atan2(st.y - sb.y, st.x - sb.x);
     if(Math.hypot(st.x - sb.x, st.y - sb.y) > 1) {
         ctx.beginPath(); ctx.moveTo(sb.x, sb.y); ctx.lineTo(st.x, st.y); ctx.stroke();
-        drawArrowHead(sb.x, sb.y, ang, DIM_ARROW_SIZE);
-        drawArrowHead(st.x, st.y, ang + Math.PI, DIM_ARROW_SIZE);
+        drawArrowHead(sb.x, sb.y, ang, dimSizePx(DIM_ARROW_SIZE));
+        drawArrowHead(st.x, st.y, ang + Math.PI, dimSizePx(DIM_ARROW_SIZE));
     }
 
     // 測る先の点の印
