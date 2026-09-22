@@ -176,25 +176,11 @@ function _drawLoupeAt(lx, ly, box) {
         drawOneEntity(e, i === hl ? '#ff6b6b' : null);
     });
 
-    if(snapResult && osnapState.main) {
+    if(snapActive()) {
         const s = wcsToScreen(snapResult.wcsX, snapResult.wcsY);
-        const mk = 6;
+        drawSnapGuides({ currentOnly: true, px: 1 / zoom }); // 延長を使っているときの補助線（ルーペの中）
         ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 1.5;
-        if(snapResult.type === '端点') {
-            ctx.beginPath(); ctx.moveTo(s.x, s.y-mk); ctx.lineTo(s.x+mk, s.y+mk*0.7); ctx.lineTo(s.x-mk, s.y+mk*0.7); ctx.closePath(); ctx.stroke();
-        } else if(snapResult.type === '中点') {
-            ctx.strokeRect(s.x-mk, s.y-mk, mk*2, mk*2);
-            ctx.beginPath(); ctx.moveTo(s.x-mk, s.y+mk); ctx.lineTo(s.x, s.y-mk); ctx.lineTo(s.x+mk, s.y+mk); ctx.stroke();
-        } else if(snapResult.type === '中心') {
-            ctx.beginPath(); ctx.arc(s.x, s.y, mk, 0, Math.PI*2); ctx.stroke();
-        } else if(snapResult.type === '交点') {
-            ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.moveTo(s.x+mk,s.y-mk); ctx.lineTo(s.x-mk,s.y+mk); ctx.stroke();
-        } else if(snapResult.type === '近接点') {
-            ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.moveTo(s.x-mk,s.y+mk); ctx.lineTo(s.x+mk,s.y-mk); ctx.strokeRect(s.x-mk,s.y-mk,mk*2,mk*2);
-        } else if(snapResult.type === '垂線') {
-            ctx.beginPath(); ctx.moveTo(s.x-mk,s.y-mk); ctx.lineTo(s.x-mk,s.y+mk); ctx.lineTo(s.x+mk,s.y+mk); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(s.x-mk,s.y); ctx.lineTo(s.x-mk+mk*0.5,s.y); ctx.moveTo(s.x,s.y+mk); ctx.lineTo(s.x,s.y+mk-mk*0.5); ctx.stroke();
-        }
+        drawSnapShape(snapResult.type, s.x, s.y, 6);
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -210,7 +196,7 @@ function _drawLoupeAt(lx, ly, box) {
     ctx.beginPath(); ctx.strokeRect(loupeX - loupeR, finalY - loupeR, loupeR * 2, loupeR * 2);
 
     // ルーペの下の座標。スナップしているときは、確定で入力される点（スナップ点）の座標を出す
-    const snapping = !box && snapResult && osnapState.main;
+    const snapping = !box && snapActive();
     const p = snapping ? { x: snapResult.wcsX, y: snapResult.wcsY } : screenToWcs(lx, ly);
     const ucsCoord = wcsToUcs(p.x, p.y);
     const fs = Math.max(8, Math.round(11 * (displayPref('coordFont') || 1))); // 座標の文字（既定 11px）
@@ -224,7 +210,8 @@ function _drawLoupeAt(lx, ly, box) {
     ctx.fillText(text, loupeX, finalY + loupeR + lineH);
     if(snapping) {
         ctx.fillStyle = '#ffff00'; ctx.font = 'bold ' + fs + 'px monospace';
-        ctx.fillText(`SNAP: ${snapResult.type}`, loupeX, finalY + loupeR + lineH * 2);
+        const cyc = snapResult.count > 1 ? ` (${snapResult.index + 1}/${snapResult.count})` : ''; // 重なった候補の数
+        ctx.fillText(`SNAP: ${snapResult.type}${cyc}`, loupeX, finalY + loupeR + lineH * 2);
     }
     ctx.restore();
 }
@@ -630,16 +617,15 @@ function drawRubberBand() {
     }
 }
 
+// スナップ記号（形は cad-snap.js の drawSnapShape）と、延長の補助線・2点の中点の途中表示
 function drawSnapMarker() {
-    if(!snapResult || !osnapState.main) { snapIndicator.textContent=''; return; }
+    updateSnapCycleButton();
+    drawSnapGuides();
+    if(!snapActive()) { snapIndicator.textContent=''; return; }
     snapIndicator.textContent=snapResult.type;
-    const s=wcsToScreen(snapResult.wcsX,snapResult.wcsY); ctx.save(); ctx.strokeStyle='#00ff00'; ctx.lineWidth=2;
-    if(snapResult.type==='端点') { ctx.beginPath();ctx.moveTo(s.x,s.y-6);ctx.lineTo(s.x+6,s.y+4);ctx.lineTo(s.x-6,s.y+4);ctx.closePath();ctx.stroke(); }
-    else if(snapResult.type==='中点') { ctx.strokeRect(s.x-5,s.y-5,10,10); ctx.beginPath();ctx.moveTo(s.x-5,s.y+5);ctx.lineTo(s.x,s.y-5);ctx.lineTo(s.x+5,s.y+5);ctx.stroke(); }
-    else if(snapResult.type==='中心') { ctx.beginPath();ctx.arc(s.x,s.y,6,0,Math.PI*2);ctx.stroke(); }
-    else if(snapResult.type==='交点') { ctx.beginPath();ctx.moveTo(s.x-6,s.y-6);ctx.lineTo(s.x+6,s.y+6);ctx.moveTo(s.x+6,s.y-6);ctx.lineTo(s.x-6,s.y+6);ctx.stroke(); }
-    else if(snapResult.type==='近接点') { ctx.beginPath();ctx.moveTo(s.x-5,s.y-5);ctx.lineTo(s.x+5,s.y+5);ctx.moveTo(s.x-5,s.y+5);ctx.lineTo(s.x+5,s.y-5);ctx.strokeRect(s.x-5,s.y-5,10,10); } // 砂時計っぽく
-    else if(snapResult.type==='垂線') { ctx.beginPath();ctx.moveTo(s.x-5,s.y-5);ctx.lineTo(s.x-5,s.y+5);ctx.lineTo(s.x+5,s.y+5);ctx.moveTo(s.x-5,s.y);ctx.lineTo(s.x-1,s.y);ctx.moveTo(s.x,s.y+5);ctx.lineTo(s.x,s.y+1);ctx.stroke(); } // Ｌ字
+    const s=wcsToScreen(snapResult.wcsX,snapResult.wcsY);
+    ctx.save(); ctx.strokeStyle='#00ff00'; ctx.lineWidth=2;
+    drawSnapShape(snapResult.type, s.x, s.y, 6);
     ctx.restore();
 }
 

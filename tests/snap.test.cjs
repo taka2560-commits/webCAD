@@ -172,8 +172,9 @@ describe('オブジェクトスナップ', () => {
     });
 
     it('円弧は向こう側の垂線にも吸着する（描かれている範囲だけ）', () => {
-        const arc = { type: 'ARC', layer: 0, cx: 0, cy: 0, radius: 50, startAngle: 0, endAngle: Math.PI, counterclockwise: true };
-        withBase('WAITING_LINE_P2', 0, -80);  // 円弧（上半分）の下側の外から
+        // 0〜2.5rad の円弧（中点は 1.25rad なので、向こう側の足 (0,50)=π/2 とは別の位置）
+        const arc = { type: 'ARC', layer: 0, cx: 0, cy: 0, radius: 50, startAngle: 0, endAngle: 2.5, counterclockwise: true };
+        withBase('WAITING_LINE_P2', 0, -80);  // 円弧の下側の外から
         const s = snapAt([arc], 0, 50, 2, 1);  // 向こう側の足 (0, 50)
         assert.equal(s.type, '垂線');
         assert.ok(near(s.wcsX, 0) && near(s.wcsY, 50));

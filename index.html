@@ -131,8 +131,23 @@
         #btn-osnap.active { color:var(--green);background:rgba(0,255,136,0.15);border-color:var(--green); box-shadow:0 0 8px rgba(0,255,136,0.2); }
         
         #osnap-panel { display:none; position:fixed; bottom:55px; right:10px; background:var(--panel-bg); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border:1px solid var(--border-color); padding:14px; border-radius:var(--r-card); z-index:999999 !important; box-shadow:0 10px 40px rgba(0,0,0,0.5); pointer-events:auto; }
-        #osnap-panel label { display:flex; align-items:center; margin-bottom:12px; font-size:14px; cursor:pointer; min-width:130px; color:#fff; }
-        #osnap-panel input { transform:scale(1.3); margin-right:12px; cursor:pointer; }
+        #osnap-panel { width:min(320px, calc(100vw - 16px)); max-height:calc(100vh - 80px); overflow-y:auto; padding:12px !important; }
+        #osnap-panel .osnap-sec { font-size:11px; font-weight:700; color:#aaa; margin:2px 0 6px; }
+        #osnap-panel .osnap-sec:not(:first-child) { margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1); }
+        #osnap-panel .osnap-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; }
+        #osnap-panel .osnap-chk { display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; color:#fff; min-height:28px; }
+        #osnap-panel .osnap-chk input { transform:scale(1.25); cursor:pointer; margin:0; }
+        #osnap-panel .osnap-row { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; color:#ddd; }
+        #osnap-panel .osnap-sel { flex:1; min-height:30px; border-radius:8px; background:#2a2e35; color:#e0e0e0; border:1px solid var(--border-3); }
+        #osnap-panel .osnap-once-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; }
+        #osnap-panel .osnap-once, #osnap-panel .osnap-tool { min-height:32px; padding:0 2px; border-radius:8px; background:#2a2e35; color:#e0e0e0; border:1px solid var(--border-3); font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; }
+        #osnap-panel .osnap-once.active { border-color:#ffcc00; color:#ffcc00; background:rgba(255,204,0,0.10); }
+        #osnap-panel .osnap-tools { display:flex; gap:6px; margin-top:6px; }
+        #osnap-panel .osnap-tool { flex:1; }
+        #osnap-panel .osnap-hint { margin-top:8px; font-size:10px; color:#888; line-height:1.4; }
+        /* 「次の1点だけ」の指定中（黄色＝いつもと違う状態） */
+        #btn-osnap.snap-override { color:#ffcc00 !important; border-color:#ffcc00 !important; background:rgba(255,204,0,0.12) !important; }
+        #fs-btn-osnap.snap-override { box-shadow:0 0 0 2px #ffcc00 !important; }
         
         #coords-display { font-family:'Consolas',monospace; min-width:110px; text-align:right; font-size:calc(12px * var(--coord-scale, 1)); font-weight:700; color:#00ff88;
             display:inline-flex; flex-wrap:wrap; justify-content:flex-end; column-gap:0.8em; line-height:1.1; flex:0 1 auto; }
@@ -198,7 +213,7 @@
         /* 通常画面ではステータスバー（座標）の上に出す。重なると測りながら座標が読めないため */
         body:not(.fullscreen-mode) #fs-dim-actionbar { bottom:56px !important; }
         /* スナップの種類（端点など）は折り返さない */
-        #snap-indicator { flex-shrink:0; white-space:nowrap; }
+        #snap-indicator { flex-shrink:0; white-space:nowrap; width:auto !important; min-width:30px; }
 
         #fs-zoom-panel {
             position: fixed; bottom: 20px; left: 14px; z-index: 100001;
@@ -278,7 +293,7 @@
             #status-bar .paper-space-label { display: none; }  /* 常に「モデル」なので、狭い画面では座標に場所を譲る */
             .status-btn { padding: 0 6px; font-size: 10px; }
             #coords-display { min-width: 0; font-size: min(calc(10px * var(--coord-scale, 1)), 15px); }
-            #snap-indicator { width: 24px !important; font-size: 9px; }
+            #snap-indicator { min-width: 24px; font-size: 9px; }
             #command-line-area:not(.collapsed) { left: 62px; height: 120px; }
         }
         /* プロジェクト一覧のスタイル */
@@ -553,14 +568,8 @@
     </div>
 
     <!-- オブジェクトスナップ設定パネル（固定配置用） -->
-    <div id="osnap-panel">
-        <label><input type="checkbox" id="osnap-end" checked> 端点</label>
-        <label><input type="checkbox" id="osnap-mid" checked> 中点</label>
-        <label><input type="checkbox" id="osnap-cen" checked> 中心</label>
-        <label><input type="checkbox" id="osnap-int" checked> 交点</label>
-        <label><input type="checkbox" id="osnap-near" checked> 近接点</label>
-        <label><input type="checkbox" id="osnap-perp" checked> 垂線</label>
-    </div>
+    <!-- スナップの設定（中身は cad-snap.js が作る） -->
+    <div id="osnap-panel"></div>
 
     <!-- フローティング・プロパティパネル -->
     <div id="property-panel">
@@ -683,6 +692,7 @@
         <button onclick="dimConfirmPoint()" style="background:#00ff88; color:#000; border:none; padding:8px 16px; border-radius:16px; font-weight:bold; font-size:14px;">☑️ 確定</button>
         <button id="dim-mode-toggle" onclick="dimToggleMode()" style="background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">📏 直列 (変更)</button>
         <button id="dim-dir-toggle" onclick="dimToggleDir()" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⚙ 自動 (X/Y)</button>
+        <button id="dim-snap-cycle" onclick="cycleSnapCandidate()" title="重なったスナップの候補を切り替え" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⇄</button>
         <button id="dim-meas-write" onclick="measureWriteDims()" style="display:none; background:#00ff88; color:#000; border:none; padding:8px 16px; border-radius:16px; font-weight:bold; font-size:14px;">📐 記入</button>
         <button id="dim-meas-base" onclick="measureSetBase()" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">📍 基点</button>
         <button id="dim-cancel-btn" onclick="issueCommand('CANCEL')" style="background:transparent; color:#ff6b6b; border:1px solid #ff6b6b; padding:6px 12px; border-radius:12px; font-size:12px;">❌ 終了</button>
@@ -723,6 +733,7 @@
     <script src="cad-prefs.js"></script>
     <script src="cad-view.js"></script>
     <script src="cad-geom.js"></script>
+    <script src="cad-snap.js"></script>
     <script src="cad-render.js"></script>
     <script src="cad-command.js"></script>
     <script src="cad-input.js"></script>

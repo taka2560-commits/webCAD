@@ -69,7 +69,7 @@ function setCoordsDisplay(ucsX, ucsY) {
 }
 // 設定を変えたとき、今の位置の座標をすぐ新しい桁数で出し直す
 function refreshCoordDisplay() {
-    const p = (snapResult && osnapState.main) ? wcsToUcs(snapResult.wcsX, snapResult.wcsY) : { x: mouse.ucsX, y: mouse.ucsY };
+    const p = snapActive() ? wcsToUcs(snapResult.wcsX, snapResult.wcsY) : { x: mouse.ucsX, y: mouse.ucsY };
     setCoordsDisplay(p.x, p.y);
 }
 

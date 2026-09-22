@@ -262,7 +262,7 @@ function setupEventListeners() {
             }, 600);
 
             // 全画面座標ツールチップ更新
-            if(snapResult && osnapState.main) {
+            if(snapActive()) {
                 const su = wcsToUcs(snapResult.wcsX, snapResult.wcsY);
                 if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, su.x, su.y, snapResult.type);
             } else {
@@ -340,7 +340,7 @@ function setupEventListeners() {
             }
 
             // 座標表示更新
-            if(snapResult && osnapState.main) {
+            if(snapActive()) {
                 const su = wcsToUcs(snapResult.wcsX, snapResult.wcsY);
                 setCoordsDisplay(su.x, su.y);
                 if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, su.x, su.y, snapResult.type);

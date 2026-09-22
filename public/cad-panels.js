@@ -641,8 +641,11 @@ window.toggleOsnapPanel = function(e) {
             const bottomPos = window.innerHeight - rect.top + 5;
             p.style.bottom = bottomPos + 'px';
             p.style.top = 'auto';
+            p.style.maxHeight = Math.max(160, rect.top - 15) + 'px'; // ボタンより上に収まる高さ（中身はスクロール）
             let leftPos = rect.left - 60; // ボタンより少し左側を基準
-            if(leftPos < 5) leftPos = 5;  // 画面左端にはみ出さないよう調整
+            // 画面の左右どちらにもはみ出さないよう調整（パネルの幅は中身で決まる）
+            leftPos = Math.min(leftPos, window.innerWidth - p.offsetWidth - 5);
+            if(leftPos < 5) leftPos = 5;
             p.style.left = leftPos + 'px';
             p.style.right = 'auto';
         } else {
@@ -653,11 +656,6 @@ window.toggleOsnapPanel = function(e) {
         }
     }
 };
-// パネルのチェックボックスイベント
-['end','mid','cen','int','near','perp'].forEach(type => {
-    const cb = document.getElementById('osnap-'+type);
-    if(cb) cb.addEventListener('change', (e) => { osnapState[type] = e.target.checked; render(); });
-});
 
 window.changeLayerColorGlobal = function(layerId, color) {
     if(layers[layerId]) {

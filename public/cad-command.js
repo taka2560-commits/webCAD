@@ -26,11 +26,18 @@ function applyOrtho(wcs) {
 }
 
 function getInputPoint() {
-    if(snapResult && osnapState.main) return {x:snapResult.wcsX, y:snapResult.wcsY};
+    if(snapActive()) return {x:snapResult.wcsX, y:snapResult.wcsY};
     return applyOrtho({x:mouse.wcsX, y:mouse.wcsY});
 }
 
+// 点の入力（クリック・タップの確定・座標入力）。2点の中点の途中ならその点として受け取り、
+// 入力のあとは「次の1点だけ」のスナップ指定を解除する
 function handlePointInput(wcs, fromMouse = false) {
+    if(snapInputIntercept(wcs)) return;
+    _handlePointInputCore(wcs, fromMouse);
+    afterSnapPointInput(wcs);
+}
+function _handlePointInputCore(wcs, fromMouse) {
     const m = cmdState.mode;
     if(m==='WAITING_LAYOFF_TOUCH') {
         const idx = hitTestEntity(mouse.screenX, mouse.screenY);
@@ -567,6 +574,13 @@ function processCommand(cmdText) {
     const cmd = cmdText.toUpperCase().trim();
     const coordMatch = cmd.match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
     if(coordMatch) { const ux=parseFloat(coordMatch[1]),uy=parseFloat(coordMatch[3]); const w=ucsToWcs(ux,uy); handlePointInput(w, true); return; }
+    // 相対座標「@x,y」: 直前に入力した点から（並びは絶対座標と同じ）
+    const relMatch = cmd.match(/^@\s*(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
+    if(relMatch) {
+        const w = relativeCommandPoint(parseFloat(relMatch[1]), parseFloat(relMatch[3]));
+        if(w && cmdState.mode !== 'IDLE') handlePointInput(w, true); else addCommandLog('-> 相対座標の基準になる点がありません（先に1点を入力してください）');
+        return;
+    }
     const numMatch = cmd.match(/^(-?\d+(\.\d+)?)$/);
     if(numMatch) {
         const val = parseFloat(numMatch[1]);

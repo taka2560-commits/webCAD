@@ -385,7 +385,9 @@ let cmdState = _makeCmdState();
 let snapResult = null;
 const SNAP_R = 10, ERASE_R = 5;
 // スナップ・直交状態
-let osnapState = { main: true, end: true, mid: true, cen: true, int: true, near: true, perp: true };
+// 端点・中点・中心・交点・近接点・垂線・接線・挿入点・四半円点・延長は既定でON、図心・等分点はOFF（cad-snap.js で端末に保存）
+let osnapState = { main: true, end: true, mid: true, cen: true, int: true, near: true, perp: true,
+    tan: true, ins: true, qua: true, ext: true, gce: false, div: false, divN: 3 };
 let orthoMode = false;
 let touchState = {
     lastDist: 0, lastMid: null, isPinch: false,
@@ -493,8 +495,9 @@ function textHitDistance(e, sx, sy) {
 function isMobile() { return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window); }
 function addCommandLog(t) { const d=document.createElement('div'); d.textContent=t; commandLog.appendChild(d); commandLog.scrollTop=commandLog.scrollHeight; }
 function setPrompt(t) { document.getElementById('command-prompt').textContent=t; updateCommandPill(); }
-function resetCommand() { 
-    cmdState=_makeCmdState(); 
+function resetCommand() {
+    cmdState=_makeCmdState();
+    if(typeof snapToolsReset === 'function') snapToolsReset(); // 次の1点だけの指定・2点の中点を解除
     setPrompt('コマンド:'); activeCommandName=''; setActiveTool(null);
     
     // 画層管理・ブロック管理のフローティングパネルは閉じずに内容だけ更新する
