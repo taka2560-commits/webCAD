@@ -18,7 +18,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 // index.html と同じ読み込み順（cad-errors.js は head、残りは body 末尾）
 const APP_SCRIPTS = ['cad-errors.js', 'cad-text-parse.js', 'cad-dimension.js', 'cad-io.js', 'cad-core.js',
     'cad-prefs.js', 'cad-view.js', 'cad-geom.js', 'cad-snap.js', 'cad-render.js', 'cad-command.js', 'cad-input.js', 'cad-panels.js',
-    'cad-survey.js', 'cad-storage.js', 'cad-boot.js'];
+    'cad-survey.js', 'cad-storage.js', 'cad-guide.js', 'cad-boot.js'];
 
 // Canvas 2D の代用品。描画命令は何もしないが、文字幅の計測（measureText）は概算値を返す。
 function fakeContext2d(canvas) {
@@ -92,6 +92,11 @@ async function loadApp(options = {}) {
     window.DxfParser = require('dxf-parser');
     window.Drawing = require('dxf-writer');
     window.loadLibreDwg = async () => { throw new Error('テストでは DWG 読込エンジンを使用しません'); };
+
+    // 端末に保存済みの設定（以前から使っている人の再現など）
+    if (options.storage) Object.entries(options.storage).forEach(([k, v]) => window.localStorage.setItem(k, v));
+    // 操作ガイドの初回の案内は、ガイドのテスト（options.firstRun）以外では出さない
+    if (!options.firstRun) window.localStorage.setItem('cad_guide', JSON.stringify({ welcome: 'never' }));
 
     const ctx = dom.getInternalVMContext();
     const run = (code, filename) => new vm.Script(code, { filename }).runInContext(ctx);

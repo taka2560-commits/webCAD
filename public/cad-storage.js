@@ -196,6 +196,8 @@ function _hasUnsavedChanges() { return _changeSeq !== _savedSeq; }
 function _hasUnsavedProjectChanges() { return entities.length > 0 && (!_currentProjectName || _changeSeq !== _projectSavedSeq); }
 
 function _doAutoSave() {
+    // 操作ガイドのツアー中は練習用の図面なので自動保存しない（利用者の図面の自動保存を上書きしない）
+    if (typeof guideTourActive === 'function' && guideTourActive()) return Promise.resolve(false);
     // 保存中なら、終わってから（まだ未保存の変更があれば）もう一度保存する
     if (_autoSavePending) {
         return _autoSavePending.then(() => (_hasUnsavedChanges() ? _doAutoSave() : true));
@@ -292,6 +294,12 @@ function _updateAutoSaveStatus(status) {
 
 // ===== 手動保存（名前付きプロジェクト） =====
 window.saveProject = async function(nameOverride) {
+    // 操作ガイドのツアー中は、練習用の図面を保存一覧に残さない（押したことだけをガイドに伝える）
+    if (typeof guideTourActive === 'function' && guideTourActive()) {
+        if (typeof showToast === 'function') showToast('💾 練習中なので、実際には保存しません');
+        if (typeof guideNotify === 'function') guideNotify('saved');
+        return;
+    }
     let name = nameOverride || _currentProjectName;
     if (!name) {
         name = prompt('プロジェクト名を入力してください:', `図面_${new Date().toLocaleDateString('ja-JP')}`);

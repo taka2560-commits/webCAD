@@ -36,6 +36,7 @@ function handlePointInput(wcs, fromMouse = false) {
     if(snapInputIntercept(wcs)) return;
     _handlePointInputCore(wcs, fromMouse);
     afterSnapPointInput(wcs);
+    if(typeof guideNotify === 'function') guideNotify('point'); // 操作ガイド: 手順カードを今の段階に合わせる
 }
 function _handlePointInputCore(wcs, fromMouse) {
     const m = cmdState.mode;
@@ -676,7 +677,12 @@ function processCommand(cmdText) {
         `);
     }
     else if(cmd==='A'||cmd==='ARC') { cmdState.mode='WAITING_ARC_P1'; cmdState.points=[]; setPrompt('始点:'); setActiveTool('ARC'); addCommandLog('-> 始点を指定'); }
-    else if(cmd==='PL'||cmd==='PLINE') { cmdState.mode='WAITING_PLINE_NEXT'; cmdState.points=[]; setPrompt('始点:'); setActiveTool('PLINE'); addCommandLog('-> 始点を指定'); }
+    else if(cmd==='PL'||cmd==='PLINE') {
+        cmdState.mode='WAITING_PLINE_NEXT'; cmdState.points=[]; setPrompt('始点:'); setActiveTool('PLINE'); addCommandLog('-> 始点を指定');
+        // スマホでも完了できるよう、画面下に「☑確定（完了）」「⭘閉じる」「❌終了」を出す
+        showActionbarControls({});
+        const pc = document.getElementById('pline-close-btn'); if(pc) pc.style.display = '';
+    }
     else if(cmd==='EL'||cmd==='ELLIPSE') { cmdState.mode='WAITING_ELLIPSE_CENTER'; setPrompt('中心:'); setActiveTool('ELLIPSE'); addCommandLog('-> 楕円の中心を指定'); }
     else if(cmd==='T'||cmd==='TEXT') { 
         cmdState.mode='WAITING_TEXT_INPUT'; 
@@ -759,7 +765,10 @@ function processCommand(cmdText) {
     else if(cmd==='U'||cmd==='UNDO') { undo(); }
     else if(cmd==='REDO') { redo(); }
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
-    else if(cmd==='CANCEL') { resetCommand(); }
+    else if(cmd==='CANCEL') {
+        // ポリラインは描いた部分を残して終わる（2点以上あるとき）
+        if(cmdState.mode === 'WAITING_PLINE_NEXT' && cmdState.points.length >= 2) finishPline(false); else resetCommand();
+    }
     else if(cmd==='ERRORS'||cmd==='ERRLOG') { if(window.cadErrors) window.cadErrors.show(); }
     else if(typeof processSurveyCommand === 'function' && processSurveyCommand(cmd)) { /* 測量コマンド（座標一覧・SIMA/CSV出力・GNSS）処理済み */ }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
@@ -768,7 +777,14 @@ function processCommand(cmdText) {
 
 
 // ===== 全画面UI コールバック用関数（アクションバー） =====
+// ポリラインの「⭘閉じる」
+window.plineCloseFromBar = function() {
+    if(cmdState.mode !== 'WAITING_PLINE_NEXT') return;
+    if(cmdState.points.length >= 3) finishPline(true);
+    else if(typeof showToast === 'function') showToast('閉じるには3点以上が必要です');
+};
 window.dimConfirmPoint = function() {
+    if(cmdState.mode === 'WAITING_PLINE_NEXT') { finishPline(false); return; } // ポリラインの完了
     if(cmdState.mode.startsWith('WAITING_DIM')) {
         const pt = getInputPoint(); // スナップがあればスナップ座標、なければWCS座標
         // 寸法が確定した際にも振動フィードバック

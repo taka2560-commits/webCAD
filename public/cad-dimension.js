@@ -863,6 +863,7 @@ window.measureWriteDims = function() {
     addCommandLog(`-> 寸法を記入: X ${measFormatLength(Math.abs(t.y - b.y))}${u} / Y ${measFormatLength(Math.abs(t.x - b.x))}${u} / 直線 ${measFormatLength(dist(b.x,b.y,t.x,t.y))}${u}`);
     if(typeof showToast === 'function') showToast('寸法を記入しました');
     if(typeof clearSnapOverride === 'function') clearSnapOverride();
+    if(typeof guideNotify === 'function') guideNotify('measureWrite');
     if(navigator.vibrate) navigator.vibrate(20);
     if(typeof render === 'function') render();
 };

@@ -112,6 +112,7 @@ function registerExtraDxfHandlers(parser) {
 // ===== 取り込み先の準備（置き換え / 追加） =====
 // 図面が空でなければ確認し、置き換えの場合は図形・画層を初期化する。Undoは1回分にまとめる
 function _prepareImportTarget() {
+    if(typeof guideBeforeFileOpen === 'function') guideBeforeFileOpen();
     saveUndo();
     if(entities.length === 0) return 'fresh';
     const replace = confirm('現在の図面を置き換えて開きますか？\n\n[OK] 置き換える\n[キャンセル] 現在の図面に追加する');

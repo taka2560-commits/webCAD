@@ -165,4 +165,5 @@ function zoomExtents() {
     const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
     _reanchorView(canvas.width/2, canvas.height/2, {x:cx, y:cy});
     render(); addCommandLog('全体表示');
+    if(typeof guideNotify === 'function') guideNotify('extents');
 }

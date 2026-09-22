@@ -494,10 +494,11 @@ function textHitDistance(e, sx, sy) {
 // ===== ユーティリティ =====
 function isMobile() { return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window); }
 function addCommandLog(t) { const d=document.createElement('div'); d.textContent=t; commandLog.appendChild(d); commandLog.scrollTop=commandLog.scrollHeight; }
-function setPrompt(t) { document.getElementById('command-prompt').textContent=t; updateCommandPill(); }
+function setPrompt(t) { document.getElementById('command-prompt').textContent=t; updateCommandPill(); if(typeof guideNotify === 'function') guideNotify('mode'); }
 function resetCommand() {
     cmdState=_makeCmdState();
     if(typeof snapToolsReset === 'function') snapToolsReset(); // 次の1点だけの指定・2点の中点を解除
+    if(typeof guideNotify === 'function') guideNotify('reset');  // 操作ガイド: コマンドの区切り
     setPrompt('コマンド:'); activeCommandName=''; setActiveTool(null);
     
     // 画層管理・ブロック管理のフローティングパネルは閉じずに内容だけ更新する
@@ -514,6 +515,7 @@ function resetCommand() {
     // 寸法・非表示アクションバーを確実に隠す＆ボタン状態を復元
     const actionbar = document.getElementById('fs-dim-actionbar');
     if(actionbar) {
+        const plineClose = document.getElementById('pline-close-btn'); if (plineClose) plineClose.style.display = 'none';
         actionbar.style.display = 'none';
         const confirmBtn = actionbar.querySelector('button[onclick="dimConfirmPoint()"]');
         if (confirmBtn) confirmBtn.style.display = '';
@@ -672,7 +674,8 @@ function showActionbarControls(options = {}) {
     if(confirmBtn) confirmBtn.style.display = options.hideConfirm ? 'none' : '';
     if(modeToggle) modeToggle.style.display = options.showMode ? '' : 'none';
     if(dirToggle) dirToggle.style.display = options.showDir ? '' : 'none';
-    // 基点測定のボタンは他のコマンドでは出さない
+    // 基点測定・ポリラインのボタンは他のコマンドでは出さない
+    const plineClose = document.getElementById('pline-close-btn'); if(plineClose) plineClose.style.display = 'none';
     const writeBtn = document.getElementById('dim-meas-write'); if(writeBtn) writeBtn.style.display = 'none';
     const measBaseBtn = document.getElementById('dim-meas-base'); if(measBaseBtn) measBaseBtn.style.display = 'none';
 }
@@ -704,6 +707,7 @@ let activeCommandName = '';
 
 // トグルコマンド: 同じコマンドを再押しでキャンセル（エスケープ動作）
 function toggleCommand(cmd) {
+    if(cmdState.mode === 'WAITING_PLINE_NEXT' && activeCommandName === cmd && cmdState.points.length >= 2) { finishPline(false); return; }
     if(cmdState.mode !== 'IDLE' && activeCommandName === cmd) {
         addCommandLog('* キャンセル *');
         resetCommand();
@@ -881,5 +885,5 @@ function saveUndo() {
     // 自動保存トリガー
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
-function undo() { if(!undoStack.length){addCommandLog('元に戻す操作がありません');return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
+function undo() { if(typeof guideNotify === 'function') guideNotify('undo'); if(!undoStack.length){addCommandLog('元に戻す操作がありません');return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
 function redo() { if(!redoStack.length){addCommandLog('やり直す操作がありません');return;} _bumpGeomEpoch(); undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }

@@ -24,9 +24,10 @@ function setupEventListeners() {
             renderOverlay(); return; // なぞった線は重ね表示
         }
         const hlBefore = cmdState.highlightIdx;
-        // コマンドモード中のみスナップ計算（IDLE時は軽量化のためスキップ）
+        // コマンドモード中のみスナップ計算（IDLE時は軽量化のためスキップ。座標読取モードでは座標を読むため常に計算）
         const isSelectMode = ['WAITING_ERASE_SELECT','WAITING_MOVE_SELECT','WAITING_COPY_SELECT','WAITING_OFFSET_SELECT','WAITING_OFFSET_SIDE'].includes(cmdState.mode);
-        if(cmdState.mode !== 'IDLE' && !isSelectMode && !mouse.isSelecting) {
+        const isFullscreenMouse = document.body.classList.contains('fullscreen-mode');
+        if((cmdState.mode !== 'IDLE' || isFullscreenMouse) && !isSelectMode && !mouse.isSelecting) {
             snapResult = findSnap(mouse.screenX, mouse.screenY, mouse.wcsX, mouse.wcsY);
         } else { snapResult = null; }
         if(snapResult){ const su=wcsToUcs(snapResult.wcsX,snapResult.wcsY); setCoordsDisplay(su.x, su.y); if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, su.x, su.y, snapResult.type); }
@@ -251,6 +252,7 @@ function setupEventListeners() {
                             entities.splice(idx, 1);
                             const name = hitEnt.type === 'TEXT' ? `文字 "${hitEnt.text}"` : `寸法 (${hitEnt.subType || '不明'})`;
                             addCommandLog(`-> 長押しにより ${name} を削除しました`);
+                            if(typeof guideNotify === 'function') guideNotify('longPressDelete');
                             cmdState.highlightIdx = -1;
                             if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
                             render();
@@ -404,6 +406,7 @@ function setupEventListeners() {
                 const isDimMode = cmdState.mode.startsWith('WAITING_DIM');
                 
                 if(isDimMode) {
+                    if(typeof guideNotify === 'function') guideNotify('dimTouchEnd');
                     // 寸法コマンド: 全画面・通常画面問わず自動確定しない。アクションバーの「確定」を待つ
                     // ルーペは消すが、スナップ位置は保持・表示する
                     render();
@@ -416,6 +419,8 @@ function setupEventListeners() {
             } else if(!touchState.hasMoved) {
                 // 短いタップでIDLEモード: エンティティ選択/選択解除（グループ選択ONならブロック全体）
                 selectEntityAt(mouse.screenX, mouse.screenY);
+            } else if(!document.body.classList.contains('fullscreen-mode') && typeof guideNotify === 'function') {
+                guideNotify('idleDrag'); // 1本指でなぞった（画面を動かしたかったのかもしれない）
             }
 
             touchState.isDragging = false;
