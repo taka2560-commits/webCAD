@@ -110,7 +110,12 @@ function collectSnapPoints(wx, wy, baseWcs) {
             pts.push({x:px, y:py, t:'近接点'}); 
         }
     };
-    const addPerp = (px, py) => { if(osnapState.perp) pts.push({x:px, y:py, t:'垂線'}); };
+    const addPerp = (px, py) => {
+        if(!osnapState.perp) return;
+        // 基点が線の上にあると、垂線の足＝基点そのものになる（長さ0の線になるだけなので候補にしない）
+        if(baseWcs && dist(px, py, baseWcs.x, baseWcs.y) * view.scale < 0.5) return;
+        pts.push({x:px, y:py, t:'垂線'});
+    };
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
 
     // マウスカーソル周辺でのみ検索するカリング
@@ -120,6 +125,31 @@ function collectSnapPoints(wx, wy, baseWcs) {
         wxMin = wx - searchRad; wxMax = wx + searchRad;
         wyMin = wy - searchRad; wyMax = wy + searchRad;
     }
+    // カーソル周辺のカリング窓に重なるか
+    const inWin = (minX, minY, maxX, maxY) => {
+        if(wxMin === undefined) return true;
+        return !(maxX < wxMin || minX > wxMax || maxY < wyMin || minY > wyMax);
+    };
+    // 線分1本ぶんのスナップ点（中点・近接点・垂線）。線分・ポリライン・長方形の辺で共通に使う
+    // （以前は線分だけが垂線に対応し、取り込み図面に多いポリラインや長方形の辺では垂線が出なかった）
+    const addSegSnaps = (x1, y1, x2, y2) => {
+        if(!inWin(Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2))) return; // カーソルから遠い区間は候補にならない
+        if(osnapState.mid) pts.push({x:(x1+x2)/2, y:(y1+y2)/2, t:'中点'});
+        const dx = x2 - x1, dy = y2 - y1, len2 = dx*dx + dy*dy;
+        if(len2 <= 0) return;
+        if(osnapState.near && wx !== undefined) {
+            let t = ((wx-x1)*dx + (wy-y1)*dy) / len2;
+            t = Math.max(0, Math.min(1, t));
+            addNear(x1 + t*dx, y1 + t*dy);
+        }
+        if(osnapState.perp && baseWcs) {
+            // 垂線の足は線分の上にあるときだけ（延長線上の足は対象外）
+            const t = ((baseWcs.x-x1)*dx + (baseWcs.y-y1)*dy) / len2;
+            if(t >= 0 && t <= 1) addPerp(x1 + t*dx, y1 + t*dy);
+        }
+    };
+    // 円・円弧への垂線は中心と基点を結ぶ直線の上（手前と向こう側の2点）。基点が中心だと向きが決まらない
+    const perpDirOk = (cx, cy) => baseWcs && dist(baseWcs.x, baseWcs.y, cx, cy) * view.scale >= 0.5;
 
     _forEachCandidate(wxMin, wyMin, wxMax, wyMax, e => {
         if(!isVisible(e)) return;
@@ -129,24 +159,9 @@ function collectSnapPoints(wx, wy, baseWcs) {
             if(e.bbox.maxX < wxMin || e.bbox.minX > wxMax || e.bbox.maxY < wyMin || e.bbox.minY > wyMax) return;
         }
 
-        if(e.type==='LINE') { 
-            if(osnapState.end) pts.push({x:e.x1,y:e.y1,t:'端点'},{x:e.x2,y:e.y2,t:'端点'}); 
-            if(osnapState.mid) pts.push({x:(e.x1+e.x2)/2,y:(e.y1+e.y2)/2,t:'中点'}); 
-            // Nearest & Perp
-            if(osnapState.near || osnapState.perp) {
-                const dx=e.x2-e.x1, dy=e.y2-e.y1, len2=dx*dx+dy*dy;
-                if(len2 > 0) {
-                    if(osnapState.near && wx!==undefined) {
-                        let t = ((wx-e.x1)*dx + (wy-e.y1)*dy) / len2;
-                        t = Math.max(0, Math.min(1, t));
-                        addNear(e.x1 + t*dx, e.y1 + t*dy);
-                    }
-                    if(osnapState.perp && baseWcs) {
-                        let t = ((baseWcs.x-e.x1)*dx + (baseWcs.y-e.y1)*dy) / len2;
-                        if(t>=0 && t<=1) addPerp(e.x1 + t*dx, e.y1 + t*dy);
-                    }
-                }
-            }
+        if(e.type==='LINE') {
+            if(osnapState.end) pts.push({x:e.x1,y:e.y1,t:'端点'},{x:e.x2,y:e.y2,t:'端点'});
+            addSegSnaps(e.x1, e.y1, e.x2, e.y2);
         }
         else if(e.type==='CIRCLE') { 
             if(osnapState.cen) pts.push({x:e.cx,y:e.cy,t:'中心'});
@@ -154,10 +169,10 @@ function collectSnapPoints(wx, wy, baseWcs) {
                 const a = Math.atan2(wy-e.cy, wx-e.cx);
                 addNear(e.cx + e.radius*Math.cos(a), e.cy + e.radius*Math.sin(a));
             }
-            if(osnapState.perp && baseWcs) {
+            if(osnapState.perp && perpDirOk(e.cx, e.cy)) {
                 const a = Math.atan2(baseWcs.y-e.cy, baseWcs.x-e.cx);
-                addPerp(e.cx + e.radius*Math.cos(a), e.cy + e.radius*Math.sin(a)); // Outside perp
-                addPerp(e.cx - e.radius*Math.cos(a), e.cy - e.radius*Math.sin(a)); // Inside perp
+                addPerp(e.cx + e.radius*Math.cos(a), e.cy + e.radius*Math.sin(a)); // 手前側
+                addPerp(e.cx - e.radius*Math.cos(a), e.cy - e.radius*Math.sin(a)); // 向こう側
             }
         }
         else if(e.type==='ARC') { 
@@ -174,7 +189,10 @@ function collectSnapPoints(wx, wy, baseWcs) {
                     }
                 };
                 if(osnapState.near && wx!==undefined) checkArcPt(wx, wy, 'near');
-                if(osnapState.perp && baseWcs) checkArcPt(baseWcs.x, baseWcs.y, 'perp');
+                if(osnapState.perp && perpDirOk(e.cx, e.cy)) {
+                    checkArcPt(baseWcs.x, baseWcs.y, 'perp');                         // 手前側
+                    checkArcPt(2*e.cx - baseWcs.x, 2*e.cy - baseWcs.y, 'perp');       // 向こう側（中心の反対方向）
+                }
             }
         }
         else if(e.type==='ELLIPSE') {
@@ -186,52 +204,23 @@ function collectSnapPoints(wx, wy, baseWcs) {
                 pts.push({x:e.cx+e.ry*Math.sin(e.rotation), y:e.cy-e.ry*Math.cos(e.rotation), t:'端点'});
             }
         }
-        else if(e.type==='RECTANG') { 
-            if(osnapState.end) pts.push({x:e.x1,y:e.y1,t:'端点'},{x:e.x2,y:e.y1,t:'端点'},{x:e.x2,y:e.y2,t:'端点'},{x:e.x1,y:e.y2,t:'端点'});
-            if(osnapState.mid) pts.push({x:(e.x1+e.x2)/2,y:(e.y1+e.y2)/2,t:'中点'}); 
-            // Nearest on RECTANG sides
-            if(osnapState.near && wx!==undefined) {
-                // To keep it simple, treat it as 4 lines
-                const lines = [
-                    {x1:e.x1,y1:e.y1, x2:e.x2,y2:e.y1}, {x1:e.x2,y1:e.y1, x2:e.x2,y2:e.y2},
-                    {x1:e.x2,y1:e.y2, x2:e.x1,y2:e.y2}, {x1:e.x1,y1:e.y2, x2:e.x1,y2:e.y1}
-                ];
-                lines.forEach(l => {
-                    let dx=l.x2-l.x1, dy=l.y2-l.y1, len2=dx*dx+dy*dy;
-                    if(len2>0) { let t=((wx-l.x1)*dx+(wy-l.y1)*dy)/len2; t=Math.max(0,Math.min(1,t)); addNear(l.x1+t*dx, l.y1+t*dy); }
-                });
-            }
+        else if(e.type==='RECTANG') {
+            const c = [[e.x1,e.y1],[e.x2,e.y1],[e.x2,e.y2],[e.x1,e.y2]];
+            if(osnapState.end) c.forEach(p => pts.push({x:p[0], y:p[1], t:'端点'}));
+            for(let i=0; i<4; i++) { const a = c[i], b = c[(i+1)%4]; addSegSnaps(a[0], a[1], b[0], b[1]); }
+            if(osnapState.cen) pts.push({x:(e.x1+e.x2)/2, y:(e.y1+e.y2)/2, t:'中心'});
         }
-        else if(e.type==='PLINE') { 
-            e.points.forEach((p,i)=>{
-                if(osnapState.end) pts.push({x:p.x,y:p.y,t:'端点'}); 
-                if(i>0) {
-                    if(osnapState.mid) pts.push({x:(p.x+e.points[i-1].x)/2,y:(p.y+e.points[i-1].y)/2,t:'中点'});
-                    if(osnapState.near && wx!==undefined) {
-                        let l = {x1:e.points[i-1].x, y1:e.points[i-1].y, x2:p.x, y2:p.y};
-                        let dx=l.x2-l.x1, dy=l.y2-l.y1, len2=dx*dx+dy*dy;
-                        if(len2>0) { let t=((wx-l.x1)*dx+(wy-l.y1)*dy)/len2; t=Math.max(0,Math.min(1,t)); addNear(l.x1+t*dx, l.y1+t*dy); }
-                    }
-                }
-            }); 
-            if(e.closed && e.points.length>2) {
-                let last = e.points[e.points.length-1], first = e.points[0];
-                if(osnapState.mid) pts.push({x:(first.x+last.x)/2, y:(first.y+last.y)/2, t:'中点'});
-                if(osnapState.near && wx!==undefined) {
-                    let dx=first.x-last.x, dy=first.y-last.y, len2=dx*dx+dy*dy;
-                    if(len2>0) { let t=((wx-last.x)*dx+(wy-last.y)*dy)/len2; t=Math.max(0,Math.min(1,t)); addNear(last.x+t*dx, last.y+t*dy); }
-                }
-            }
+        else if(e.type==='PLINE' && e.points) {
+            const P = e.points;
+            // 頂点が多い線（等高線など）でもカーソルの近くだけを調べる
+            if(osnapState.end) P.forEach(p => { if(inWin(p.x, p.y, p.x, p.y)) pts.push({x:p.x, y:p.y, t:'端点'}); });
+            for(let i=1; i<P.length; i++) addSegSnaps(P[i-1].x, P[i-1].y, P[i].x, P[i].y);
+            if(e.closed && P.length>2) addSegSnaps(P[P.length-1].x, P[P.length-1].y, P[0].x, P[0].y);
         }
         else if(e.type==='POINT') { if(osnapState.end) pts.push({x:e.x,y:e.y,t:'端点'}); }
     });
     // 交点（線分・ポリライン・長方形・円・円弧に対応。ブロック展開後のPLINE等も対象）
     if(osnapState.int) {
-        // カーソル周辺のカリング窓に重なるか
-        const inWin = (minX, minY, maxX, maxY) => {
-            if(wxMin === undefined) return true;
-            return !(maxX < wxMin || minX > wxMax || maxY < wyMin || minY > wyMax);
-        };
         // 1) 交点計算に使う線分と円・弧を収集（線分は個々の区間単位でカリング）
         const segs = [], circles = [];
         const MAX_SEGS = 300, MAX_CIRCLES = 60;
@@ -283,11 +272,23 @@ function collectSnapPoints(wx, wy, baseWcs) {
     }
     return pts;
 }
+// 垂線スナップの基点（いま引いている線・寸法の「始まりの点」）。基点が無い入力では垂線は出ない
 function getBaseWcs() {
     const m = cmdState.mode;
     if(m==='WAITING_LINE_P2' || m==='WAITING_CIRCLE_RADIUS' || m==='WAITING_RECT_P2') return cmdState.startWcs;
+    if((m==='WAITING_UCS_2P_XDIR' || m==='WAITING_UCS_2P_XDIR_PREVIEW') && cmdState.startWcs) return cmdState.startWcs;
     if(m==='WAITING_PLINE_NEXT' && cmdState.points.length>0) return cmdState.points[cmdState.points.length-1];
     if(m==='WAITING_MOVE_DEST' || m==='WAITING_COPY_DEST') return cmdState.moveBase;
+    // 3点円弧: 直前に指定した点から
+    if((m==='WAITING_ARC_P2' || m==='WAITING_ARC_P3') && cmdState.points && cmdState.points.length>0) return cmdState.points[cmdState.points.length-1];
+    // 平行寸法・整列寸法の2点目: 1点目から（点から線までの垂直な距離を測る）
+    if((m==='WAITING_DIMLIN_P2' || m==='WAITING_DIMALN_P2') && cmdState.points && cmdState.points.length>0) return cmdState.points[0];
+    // 連続寸法: 2点目は1点目から、以降は直列なら前の点・並列なら最初の点から
+    const cp = cmdState.dimContPoints;
+    if(m==='WAITING_DIMCONT_P2' && cp && cp.length>0) return cp[0];
+    if(m==='WAITING_DIMCONT_NEXT' && cp && cp.length>0) return cmdState.dimContType === 'PARALLEL' ? cp[0] : cp[cp.length-1];
+    // 基点測定: 基点から（基点から線までの垂直な距離）
+    if(m==='WAITING_DIMMEAS_TO' && cmdState.measBase) return cmdState.measBase;
     return null;
 }
 

@@ -111,6 +111,111 @@ describe('オブジェクトスナップ', () => {
         assert.ok(near(s.wcsX, 30) && near(s.wcsY, 0));
     });
 
+    // ---- 垂線（2026-09-22: ポリライン・長方形・寸法・基点測定・円弧の向こう側に対応） ----
+    // 基点 (bx, by) を持つ入力の途中にする
+    function withBase(mode, bx, by) {
+        app.eval(`cmdState = _makeCmdState(); cmdState.mode = '${mode}'; cmdState.startWcs = { x: ${bx}, y: ${by} };
+            cmdState.points = [{ x: ${bx}, y: ${by} }]; cmdState.measBase = { x: ${bx}, y: ${by} }; cmdState.moveBase = { x: ${bx}, y: ${by} };`);
+    }
+
+    it('斜めのポリラインの区間へ、正確な垂線の足に吸着する（近接点より優先）', () => {
+        withBase('WAITING_LINE_P2', 0, 100);
+        // 区間 (0,0)-(100,50) への (0,100) からの垂線の足 = (40, 20)
+        const s = snapAt([{ type: 'PLINE', layer: 0, closed: false, points: [{ x: -50, y: -25 }, { x: 0, y: 0 }, { x: 100, y: 50 }] }], 40, 20, 3, 2);
+        assert.equal(s.type, '垂線');
+        assert.ok(near(s.wcsX, 40) && near(s.wcsY, 20), JSON.stringify(s));
+    });
+
+    it('閉じたポリラインの最後の辺（始点へ戻る辺）にも垂線が出る', () => {
+        withBase('WAITING_LINE_P2', -30, 10);
+        // 閉じる辺は (0,40)→(0,0)。(-30,10) からの足 = (0,10)（辺の中点 (0,20) とは別の位置）
+        const s = snapAt([{ type: 'PLINE', layer: 0, closed: true, points: [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 40 }, { x: 0, y: 40 }] }], 0, 10, 2, 2);
+        assert.equal(s.type, '垂線');
+        assert.ok(near(s.wcsX, 0) && near(s.wcsY, 10));
+    });
+
+    it('長方形の辺にも垂線が出て、中点は辺の中点・中央は「中心」になる', () => {
+        const rect = { type: 'RECTANG', layer: 0, x1: 0, y1: 0, x2: 60, y2: 40 };
+        withBase('WAITING_LINE_P2', 15, 100);
+        const perp = snapAt([rect], 15, 40, 2, 2);
+        assert.equal(perp.type, '垂線');
+        assert.ok(near(perp.wcsX, 15) && near(perp.wcsY, 40));
+        app.eval(`entities.length = 0; cmdState = _makeCmdState(); cmdState.mode = 'WAITING_LINE_P1';`);
+        const mid = snapAt([rect], 60, 20, -2, 2);   // 右辺の中点
+        assert.equal(mid.type, '中点');
+        assert.ok(near(mid.wcsX, 60) && near(mid.wcsY, 20));
+        app.eval('entities.length = 0;');
+        const cen = snapAt([rect], 30, 20, 2, 2);    // 長方形の中央
+        assert.equal(cen.type, '中心');
+    });
+
+    for (const [label, mode] of [['整列寸法の2点目', 'WAITING_DIMALN_P2'], ['平行寸法の2点目', 'WAITING_DIMLIN_P2'], ['基点測定', 'WAITING_DIMMEAS_TO']]) {
+        it(`${label}でも垂線に吸着する（点から線までの垂直な距離）`, () => {
+            withBase(mode, 30, 80);
+            const s = snapAt([{ type: 'LINE', layer: 0, x1: 0, y1: 0, x2: 100, y2: 0 }], 30, 0, 2, 1);
+            assert.equal(s.type, '垂線');
+            assert.ok(near(s.wcsX, 30) && near(s.wcsY, 0));
+        });
+    }
+
+    it('連続寸法は直列なら前の点、並列なら最初の点からの垂線', () => {
+        const line = [{ type: 'LINE', layer: 0, x1: 0, y1: 0, x2: 100, y2: 0 }];
+        app.eval(`cmdState = _makeCmdState(); cmdState.mode = 'WAITING_DIMCONT_NEXT'; cmdState.dimContType = 'SERIAL';
+            cmdState.dimContPoints = [{ x: 10, y: 50 }, { x: 20, y: 60 }, { x: 70, y: 60 }];`);
+        const serial = snapAt(line, 70, 0, 2, 1);
+        assert.equal(serial.type, '垂線');
+        assert.ok(near(serial.wcsX, 70));
+        app.eval(`entities.length = 0; cmdState.dimContType = 'PARALLEL';`);
+        const parallel = snapAt(line, 10, 0, 2, 1);
+        assert.equal(parallel.type, '垂線');
+        assert.ok(near(parallel.wcsX, 10));
+    });
+
+    it('円弧は向こう側の垂線にも吸着する（描かれている範囲だけ）', () => {
+        const arc = { type: 'ARC', layer: 0, cx: 0, cy: 0, radius: 50, startAngle: 0, endAngle: Math.PI, counterclockwise: true };
+        withBase('WAITING_LINE_P2', 0, -80);  // 円弧（上半分）の下側の外から
+        const s = snapAt([arc], 0, 50, 2, 1);  // 向こう側の足 (0, 50)
+        assert.equal(s.type, '垂線');
+        assert.ok(near(s.wcsX, 0) && near(s.wcsY, 50));
+        app.eval('entities.length = 0;');
+        const off = snapAt([arc], 0, -50, 2, 1); // 手前側 (0,-50) は描かれていない部分
+        assert.notEqual(off && off.type, '垂線');
+    });
+
+    it('線の上から引き始めたとき、始点そのものを垂線にしない', () => {
+        withBase('WAITING_LINE_P2', 30, 0);
+        app.eval('osnapState.near = false;');
+        const s = snapAt([{ type: 'LINE', layer: 0, x1: 0, y1: 0, x2: 100, y2: 0 }], 30, 0, 2, 1);
+        assert.notEqual(s && s.type, '垂線');
+    });
+
+    it('垂線の足が線分の外（延長線上）になるときは吸着しない', () => {
+        withBase('WAITING_LINE_P2', 150, 50);  // 足 (150,0) は線分 0..100 の外
+        const s = snapAt([{ type: 'LINE', layer: 0, x1: 0, y1: 0, x2: 100, y2: 0 }], 100, 0, -4, 1);
+        assert.notEqual(s && s.type, '垂線');
+    });
+
+    it('画面を回転していても垂線の足は同じ位置', () => {
+        app.eval('view.rotation = 0.6;');
+        withBase('WAITING_LINE_P2', 0, 100);
+        const s = snapAt([{ type: 'LINE', layer: 0, x1: 0, y1: 0, x2: 100, y2: 50 }], 40, 20, 2, 2);
+        assert.equal(s.type, '垂線');
+        assert.ok(near(s.wcsX, 40) && near(s.wcsY, 20));
+    });
+
+    it('頂点の多いポリラインでも、カーソルから遠い頂点は候補にしない', () => {
+        // 2万頂点の線（等高線を想定）。カーソルはその1点の近く
+        app.eval(`cmdState = _makeCmdState(); cmdState.mode = 'WAITING_LINE_P1';
+            const pts = []; for (let i = 0; i < 20000; i++) pts.push({ x: i * 10, y: (i % 2) * 5 });
+            window.__ents = [{ type: 'PLINE', layer: 0, closed: false, points: pts }];`);
+        const s = app.val(`(function(){ window.__ents.forEach(e => { e.bbox = calcBBox(e); entities.push(e); });
+            view.scale = 1; view.x = -50000; view.y = 300;
+            const w = { x: 50000, y: 0 }; const sc = wcsToScreen(w.x, w.y);
+            const t0 = performance.now(); const r = findSnap(sc.x + 2, sc.y + 1, w.x + 2, w.y - 1); return { r, ms: performance.now() - t0 }; })()`);
+        assert.equal(s.r.type, '端点');
+        assert.ok(near(s.r.wcsX, 50000) && near(s.r.wcsY, 0));
+    });
+
     it('未捕捉エラーが起きない', () => {
         assert.deepEqual(app.errors(), []);
     });
