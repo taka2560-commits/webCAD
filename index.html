@@ -484,6 +484,16 @@
         .ts-sec { font-size:11px; font-weight:700; color:var(--dim); border-bottom:1px solid var(--border-2); padding-bottom:2px; }
         .ts-status { font-size:12px; color:#e0e0e0; display:flex; align-items:center; gap:6px; }
         .ts-dot { width:8px; height:8px; border-radius:50%; background:var(--highlight-color); box-shadow:0 0 6px var(--highlight-color); }
+        /* 杭打ち（📍）パネル: 距離・矢印は大きく（歩きながら読む） */
+        .stake-nav { display:flex; gap:6px; align-items:center; }
+        .stake-nav .prop-btn { flex:0 0 auto; margin-top:0; min-height:34px; padding:4px 10px; }
+        .stake-count { flex:1; min-width:0; text-align:center; font-size:12px; color:var(--dim); }
+        .stake-big { display:flex; align-items:center; gap:14px; }
+        .stake-arrow { width:84px; height:84px; flex:0 0 84px; }
+        .stake-dist { font-size:30px; font-weight:800; color:var(--cyan); font-family:Consolas,monospace; line-height:1.1; }
+        .stake-dir { font-size:12px; color:#e0e0e0; }
+        .stake-here { font-size:13px; font-weight:700; color:var(--green); }
+        .cogo-table tr.stake-cur td { background:rgba(0,255,255,0.12); }
     </style>
 </head>
 <body>
@@ -533,6 +543,7 @@
                 <button class="menu-item-btn" onclick="showCoordListPanel(); toggleTopMenu();">📍 座標一覧</button>
                 <button class="menu-item-btn" onclick="showCogoPanel(); toggleTopMenu();" title="求積（座標法）・逆計算・点の追加（方向角と距離）・交点">🧮 測量計算</button>
                 <button class="menu-item-btn" onclick="showTsPanel(); toggleTopMenu();" title="ソキアのトータルステーションと SDR ファイル・通信（USB・Bluetooth）で受け渡し">📡 TS連携</button>
+                <button class="menu-item-btn" onclick="showStakePanel(); toggleTopMenu();" title="杭を順に選び、現在地（GNSS）または器械点から、距離と向き・夾角を案内">📍 杭打ち</button>
                 <button class="menu-item-btn" onclick="toggleGnss(); toggleTopMenu();">🛰 現在地</button>
                 <button class="menu-item-btn" onclick="exportSima(); toggleTopMenu();">SIMA 出力</button>
                 <button class="menu-item-btn" onclick="exportCoordCsv(); toggleTopMenu();">座標CSV 出力</button>
@@ -827,6 +838,7 @@
     <script src="cad-cogo-ui.js"></script>
     <script src="cad-sdr.js"></script>
     <script src="cad-ts.js"></script>
+    <script src="cad-stake.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-boot.js"></script>

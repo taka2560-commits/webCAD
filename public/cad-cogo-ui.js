@@ -25,6 +25,13 @@ const _cogo = {
     lastName: '', // 最後に追加した点名（次の名前の案に使う）
 };
 
+// 点の欄を持つパネル（測量計算・杭打ち）。slots: いまの欄の並び、render: パネル全体、update: 結果だけ描き直す
+const COGO_PICK_OWNERS = {
+    cogo: { slots: () => _cogoTabSlots(), render: () => _cogoRender(), update: () => _cogoUpdateResult() },
+};
+function cogoRegisterPickOwner(name, def) { COGO_PICK_OWNERS[name] = def; }
+function _cogoOwner(name) { return COGO_PICK_OWNERS[name] || COGO_PICK_OWNERS.cogo; }
+
 // ===== パネル =====
 window.showCogoPanel = function(tab) {
     if(tab) _cogo.tab = tab;
@@ -92,21 +99,22 @@ function _cogoSlotValue(key) {
     const s = _cogo.slots[key], sv = _cogoSlotSurvey(key);
     return s ? (s.name || `${cogoFix(sv.X, 3)},${cogoFix(sv.Y, 3)}`) : '';
 }
-function _cogoSlotHtml(key) {
+function _cogoSlotHtml(key, owner) {
+    const own = owner ? `, '${owner}'` : '';
     return `<div class="cogo-slot">
         <div class="prop-row cogo-row"><div class="prop-label cogo-label">${COGO_SLOT_LABELS[key][0]}</div>
             <input id="cogo-slot-${key}" class="prop-val" type="text" autocomplete="off" placeholder="点名 または X,Y" value="${escapeHtml(_cogoSlotValue(key))}"
-                onchange="cogoSlotTyped('${key}', this.value)" style="min-width:0;">
-            <button class="prop-btn btn-sub cogo-pick" onclick="cogoPick('${key}')" title="図面でなぞって指定">📍</button></div>
+                onchange="cogoSlotTyped('${key}', this.value${own})" style="min-width:0;">
+            <button class="prop-btn btn-sub cogo-pick" onclick="cogoPick('${key}'${own})" title="図面でなぞって指定">📍</button></div>
         <div id="cogo-xy-${key}" class="cogo-xy">${_cogoSlotXyText(key)}</div></div>`;
 }
-function _cogoSlotsHtml() { return _cogoTabSlots().map(_cogoSlotHtml).join(''); }
+function _cogoSlotsHtml() { return _cogoTabSlots().map((k) => _cogoSlotHtml(k)).join(''); }
 function _cogoRefreshSlot(key) {
     const inp = document.getElementById('cogo-slot-' + key); if(inp) inp.value = _cogoSlotValue(key);
     const xy = document.getElementById('cogo-xy-' + key); if(xy) xy.innerHTML = _cogoSlotXyText(key);
 }
 // 欄に点名・点番号・「X,Y」を入れたとき
-window.cogoSlotTyped = function(key, text) {
+window.cogoSlotTyped = function(key, text, owner) {
     const t = String(text || '').trim();
     if(!t) { delete _cogo.slots[key]; }
     else {
@@ -116,16 +124,16 @@ window.cogoSlotTyped = function(key, text) {
         _cogo.slots[key] = { x: p.x, y: p.y, name: p.name || '', snapped: true };
     }
     _cogoRefreshSlot(key);
-    _cogoUpdateResult();
+    _cogoOwner(owner).update();
     renderOverlay();
 };
 
 // ===== 図面での点の指定 =====
 // 押した欄から、そのタブで空いている欄へ順に指定していく
-window.cogoPick = function(key) {
-    const keys = _cogoTabSlots(), i0 = keys.indexOf(key);
+window.cogoPick = function(key, owner) {
+    const keys = _cogoOwner(owner).slots(), i0 = keys.indexOf(key);
     const chain = [key].concat(i0 >= 0 ? keys.slice(i0 + 1).filter((k) => !_cogo.slots[k]) : []);
-    _cogo.pick = { keys: chain, i: 0 };
+    _cogo.pick = { keys: chain, i: 0, owner: owner || 'cogo' };
     _cogoStartPick();
 };
 function _cogoShowBar(withConfirm) {
@@ -138,7 +146,7 @@ function _cogoShowBar(withConfirm) {
     if(typeof _hideMeasureButtons === 'function') _hideMeasureButtons();
 }
 // スマホでは図面が見えるようにパネルを隠す（指定が終わるとまた開く）
-function _cogoPanelDuringPick() { if(window.innerWidth >= 700) _cogoRender(); else hidePropertyPanel(); }
+function _cogoPanelDuringPick() { if(window.innerWidth >= 700) _cogoOwner(_cogo.pick && _cogo.pick.owner).render(); else hidePropertyPanel(); }
 function _cogoStartPick() {
     const p = _cogo.pick, key = p.keys[p.i], label = COGO_SLOT_LABELS[key][0];
     resetCommand();
@@ -160,7 +168,7 @@ window.cogoPickLot = function() {
 };
 function cogoIsPicking() { return cmdState.mode === COGO_PICK_MODE || cmdState.mode === COGO_LOT_MODE; }
 // ❌終了・Esc で指定をやめたとき: パネルに戻る
-function cogoPickCancelled() { _cogo.pick = null; _cogoRender(); render(); }
+function cogoPickCancelled() { const own = _cogoOwner(_cogo.pick && _cogo.pick.owner); _cogo.pick = null; own.render(); render(); }
 
 // 点の入力（cad-command.js の点入力から呼ばれる）。処理したら true
 function handleCogoPointInput(mode, wcs) {
@@ -176,10 +184,11 @@ function handleCogoPointInput(mode, wcs) {
     if(navigator.vibrate) navigator.vibrate(20);
     p.i++;
     if(p.i < p.keys.length) { _cogoStartPick(); return true; }
+    const own = _cogoOwner(p.owner);
     _cogo.pick = null;
     resetCommand();
-    if(_cogo.tab === 'inv') _cogoLogInverse();
-    _cogoRender();
+    if(p.owner === 'cogo' && _cogo.tab === 'inv') _cogoLogInverse();
+    own.render();
     render();
     return true;
 }
@@ -487,7 +496,7 @@ window.cogoAddPoint = function() {
 
 // ===== 重ね表示（点の欄の印・補助線・計算した点） =====
 function _cogoOverlayOn() {
-    if(cogoIsPicking()) return true;
+    if(cogoIsPicking()) return cmdState.mode === COGO_LOT_MODE || !_cogo.pick || _cogo.pick.owner === 'cogo';
     const p = document.getElementById('property-panel'), t = document.getElementById('property-panel-title');
     return !!(p && p.style.display === 'flex' && t && t.textContent === COGO_TITLE);
 }

@@ -104,6 +104,7 @@ function _drawFrame(overlayOnly) {
         if(typeof drawMeasureOverlay === 'function') drawMeasureOverlay(); // 基点測定（基点からのX・Y・直線距離）
         if(typeof drawCogoOverlay === 'function') drawCogoOverlay(); // 測量計算（指定した点・補助線・計算した点）
         if(typeof drawTsOverlay === 'function') drawTsOverlay(); // TS から受信した、取り込み前の点
+        if(typeof drawStakeOverlay === 'function') drawStakeOverlay(); // 杭打ち（順番の杭・済み・いまの杭・案内の線）
         
         // 範囲選択矩形描画
         drawSelectionRect();

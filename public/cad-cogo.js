@@ -155,46 +155,53 @@ function _cogoTextW(s, h) {
     return w * h;
 }
 /**
- * 求積表を図面の図形（線と文字）で作る。
- * opt: { left, top（表の左上・図面の座標）, h（文字の高さ・図面の単位）, layer, title, landMode }
+ * 線と文字の表（題・見出し・行・合計欄）を図面の図形で作る（求積表・杭打ち表で共通）。
+ * opt: { left, top（表の左上・図面の座標）, h（文字の高さ・図面の単位）, layer, title,
+ *        cols: [{ head, align }], rows: [[文字, …]], foot: [[見出し, 値], …], footCol（合計の値の列。見出しはその左の列すべてにまたがる） }
  * 戻り値: { entities, width, height }
  */
-function cogoAreaTableEntities(t, opt) {
-    const h = opt.h, pad = h * 0.5, rowH = h * 1.8, layer = opt.layer;
-    const foot = cogoAreaFooter(t, opt.landMode);
-    const widths = COGO_AREA_COLS.map((c, i) => {
+function cogoGridTable(opt) {
+    const h = opt.h, pad = h * 0.5, rowH = h * 1.8, layer = opt.layer, cols = opt.cols, foot = opt.foot || [], fc = opt.footCol;
+    const widths = cols.map((c, i) => {
         let w = _cogoTextW(c.head, h);
-        t.rows.forEach((r) => { w = Math.max(w, _cogoTextW(c.v(r), h)); });
-        if(i === 4) foot.forEach((f) => { w = Math.max(w, _cogoTextW(f[1], h)); });
+        opt.rows.forEach((r) => { w = Math.max(w, _cogoTextW(r[i], h)); });
+        if(i === fc) foot.forEach((f) => { w = Math.max(w, _cogoTextW(f[1], h)); });
         return w + pad * 2;
     });
-    // 合計欄の見出しは左の4列にまたがる。入りきらなければ最初の列を広げる
-    const labelW = Math.max(...foot.map((f) => _cogoTextW(f[0], h))) + pad * 2;
-    const left4 = widths[0] + widths[1] + widths[2] + widths[3];
-    if(left4 < labelW) widths[0] += labelW - left4;
+    // 合計欄の見出しが入りきらなければ最初の列を広げる
+    if(foot.length && fc > 0) {
+        const labelW = Math.max(...foot.map((f) => _cogoTextW(f[0], h))) + pad * 2;
+        const leftW = widths.slice(0, fc).reduce((a, b) => a + b, 0);
+        if(leftW < labelW) widths[0] += labelW - leftW;
+    }
     const xs = [opt.left];
     widths.forEach((w) => xs.push(xs[xs.length - 1] + w));
     const right = xs[xs.length - 1];
-    const nData = t.rows.length, nRows = 2 + nData + foot.length; // 題・見出し・点・合計
+    const nData = opt.rows.length, nRows = 2 + nData + foot.length; // 題・見出し・行・合計
     const ys = [];
     for(let i = 0; i <= nRows; i++) ys.push(opt.top - i * rowH);
     const out = [];
     const line = (x1, y1, x2, y2) => out.push({ type: 'LINE', layer, color: null, x1, y1, x2, y2 });
-    const text = (s, x, y, align) => out.push({ type: 'TEXT', layer, color: null, x, y, text: String(s), height: h, halign: align, valign: 'middle' });
+    const text = (s, x, y, align) => { if(s !== '' && s !== null && s !== undefined) out.push({ type: 'TEXT', layer, color: null, x, y, text: String(s), height: h, halign: align, valign: 'middle' }); };
     for(let i = 0; i <= nRows; i++) line(opt.left, ys[i], right, ys[i]);
     line(opt.left, ys[0], opt.left, ys[nRows]); line(right, ys[0], right, ys[nRows]);
     const dataEnd = 2 + nData;
     for(let c = 1; c < widths.length; c++) line(xs[c], ys[1], xs[c], ys[dataEnd]);
-    line(xs[4], ys[dataEnd], xs[4], ys[nRows]); line(xs[5], ys[dataEnd], xs[5], ys[nRows]);
+    if(foot.length) { line(xs[fc], ys[dataEnd], xs[fc], ys[nRows]); if(fc + 1 < widths.length) line(xs[fc + 1], ys[dataEnd], xs[fc + 1], ys[nRows]); }
     const mid = (k) => (ys[k] + ys[k + 1]) / 2;
-    text('座標求積表' + (opt.title ? '　' + opt.title : ''), opt.left + pad, mid(0), 'left');
-    COGO_AREA_COLS.forEach((c, i) => text(c.head, (xs[i] + xs[i + 1]) / 2, mid(1), 'center'));
-    t.rows.forEach((r, k) => COGO_AREA_COLS.forEach((c, i) => {
-        const x = c.align === 'center' ? (xs[i] + xs[i + 1]) / 2 : xs[i + 1] - pad;
-        text(c.v(r), x, mid(2 + k), c.align);
+    text(opt.title, opt.left + pad, mid(0), 'left');
+    cols.forEach((c, i) => text(c.head, (xs[i] + xs[i + 1]) / 2, mid(1), 'center'));
+    opt.rows.forEach((r, k) => cols.forEach((c, i) => {
+        const x = c.align === 'center' ? (xs[i] + xs[i + 1]) / 2 : c.align === 'left' ? xs[i] + pad : xs[i + 1] - pad;
+        text(r[i], x, mid(2 + k), c.align);
     }));
-    foot.forEach(([k, v], j) => { text(k, xs[4] - pad, mid(dataEnd + j), 'right'); text(v, xs[5] - pad, mid(dataEnd + j), 'right'); });
+    foot.forEach(([k, v], j) => { text(k, xs[fc] - pad, mid(dataEnd + j), 'right'); text(v, xs[fc + 1] - pad, mid(dataEnd + j), 'right'); });
     return { entities: out, width: right - opt.left, height: nRows * rowH };
+}
+// 求積表を図面の図形で作る。opt: { left, top, h, layer, title, landMode }
+function cogoAreaTableEntities(t, opt) {
+    return cogoGridTable({ left: opt.left, top: opt.top, h: opt.h, layer: opt.layer, title: '座標求積表' + (opt.title ? '　' + opt.title : ''),
+        cols: COGO_AREA_COLS, rows: t.rows.map((r) => COGO_AREA_COLS.map((c) => c.v(r))), foot: cogoAreaFooter(t, opt.landMode), footCol: 4 });
 }
 
 // 辺長の文字（辺の中央・区画の外側・辺に沿った向き）。wpts: 図面の座標の頂点

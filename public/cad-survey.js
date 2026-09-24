@@ -678,6 +678,7 @@ window.stopGnss = function() {
     _gnss.on = false; _gnss.watchId = null; _gnss.fix = null; _gnss.follow = false;
     const bar = document.getElementById('gnss-bar'); if(bar) bar.style.display = 'none';
     renderOverlay();
+    if(typeof stakeOnGnss === 'function') stakeOnGnss();
     addCommandLog('-> 現在地の表示を終了');
 };
 function _applyGnssFix(ll) {
@@ -694,6 +695,7 @@ function _onGnssPosition(pos) {
     _gnss.lastLatLon = { lat: c.latitude, lon: c.longitude, acc: c.accuracy || 0, time: pos.timestamp || Date.now() };
     const fix = _applyGnssFix(_gnss.lastLatLon);
     if(!fix) return;
+    if(typeof stakeOnGnss === 'function') stakeOnGnss(); // 杭打ちナビ（現在地から）
     if(!_gnss.centered) {
         _gnss.centered = true;
         window.centerOnGnss();
