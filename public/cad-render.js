@@ -109,6 +109,8 @@ function _drawFrame(overlayOnly) {
         if(typeof drawPrintOverlay === 'function') drawPrintOverlay(); // 印刷の枠（用紙・表題欄・方位記号の場所）
         if(typeof drawUnderlayOverlay === 'function') drawUnderlayOverlay(); // 下絵を2点で合わせる途中の印
         if(typeof drawPhotoPins === 'function') drawPhotoPins(); // 現場写真・メモのピン
+        if(typeof drawEditOverlay === 'function') drawEditOverlay(); // 鏡像・尺度変更・配列などの途中の形
+        if(typeof drawGripOverlay === 'function') drawGripOverlay(); // 選んだ図形のグリップ（点を動かす）
         
         // 範囲選択矩形描画
         drawSelectionRect();

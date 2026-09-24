@@ -552,7 +552,7 @@ function _adoptIdleHighlight() {
         cmdState.selectedIndices = [cmdState.highlightIdx];
     }
 }
-const _SELECTION_EDIT_COMMANDS = ['E', 'ERASE', 'M', 'MOVE', 'CO', 'COPY', 'RO', 'ROTATE'];
+const _SELECTION_EDIT_COMMANDS = ['E', 'ERASE', 'M', 'MOVE', 'CO', 'COPY', 'RO', 'ROTATE', 'MI', 'MIRROR', 'SC', 'SCALE', 'AR', 'ARRAY', 'J', 'JOIN'];
 function issueCommand(cmd) {
     if(_SELECTION_EDIT_COMMANDS.includes(String(cmd).toUpperCase())) _adoptIdleHighlight();
     cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd);

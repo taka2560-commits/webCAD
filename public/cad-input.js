@@ -5,6 +5,9 @@
 
 // ===== イベントリスナー =====
 let lastTouchTime = 0;
+// 編集コマンド（cad-edit.js）の、図形をタップで選ぶ段階・範囲選択で選べる段階
+function _isEditPick(m) { return typeof editIsPickMode === 'function' && editIsPickMode(m); }
+function _isEditArea(m) { return typeof editIsAreaSelectMode === 'function' && editIsAreaSelectMode(m); }
 function updateMousePos(e) {
     const rect=canvas.getBoundingClientRect(); mouse.screenX=e.clientX-rect.left; mouse.screenY=e.clientY-rect.top;
     const wcs=screenToWcs(mouse.screenX,mouse.screenY); mouse.wcsX=wcs.x; mouse.wcsY=wcs.y;
@@ -25,14 +28,14 @@ function setupEventListeners() {
         }
         const hlBefore = cmdState.highlightIdx;
         // コマンドモード中のみスナップ計算（IDLE時は軽量化のためスキップ。座標読取モードでは座標を読むため常に計算）
-        const isSelectMode = ['WAITING_ERASE_SELECT','WAITING_MOVE_SELECT','WAITING_COPY_SELECT','WAITING_OFFSET_SELECT','WAITING_OFFSET_SIDE'].includes(cmdState.mode);
+        const isSelectMode = ['WAITING_ERASE_SELECT','WAITING_MOVE_SELECT','WAITING_COPY_SELECT','WAITING_OFFSET_SELECT','WAITING_OFFSET_SIDE'].includes(cmdState.mode) || _isEditPick(cmdState.mode);
         const isFullscreenMouse = document.body.classList.contains('fullscreen-mode');
         if((cmdState.mode !== 'IDLE' || isFullscreenMouse) && !isSelectMode && !mouse.isSelecting) {
             snapResult = findSnap(mouse.screenX, mouse.screenY, mouse.wcsX, mouse.wcsY);
         } else { snapResult = null; }
         if(snapResult){ const su=wcsToUcs(snapResult.wcsX,snapResult.wcsY); setCoordsDisplay(su.x, su.y); if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, su.x, su.y, snapResult.type); }
         else { setCoordsDisplay(mouse.ucsX, mouse.ucsY); if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(e.clientX, e.clientY, mouse.ucsX, mouse.ucsY, null); }
-        if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') {
+        if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT'||_isEditPick(cmdState.mode)) {
             if(!mouse.isSelecting) cmdState.highlightIdx=hitTestEntity(mouse.screenX,mouse.screenY);
         }
         // 図形の強調表示が変わったときだけ図形ごと描き直す（それ以外はカーソル・スナップ記号などの重ね表示だけ）
@@ -50,11 +53,13 @@ function setupEventListeners() {
             }
 
             const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
-            const isSelectMode = selectModes.includes(cmdState.mode);
+            const isSelectMode = selectModes.includes(cmdState.mode) || _isEditArea(cmdState.mode);
 
             if (cmdState.mode!=='IDLE' && !isSelectMode) { // Left click for point input when not in IDLE and not select mode
                 const pt=getInputPoint(); handlePointInput(pt, true);
             } else {
+                // 選んだ図形のグリップ（点を動かす。cad-grip.js）。押したまま動かして離すと、離した所へ動かす
+                if(cmdState.mode === 'IDLE' && typeof gripTap === 'function' && gripTap(mouse.screenX, mouse.screenY)) { mouse.gripGrab = { x: mouse.screenX, y: mouse.screenY }; return; }
                 // 現場写真・メモのピン（通常画面で何もしていないとき）
                 if(cmdState.mode === 'IDLE' && typeof photoPinTap === 'function' && photoPinTap(mouse.screenX, mouse.screenY)) return;
                 const idx = hitTestEntity(mouse.screenX, mouse.screenY);
@@ -94,6 +99,11 @@ function setupEventListeners() {
     });
     window.addEventListener('mouseup',(e)=>{
         if(e.button===1){ mouse.isPanning=false; render(); }
+        // グリップを押したまま動かして離した: 離した所へ動かす（動かさずに離したときは、つかんだまま次のクリックを待つ）
+        if(e.button===0 && mouse.gripGrab) {
+            const g = mouse.gripGrab; mouse.gripGrab = null;
+            if(cmdState.mode === 'WAITING_GRIP_DEST' && Math.hypot(mouse.screenX - g.x, mouse.screenY - g.y) > DRAG_THRESHOLD) handlePointInput(getInputPoint(), true);
+        }
         if(e.button===0 && mouse.isTrimming) {
             if(cmdState.mode === 'WAITING_EXTEND') executeExtend(cmdState.trimPath);
             else executeTrim(cmdState.trimPath);
@@ -155,7 +165,9 @@ function setupEventListeners() {
 
         if(selected.length > 0) {
             // 編集コマンド中の範囲選択処理
-            if(cmdState.mode === 'WAITING_ERASE_SELECT') {
+            if(typeof editAreaSelect === 'function' && editAreaSelect(selected)) {
+                // 鏡像・尺度変更・配列・結合の対象（cad-edit.js）
+            } else if(cmdState.mode === 'WAITING_ERASE_SELECT') {
                 // 一括削除
                 saveUndo();
                 const toRemove = selected.sort((a,b) => b-a);
@@ -180,7 +192,7 @@ function setupEventListeners() {
                 addCommandLog(`-> ${selected.length}個のオブジェクトを選択 (${isWindow ? '窓選択' : '交差選択'})`);
             }
             updatePropertiesPanel();
-        } else {
+        } else if(!_isEditArea(cmdState.mode)) { // 結合で選んでいる途中なら、何も入らなかった範囲選択で選択を消さない
             cmdState.selectedIndices = [];
             cmdState.highlightIdx = -1;
         }
@@ -239,9 +251,13 @@ function setupEventListeners() {
             const uc = wcsToUcs(wcs.x, wcs.y);
             mouse.ucsX = uc.x; mouse.ucsY = uc.y;
 
+            // 選んだ図形のグリップの上に指を置いたら、その点をつかむ（cad-grip.js）。
+            // そのままなぞって離すと離した所へ動かし、タップだけなら、次にタップした所へ動かす
+            touchState.gripGrab = cmdState.mode === 'IDLE' && !document.body.classList.contains('fullscreen-mode') && typeof gripTap === 'function' && gripTap(tx, ty);
+
             // 指を置いた位置でスナップを取り直す（動かさずにタップしたときに前の点が残らないように）
             const isFullscreenStart = document.body.classList.contains('fullscreen-mode');
-            const isSelectModeStart = cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT'||cmdState.mode==='WAITING_OFFSET_SIDE';
+            const isSelectModeStart = cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT'||cmdState.mode==='WAITING_OFFSET_SIDE'||_isEditPick(cmdState.mode);
             if(isFullscreenStart || (cmdState.mode !== 'IDLE' && !isSelectModeStart)) snapResult = findSnap(tx, ty, mouse.wcsX, mouse.wcsY);
             else snapResult = null;
 
@@ -249,13 +265,14 @@ function setupEventListeners() {
             if(cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
                 touchState.isTrimming = true;
                 cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];
-            } else if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT') {
+            } else if(cmdState.mode==='WAITING_ERASE_SELECT'||cmdState.mode==='WAITING_MOVE_SELECT'||cmdState.mode==='WAITING_COPY_SELECT'||cmdState.mode==='WAITING_OFFSET_SELECT'||_isEditPick(cmdState.mode)) {
                 cmdState.highlightIdx = hitTestEntity(tx, ty);
             }
 
             // 長押しタイマーの設定 (0.6秒)。文字・寸法を長押しすると削除する（通常画面の待機中だけ）
             const canLongPressDelete = () => cmdState.mode === 'IDLE' && !document.body.classList.contains('fullscreen-mode')
-                && !touchState.multi && !(typeof guideTourActive === 'function' && guideTourActive());
+                && !touchState.multi && !(typeof guideTourActive === 'function' && guideTourActive())
+                && !(typeof gripHitTest === 'function' && gripHitTest(touchState.startX, touchState.startY)); // グリップの上では消さない
             if(canLongPressDelete()) touchState.pressTimer = setTimeout(() => {
                 touchState.pressTimer = null;
                 if(!touchState.hasMoved && !touchState.isPinch && canLongPressDelete()) {
@@ -291,6 +308,8 @@ function setupEventListeners() {
             touchState.isPinch = true; touchState.showLoupe = false; touchState.isSelecting = false;
             // #5 2本指の操作になったら、指を全部離すまで点の入力・なぞり（トリム）・長押しをしない
             touchState.multi = true;
+            // グリップをつかんだ指のあとに2本目が触れた: 画面を動かしたいので、つかむのをやめる（図形は選んだまま）
+            if(touchState.gripGrab && cmdState.mode === 'WAITING_GRIP_DEST') { touchState.gripGrab = false; processCommand('CANCEL'); }
             if(touchState.pressTimer) { clearTimeout(touchState.pressTimer); touchState.pressTimer = null; }
             if(touchState.isTrimming) { touchState.isTrimming = false; cmdState.trimPath = []; }
             const t1 = e.touches[0], t2 = e.touches[1];
@@ -331,7 +350,7 @@ function setupEventListeners() {
                     } else {
                         // IDLEモードまたは編集コマンドのオブジェクト選択待ちの場合は範囲選択開始
                         const selectModes = ['IDLE', 'WAITING_ERASE_SELECT', 'WAITING_MOVE_SELECT', 'WAITING_COPY_SELECT', 'WAITING_ROTATE_SELECT'];
-                        if(selectModes.includes(cmdState.mode) && window.areaSelectEnabled) {
+                        if((selectModes.includes(cmdState.mode) || _isEditArea(cmdState.mode)) && window.areaSelectEnabled) {
                             touchState.isSelecting = true;
                             touchState.selStartX = touchState.startX;
                             touchState.selStartY = touchState.startY;
@@ -356,7 +375,7 @@ function setupEventListeners() {
                     snapResult = findSnap(tx, ty, mouse.wcsX, mouse.wcsY);
                 } else if(cmdState.mode !== 'IDLE' && !touchState.isSelecting) {
                     // 通常モード: コマンドモード中のみスナップ
-                    if(cmdState.mode!=='WAITING_ERASE_SELECT'&&cmdState.mode!=='WAITING_MOVE_SELECT'&&cmdState.mode!=='WAITING_COPY_SELECT'&&cmdState.mode!=='WAITING_OFFSET_SELECT'&&cmdState.mode!=='WAITING_OFFSET_SIDE') {
+                    if(cmdState.mode!=='WAITING_ERASE_SELECT'&&cmdState.mode!=='WAITING_MOVE_SELECT'&&cmdState.mode!=='WAITING_COPY_SELECT'&&cmdState.mode!=='WAITING_OFFSET_SELECT'&&cmdState.mode!=='WAITING_OFFSET_SIDE'&&!_isEditPick(cmdState.mode)) {
                         snapResult = findSnap(tx, ty, mouse.wcsX, mouse.wcsY);
                     }
                 }
@@ -429,8 +448,10 @@ function setupEventListeners() {
                 // 範囲選択完了
                 performSelection(touchState.selStartX, touchState.selStartY, mouse.screenX, mouse.screenY);
                 touchState.isSelecting = false;
+            } else if(touchState.gripGrab && !touchState.hasMoved) {
+                // グリップをタップしてつかんだだけ: 次にタップした所へ動かす（ここでは点を入れない）
             } else if(cmdState.mode !== 'IDLE') {
-                // コマンドモード中: 指を離した位置でポイント確定
+                // コマンドモード中: 指を離した位置でポイント確定（グリップをつかんでなぞったときは、離した所へ動かす）
                 const isDimMode = cmdState.mode.startsWith('WAITING_DIM');
                 
                 if(isDimMode) {
@@ -453,6 +474,7 @@ function setupEventListeners() {
 
             touchState.isDragging = false;
             touchState.hasMoved = false;
+            touchState.gripGrab = false;
             render();
         }
 

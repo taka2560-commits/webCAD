@@ -496,6 +496,8 @@
         .stake-here { font-size:13px; font-weight:700; color:var(--green); }
         .cogo-table tr.stake-cur td { background:rgba(0,255,255,0.12); }
         .stake-rec { font-size:12px; line-height:1.6; color:var(--green); border:1px solid rgba(0,255,136,0.35); border-radius:var(--r-sub); padding:6px 8px; font-family:Consolas,monospace; }
+        /* 作図・編集（鏡像・配列など）のパネル */
+        .edit-chk { display:flex; align-items:center; gap:6px; font-size:12px; color:#ddd; cursor:pointer; }
         /* 写真・メモ（📷）パネル */
         .ph-list { display:flex; flex-direction:column; gap:4px; max-height:46vh; overflow:auto; }
         .ph-row { display:flex; align-items:center; gap:8px; text-align:left; background:#2a2e35; color:#e0e0e0; border:1px solid var(--border-3); border-radius:var(--r-sub); padding:6px 8px; cursor:pointer; font:inherit; }
@@ -616,6 +618,12 @@
         <button class="tool-btn" onclick="toggleCommand('COPY')" title="コピー (CO)"><div class="tool-icon" style="color:#ffff00;">⊞</div><span class="tool-lbl">複写</span><div class="tool-cmd">COPY</div></button>
         <button class="tool-btn" onclick="toggleCommand('OFFSET')" title="オフセット (O)"><div class="tool-icon" style="color:#ffff00;">◱</div><span class="tool-lbl">オフセ</span><div class="tool-cmd">OFFSET</div></button>
         <button class="tool-btn" onclick="toggleCommand('ROTATE')" title="回転 (RO)"><div class="tool-icon" style="color:#ffff00;">↻</div><span class="tool-lbl">回転</span><div class="tool-cmd">ROTATE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('MIRROR')" title="鏡像 (MI)"><div class="tool-icon" style="color:#ffff00;">⇋</div><span class="tool-lbl">鏡像</span><div class="tool-cmd">MIRROR</div></button>
+        <button class="tool-btn" onclick="toggleCommand('SCALE')" title="尺度変更 (SC)"><div class="tool-icon" style="color:#ffff00;">⤢</div><span class="tool-lbl">尺度</span><div class="tool-cmd">SCALE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('ARRAY')" title="配列 (AR)"><div class="tool-icon" style="color:#ffff00;">▦</div><span class="tool-lbl">配列</span><div class="tool-cmd">ARRAY</div></button>
+        <button class="tool-btn" onclick="toggleCommand('BREAK')" title="分割 (BR) - 点で分ける・等分する"><div class="tool-icon" style="color:#ffff00;">÷</div><span class="tool-lbl">分割</span><div class="tool-cmd">BREAK</div></button>
+        <button class="tool-btn" onclick="toggleCommand('JOIN')" title="結合 (J) - つながった線を1本に"><div class="tool-icon" style="color:#ffff00;">⋈</div><span class="tool-lbl">結合</span><div class="tool-cmd">JOIN</div></button>
+        <button class="tool-btn" onclick="toggleCommand('FILLET')" title="角の処理 (F) - フィレット・面取り（隅切り）"><div class="tool-icon" style="color:#ffff00;">╭</div><span class="tool-lbl">角処理</span><div class="tool-cmd">FILLET</div></button>
         
         <div class="tool-sep"></div>
         
@@ -821,6 +829,10 @@
         <button class="sel-btn" onclick="issueCommand('MOVE')" title="選択図形を移動">✥ 移動</button>
         <button class="sel-btn" onclick="issueCommand('COPY')" title="選択図形を複写">⊞ 複写</button>
         <button class="sel-btn" onclick="issueCommand('ROTATE')" title="選択図形を回転">↻ 回転</button>
+        <button class="sel-btn" onclick="issueCommand('MIRROR')" title="選択図形を鏡に映す">⇋ 鏡像</button>
+        <button class="sel-btn" onclick="issueCommand('SCALE')" title="選択図形の大きさを変える">⤢ 尺度</button>
+        <button class="sel-btn" onclick="issueCommand('ARRAY')" title="選択図形を縦横・円形に並べる">▦ 配列</button>
+        <button class="sel-btn" onclick="issueCommand('JOIN')" title="選択した線をつないで1本にする">⋈ 結合</button>
         <button class="sel-btn warn" onclick="issueCommand('ERASE')" title="選択図形を削除">✖ 削除</button>
         <button class="sel-btn" onclick="hideSelectedEntities()" title="選択図形を非表示">🚫 隠す</button>
         <button id="sel-group-btn" class="sel-btn green" onclick="toggleGroupOfSelection()">🧩 グループ化</button>
@@ -864,6 +876,9 @@
     <script src="cad-print.js"></script>
     <script src="cad-underlay.js"></script>
     <script src="cad-photo.js"></script>
+    <script src="cad-editgeom.js"></script>
+    <script src="cad-edit.js"></script>
+    <script src="cad-grip.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-boot.js"></script>

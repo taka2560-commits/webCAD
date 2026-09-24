@@ -12,6 +12,7 @@ function applyOrtho(wcs) {
     if(m==='WAITING_LINE_P2' || m==='WAITING_CIRCLE_RADIUS' || m==='WAITING_RECT_P2') base = cmdState.startWcs;
     else if(m==='WAITING_PLINE_NEXT' && cmdState.points.length>0) base = cmdState.points[cmdState.points.length-1];
     else if(m==='WAITING_MOVE_DEST' || m==='WAITING_COPY_DEST') base = cmdState.moveBase;
+    else if(typeof editBaseWcs === 'function') base = editBaseWcs(m); // 鏡の線の2点目・点を動かす（cad-edit.js）
     
     if(!base) return wcs;
     
@@ -288,6 +289,9 @@ function _handlePointInputCore(wcs, fromMouse) {
         return;
     }
 
+    // 作図・編集（鏡像・尺度変更・配列・分割・結合・角の処理）は cad-edit.js、点を動かす（グリップ）は cad-grip.js へ
+    if(typeof handleEditPointInput === 'function' && handleEditPointInput(m, wcs)) return;
+    if(typeof handleGripPointInput === 'function' && handleGripPointInput(m, wcs)) return;
     // 測量計算の点の指定・区画のタップは cad-cogo-ui.js へ
     if(typeof handleCogoPointInput === 'function' && handleCogoPointInput(m, wcs)) return;
     // 寸法コマンドの入力処理は cad-dimension.js へ委譲
@@ -657,6 +661,8 @@ function processCommand(cmdText) {
         }
     }
     // WAITING_TEXT_STR was removed
+    // 作図・編集のコマンド（鏡像・尺度変更・配列・分割・結合・角の処理）と、その途中で入れる数（倍率・半径など）（cad-edit.js）
+    if(typeof processEditCommand === 'function' && processEditCommand(cmd)) return;
     if(cmd==='C' && cmdState.mode==='WAITING_PLINE_NEXT' && cmdState.points.length>=2) { finishPline(true); return; }
     if(cmd==='LAYOFF') {
         if (cmdState.mode === 'WAITING_LAYOFF_TOUCH') {
@@ -830,9 +836,11 @@ function processCommand(cmdText) {
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
     else if(cmd==='CANCEL') {
         const wasCogo = typeof cogoIsPicking === 'function' && cogoIsPicking(); // 測量計算の点の指定中なら、やめたあとパネルに戻る
+        const grip = cmdState.mode === 'WAITING_GRIP_DEST' ? cmdState.grip : null; // 点を動かすのをやめても、図形は選んだまま
         // ポリラインは描いた部分を残して終わる（2点以上あるとき）
         if(cmdState.mode === 'WAITING_PLINE_NEXT' && cmdState.points.length >= 2) finishPline(false); else resetCommand();
         if(wasCogo) cogoPickCancelled();
+        if(grip && typeof gripReselect === 'function') gripReselect(grip.id);
     }
     else if(cmd==='ERRORS'||cmd==='ERRLOG') { if(window.cadErrors) window.cadErrors.show(); }
     else if(typeof processSurveyCommand === 'function' && processSurveyCommand(cmd)) { /* 測量コマンド（座標一覧・SIMA/CSV出力・GNSS）処理済み */ }
@@ -855,6 +863,7 @@ window.plineCloseFromBar = function() {
     else if(typeof showToast === 'function') showToast('閉じるには3点以上が必要です');
 };
 window.dimConfirmPoint = function() {
+    if(typeof editConfirm === 'function' && editConfirm()) return; // 結合・配列の確定（cad-edit.js）
     if(cmdState.mode === 'WAITING_PLINE_NEXT') { finishPline(false); return; } // ポリラインの完了
     if(cmdState.mode.startsWith('WAITING_DIM')) {
         const pt = getInputPoint(); // スナップがあればスナップ座標、なければWCS座標

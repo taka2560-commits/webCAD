@@ -441,6 +441,8 @@ function getBaseWcs() {
     if(m === 'WAITING_DIMCONT_NEXT' && cp && cp.length > 0) return cmdState.dimContType === 'PARALLEL' ? cp[0] : cp[cp.length - 1];
     // 基点測定: 基点から（基点から線までの垂直な距離）
     if(m === 'WAITING_DIMMEAS_TO' && cmdState.measBase) return cmdState.measBase;
+    // 鏡の線の2点目は1点目から、点を動かすときはつかんだ点から（cad-edit.js）
+    if(typeof editBaseWcs === 'function') { const b = editBaseWcs(m); if(b) return b; }
     return null;
 }
 
