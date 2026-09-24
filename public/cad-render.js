@@ -94,6 +94,7 @@ function _drawFrame(overlayOnly) {
         } else {
         ctx.fillStyle=canvasBg; ctx.fillRect(0,0,canvas.width,canvas.height);
         const _t0 = performance.now();
+        if(typeof drawUnderlays === 'function') drawUnderlays(); // 背景の地図・下絵（図形の下）
         drawAxes(); drawEntities(); drawDimensions();
         _lastBaseMs = performance.now() - _t0;
         if(_lastBaseMs >= GESTURE_CACHE_MIN_MS) _saveFrameCache();
@@ -106,6 +107,7 @@ function _drawFrame(overlayOnly) {
         if(typeof drawTsOverlay === 'function') drawTsOverlay(); // TS から受信した、取り込み前の点
         if(typeof drawStakeOverlay === 'function') drawStakeOverlay(); // 杭打ち（順番の杭・済み・いまの杭・案内の線）
         if(typeof drawPrintOverlay === 'function') drawPrintOverlay(); // 印刷の枠（用紙・表題欄・方位記号の場所）
+        if(typeof drawUnderlayOverlay === 'function') drawUnderlayOverlay(); // 下絵を2点で合わせる途中の印
         
         // 範囲選択矩形描画
         drawSelectionRect();

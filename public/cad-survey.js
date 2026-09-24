@@ -601,6 +601,59 @@ function latLonToJprcs(latDeg, lonDeg, zoneNo) {
     }
     return { X: Abar * x - Sbar, Y: Abar * y };
 }
+/**
+ * 平面直角座標（m。X＝北、Y＝東）→ 緯度・経度（度、GRS80）。latLonToJprcs の逆。
+ * 国土地理院の換算式（Krüger 級数の逆。β は n の5次、δ は n の6次まで）による。
+ */
+function jprcsToLatLon(X, Y, zoneNo) {
+    const z = JPRCS_ZONES[zoneNo];
+    if(!z) throw new Error('系番号が正しくありません: ' + zoneNo);
+    const a = 6378137, F = 298.257222101, m0 = 0.9999;
+    const n = 1 / (2 * F - 1);
+    const n2 = n * n, n3 = n2 * n, n4 = n3 * n, n5 = n4 * n, n6 = n5 * n;
+    const rad = Math.PI / 180;
+    const phi0 = z.lat * rad, lam0 = z.lon * rad;
+    const A = [
+        1 + n2 / 4 + n4 / 64,
+        -1.5 * (n - n3 / 8 - n5 / 64),
+        (15 / 16) * (n2 - n4 / 4),
+        -(35 / 48) * (n3 - (5 / 16) * n5),
+        (315 / 512) * n4,
+        -(693 / 1280) * n5,
+    ];
+    const beta = [
+        0,
+        n / 2 - (2 / 3) * n2 + (37 / 96) * n3 - (1 / 360) * n4 - (81 / 512) * n5,
+        (1 / 48) * n2 + (1 / 15) * n3 - (437 / 1440) * n4 + (46 / 105) * n5,
+        (17 / 480) * n3 - (37 / 840) * n4 - (209 / 4480) * n5,
+        (4397 / 161280) * n4 - (11 / 504) * n5,
+        (4583 / 161280) * n5,
+    ];
+    const delta = [
+        0,
+        2 * n - (2 / 3) * n2 - 2 * n3 + (116 / 45) * n4 + (26 / 45) * n5 - (2854 / 675) * n6,
+        (7 / 3) * n2 - (8 / 5) * n3 - (227 / 45) * n4 + (2704 / 315) * n5 + (2323 / 945) * n6,
+        (56 / 15) * n3 - (136 / 35) * n4 - (1262 / 105) * n5 + (73814 / 2835) * n6,
+        (4279 / 630) * n4 - (332 / 35) * n5 - (399572 / 14175) * n6,
+        (4174 / 315) * n5 - (144838 / 6237) * n6,
+        (601676 / 22275) * n6,
+    ];
+    const Abar = (m0 * a / (1 + n)) * A[0];
+    let S = A[0] * phi0;
+    for(let j = 1; j <= 5; j++) S += A[j] * Math.sin(2 * j * phi0);
+    const Sbar = (m0 * a / (1 + n)) * S;
+    const xi = (X + Sbar) / Abar, eta = Y / Abar;
+    let xi2 = xi, eta2 = eta;
+    for(let j = 1; j <= 5; j++) {
+        xi2 -= beta[j] * Math.sin(2 * j * xi) * Math.cosh(2 * j * eta);
+        eta2 -= beta[j] * Math.cos(2 * j * xi) * Math.sinh(2 * j * eta);
+    }
+    const chi = Math.asin(Math.sin(xi2) / Math.cosh(eta2));
+    let phi = chi;
+    for(let j = 1; j <= 6; j++) phi += delta[j] * Math.sin(2 * j * chi);
+    const lam = lam0 + Math.atan(Math.sinh(eta2) / Math.cos(xi2));
+    return { lat: phi / rad, lon: lam / rad };
+}
 // 緯度・経度に最も近い原点の系（目安。系の境界は都府県単位なので、最終的には利用者が選ぶ）
 function guessJprcsZone(latDeg, lonDeg) {
     let best = 9, bestD = Infinity;
@@ -636,6 +689,7 @@ window.setGnssZone = function(no) {
     addCommandLog(`-> GNSSの座標系: ${ROMAN[no]}系`);
     const pp = document.getElementById('property-panel'); if(pp) pp.style.display = 'none';
     if(_gnss.fix && _gnss.lastLatLon) _applyGnssFix(_gnss.lastLatLon); // 系を変えたら現在地を計算し直す
+    if(typeof render === 'function') render(); // 背景の地図も系番号で位置が変わる
     if(_gnss.pendingStart) { _gnss.pendingStart = false; startGnss(); }
 };
 

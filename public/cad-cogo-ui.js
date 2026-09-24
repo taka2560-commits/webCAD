@@ -25,7 +25,8 @@ const _cogo = {
     lastName: '', // 最後に追加した点名（次の名前の案に使う）
 };
 
-// 点の欄を持つパネル（測量計算・杭打ち）。slots: いまの欄の並び、render: パネル全体、update: 結果だけ描き直す
+// 点の欄を持つパネル（測量計算・杭打ち・下絵）。slots: いまの欄の並び、render: パネル全体、update: 結果だけ描き直す、
+// raw: スナップせず、指・カーソルの位置そのものを使う欄（下絵の画像の上の点など）
 const COGO_PICK_OWNERS = {
     cogo: { slots: () => _cogoTabSlots(), render: () => _cogoRender(), update: () => _cogoUpdateResult() },
 };
@@ -177,10 +178,12 @@ function handleCogoPointInput(mode, wcs) {
     const p = _cogo.pick;
     if(!p) { resetCommand(); return true; }
     const key = p.keys[p.i];
-    const snapped = typeof snapActive === 'function' && snapActive() && Math.abs(snapResult.wcsX - wcs.x) < 1e-9 && Math.abs(snapResult.wcsY - wcs.y) < 1e-9;
+    const raw = (_cogoOwner(p.owner).raw || []).includes(key);
+    if(raw) wcs = { x: mouse.wcsX, y: mouse.wcsY };
+    const snapped = !raw && typeof snapActive === 'function' && snapActive() && Math.abs(snapResult.wcsX - wcs.x) < 1e-9 && Math.abs(snapResult.wcsY - wcs.y) < 1e-9;
     const s = _cogo.slots[key] = { x: wcs.x, y: wcs.y, name: cogoPointNameAt(wcs.x, wcs.y), snapped };
     const sv = wcsToSurvey(wcs.x, wcs.y);
-    addCommandLog(`-> ${COGO_SLOT_LABELS[key][0]}: ${s.name || '(点名なし)'} X ${cogoFix(sv.X, 3)} Y ${cogoFix(sv.Y, 3)}${snapped ? '' : '（スナップなし）'}`);
+    addCommandLog(`-> ${COGO_SLOT_LABELS[key][0]}: ${s.name || '(点名なし)'} X ${cogoFix(sv.X, 3)} Y ${cogoFix(sv.Y, 3)}${snapped || raw ? '' : '（スナップなし）'}`);
     if(navigator.vibrate) navigator.vibrate(20);
     p.i++;
     if(p.i < p.keys.length) { _cogoStartPick(); return true; }
