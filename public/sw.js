@@ -15,6 +15,10 @@ const SHELL_CACHE = 'webcad-shell-' + BUILD_ID;
 const ASSET_CACHE = 'webcad-assets';
 // 電波が弱い現場で HTML の取得を待ち続けないためのタイムアウト
 const NAV_TIMEOUT_MS = 4000;
+// 背景地図（国土地理院のタイル）: 見た範囲を保存し、電波の無い所でも表示する。多すぎるときは古いものから消す
+const TILE_CACHE = 'webcad-tiles';
+const TILE_MAX = 4000;
+let tilePuts = 0;
 
 const scopeUrl = (p) => new URL(p, self.registration.scope).href;
 // サーバーが Vary: Origin を返すと、Origin ヘッダー付きで要求されるモジュールスクリプト
@@ -42,7 +46,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     // 古い版のアプリ本体キャッシュを削除（旧形式 webcad-pwa-cache-vNN も含む）
     const names = await caches.keys();
-    await Promise.all(names.map((n) => (n !== SHELL_CACHE && n !== ASSET_CACHE) ? caches.delete(n) : undefined));
+    await Promise.all(names.map((n) => (n !== SHELL_CACHE && n !== ASSET_CACHE && n !== TILE_CACHE) ? caches.delete(n) : undefined));
     // 今の版で参照しないハッシュ付きファイルを削除
     const keep = new Set([...IMMUTABLE_ASSETS, ...LAZY_ASSETS].map(scopeUrl));
     const assets = await caches.open(ASSET_CACHE);
@@ -82,6 +86,14 @@ self.addEventListener('message', (event) => {
 
 function isCacheable(res) {
   return res && (res.status === 200 || res.type === 'opaque');
+}
+
+// 保存した地図が多すぎたら、古いものから消す（毎回ではなく 100枚ごとに確かめる）
+async function trimTiles(cache) {
+  if (++tilePuts % 100 !== 0) return;
+  const keys = await cache.keys();
+  const over = keys.length - TILE_MAX;
+  for (let i = 0; i < over + Math.floor(TILE_MAX * 0.1) && over > 0 && i < keys.length; i++) await cache.delete(keys[i]);
 }
 
 function isImmutableUrl(url) {
@@ -154,7 +166,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 4) クロスオリジン: スクリプト・フォント・スタイルのみキャッシュ優先で保存する
+  // 4) 背景地図のタイル: 保存したものを優先（CORS で読むので中身のある応答として保存できる）
+  if (url.hostname === 'cyberjapandata.gsi.go.jp' && url.pathname.startsWith('/xyz/')) {
+    event.respondWith((async () => {
+      const cache = await caches.open(TILE_CACHE);
+      const hit = await cache.match(req.url);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res && res.status === 200 && res.type !== 'opaque') {
+        cache.put(req.url, res.clone()).then(() => trimTiles(cache)).catch(() => {});
+      }
+      return res;
+    })());
+    return;
+  }
+
+  // 5) クロスオリジン: スクリプト・フォント・スタイルのみキャッシュ優先で保存する
   if (['script', 'style', 'font'].includes(req.destination)) {
     event.respondWith(
       caches.match(req, MATCH).then((cached) => cached || fetch(req).then((res) => {

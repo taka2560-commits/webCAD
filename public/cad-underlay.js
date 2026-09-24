@@ -85,6 +85,7 @@ function _ulTile(type, z, x, y) {
     if(t) return t;
     if(_ul.tiles.size > 400) _ul.tiles.delete(_ul.tiles.keys().next().value); // 古いものから捨てる
     const img = new window.Image();
+    img.crossOrigin = 'anonymous'; // 地理院タイルは CORS に対応（保存できる形で読み、図面の画面も汚さない）
     t = { img, ok: false, err: false };
     img.onload = () => { t.ok = true; _ulScheduleRender(); };
     img.onerror = () => { t.err = true; _ulWarnOnce('net', '地図を読み込めません（インターネットの接続を確かめてください）'); };
@@ -197,10 +198,48 @@ async function ulLoadImageFile(file) {
 }
 window.ulPickImage = function() {
     const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/*';
-    inp.onchange = () => { if(inp.files && inp.files[0]) ulLoadImageFile(inp.files[0]); };
+    inp.type = 'file'; inp.accept = 'image/*,application/pdf,.pdf';
+    inp.onchange = () => {
+        const f = inp.files && inp.files[0];
+        if(!f) return;
+        if(/\.pdf$/i.test(f.name) || f.type === 'application/pdf') ulLoadPdfFile(f); else ulLoadImageFile(f);
+    };
     inp.click();
 };
+// PDF の1ページを画像にして下絵にする（pdf.js。長辺 UL_MAX_PX まで。ページが複数なら聞く）
+async function ulLoadPdfFile(file) {
+    try {
+        if(typeof window.loadPdfJs !== 'function') throw new Error('PDF 表示エンジンがありません');
+        showToast('PDF を読み込んでいます…', 2000);
+        const pdfjs = await window.loadPdfJs();
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+        let pageNo = 1;
+        if(doc.numPages > 1) {
+            const a = window.prompt(`何ページ目を下絵にしますか？（1〜${doc.numPages}）`, '1');
+            if(a === null) return false;
+            pageNo = Math.min(doc.numPages, Math.max(1, parseInt(cogoHalfWidth(a), 10) || 1));
+        }
+        const page = await doc.getPage(pageNo);
+        const vp1 = page.getViewport({ scale: 1 });
+        const vp = page.getViewport({ scale: Math.min(6, UL_MAX_PX / Math.max(vp1.width, vp1.height)) });
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(vp.width)); cv.height = Math.max(1, Math.round(vp.height));
+        const g = cv.getContext('2d');
+        g.fillStyle = '#ffffff'; g.fillRect(0, 0, cv.width, cv.height);
+        await page.render({ canvasContext: g, viewport: vp }).promise;
+        const blob = await new Promise((r) => cv.toBlob(r, 'image/png')); // 図面の線がにじまないよう PNG
+        const src = await _ulDecode(blob);
+        ulSetImage(src, cv.width, cv.height, { mime: 'image/png', data: await blob.arrayBuffer(), name: `${file.name}（${pageNo}ページ）` });
+        await ulSaveImage();
+        addCommandLog(`-> PDF を下絵にしました: ${file.name} ${pageNo}ページ（${cv.width}×${cv.height}）`);
+        showToast('PDF を下絵にしました。「📍 2点で合わせる」で図面に重ねます', 3500);
+        if(_ulPanelOpen()) _ulRender();
+        return true;
+    } catch(e) {
+        showToast('PDF を読み込めませんでした: ' + e.message, 4500);
+        return false;
+    }
+}
 // 端末に保存（自動保存の領域）。消したときは空にする
 async function ulSaveImage() {
     const u = _ul.img;
@@ -235,11 +274,12 @@ function _ulRender() {
         seg(o.map, [['none', 'なし']].concat(Object.keys(UL_MAPS).map((k) => [k, UL_MAPS[k].name])), 'ulSetMap') +
         row('濃さ', range('ul-map-op', o.mapOpacity, 'ulSetMapOpacity')) +
         row('系番号', `<div style="flex:1;font-size:12px;">${zone ? ROMAN[zone] + '系' : '<span style="color:#ffcc00;">未設定</span>'}</div><button class="prop-btn btn-sub cogo-pick" onclick="showGnssZonePanel(false)">選ぶ</button>`) +
-        _cogoNote('図面の座標を平面直角座標として、地図を下に重ねます（系番号は 🛰現在地 と同じ設定）。インターネットにつながっているときに表示します。出典: 地理院タイル') +
+        _cogoNote('図面の座標を平面直角座標として、地図を下に重ねます（系番号は 🛰現在地 と同じ設定）。一度見た範囲の地図は端末に保存され、電波の無い所でも表示できます。出典: 地理院タイル') +
+        `<div class="prop-row cogo-row"><div class="prop-label cogo-label">保存した地図</div><div id="ul-tile-count" style="flex:1;font-size:12px;">…</div><button class="prop-btn btn-sub cogo-pick" onclick="ulClearTiles()">消す</button></div>` +
         '<div class="ts-sec">下絵（画像）</div>';
     if(!u) {
-        h += '<button class="prop-btn" onclick="ulPickImage()">📁 画像を読み込む</button>' +
-            _cogoNote('地積測量図のスキャン・写真などを図面の下に表示します。読み込んだら「2点で合わせる」で、画像の上の点を図面の同じ点に重ねます（PDF は画像にしてから読み込みます）。');
+        h += '<button class="prop-btn" onclick="ulPickImage()">📁 画像・PDF を読み込む</button>' +
+            _cogoNote('地積測量図・公図のスキャン（画像・PDF）や写真を図面の下に表示します。読み込んだら「2点で合わせる」で、画像の上の点を図面の同じ点に重ねます。PDF は選んだ1ページを画像にして使います（はじめて PDF を開くときは、表示エンジンの読み込みに通信があります）。');
     } else {
         h += row('画像', `<div style="flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(u.name || '下絵')}（${u.w}×${u.h}）</div>`) +
             row('濃さ', range('ul-img-op', u.opacity, 'ulSetImageOpacity')) +
@@ -248,7 +288,25 @@ function _ulRender() {
             _cogoNote('2点で合わせる: 画像の上の点1 → 図面の点1 → 画像の点2 → 図面の点2 の順に、なぞって ☑確定（図面の点は測点に吸い付きます）。離れた2点を選ぶと正確です。');
     }
     showPropertyPanel(UL_TITLE, h);
+    ulTileCacheCount().then((n) => { const el = document.getElementById('ul-tile-count'); if(el) el.textContent = n === null ? '（この端末では保存しません）' : `${n}枚`; });
 }
+// 端末に保存した地図のタイルの枚数（アプリとして動いていて保存できないときは null）
+const UL_TILE_CACHE = 'webcad-tiles';
+async function ulTileCacheCount() {
+    try {
+        if(typeof window.caches === 'undefined') return null;
+        const c = await window.caches.open(UL_TILE_CACHE);
+        return (await c.keys()).length;
+    } catch { return null; }
+}
+window.ulClearTiles = async function() {
+    if(!confirm('端末に保存した地図を消しますか？（電波がある所では、見るとまた保存されます）')) return;
+    try { if(typeof window.caches !== 'undefined') await window.caches.delete(UL_TILE_CACHE); } catch { /* 消せなくても続行 */ }
+    _ul.tiles.clear();
+    showToast('保存した地図を消しました', 2500);
+    if(_ulPanelOpen()) _ulRender();
+    render();
+};
 window.ulSetMap = function(v) {
     const o = ulOpts();
     o.map = UL_MAPS[v] ? v : 'none';

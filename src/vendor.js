@@ -21,4 +21,22 @@ window.loadLibreDwg = function () {
     return _libreDwgPromise;
 };
 
+// PDF を下絵にするときの PDF 表示エンジン（pdf.js。古い端末でも動く legacy 版）。これも使うときに初めて読み込む
+let _pdfjsPromise = null;
+window.loadPdfJs = function () {
+    if (!_pdfjsPromise) {
+        _pdfjsPromise = Promise.all([
+            import('pdfjs-dist/legacy/build/pdf.min.mjs'),
+            import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
+        ]).then(([pdfjs, worker]) => {
+            pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+            return pdfjs;
+        }).catch((err) => {
+            _pdfjsPromise = null; // 失敗時は次回やり直せるようにする
+            throw err;
+        });
+    }
+    return _pdfjsPromise;
+};
+
 window.dispatchEvent(new Event('webcad-vendor-ready'));

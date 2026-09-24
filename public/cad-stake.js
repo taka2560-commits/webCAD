@@ -4,15 +4,17 @@
 //               スマホの GNSS は数 m ずれるので、杭のおおよその場所を探す用途（境界標を探す など）。
 //   器械点から: 器械点と後視点から、杭の夾角（後視を 0° とした右回り）・方向角・水平距離・高低差。杭打ち表（CSV・図面に置く）。
 // 点の欄（器械点・後視点・杭）は測量計算（cad-cogo-ui.js）と同じ: 📍 でなぞって ☑確定、または点名・「X,Y」。
+// 杭打ちの記録: 「✓ 済」で、現在地から案内しているときは現在地と杭の差（実測 − 計画）・精度・日時を、その測点の図形（e.stake）に残す。
+//   図面と一緒に保存され、↩ で戻せる。済みの印もこの記録から決まる。記録は CSV に出せる。
 
 const STAKE_TITLE = '📍 杭打ち';
 const STAKE_DIRS = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
 Object.assign(COGO_SLOT_LABELS, { KT: ['杭', '杭'], KS: ['器械点', '器'], KB: ['後視点', '後'] });
 const _stake = {
     mode: 'gnss',     // 'gnss'（現在地から）| 'ts'（器械点から）
-    list: [],         // 打つ杭の順番 [{ x, y, name, z }]（図面の座標）
+    list: [],         // 打つ杭の順番 [{ x, y, name, z, id（測点の図形） }]（図面の座標）
     idx: -1,
-    done: new Set(),  // 済んだ杭（座標のキー）
+    loose: new Map(), // 測点の図形が無い杭（座標で入れた杭）の記録（座標のキー → 記録。図面には残らない）
     compass: false, heading: null, orientTimer: null,
     near: false,      // 杭の近く（精度の範囲内）に入ったか（入ったときだけ振動する）
 };
@@ -20,6 +22,33 @@ cogoRegisterPickOwner('stake', { slots: () => _stakeSlots(), render: () => _stak
 function _stakeSlots() { return _stake.mode === 'ts' ? ['KS', 'KB', 'KT'] : ['KT']; }
 function _stakeKey(p) { return Math.round(p.x * 1e4) + ',' + Math.round(p.y * 1e4); }
 function _stakeTarget() { return _cogo.slots.KT || null; }
+function _stakeFmtTime(iso) {
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return '';
+    const p2 = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+// ---- 杭打ちの記録 ----
+// 杭（順番の点・点の欄）の測点の図形
+function _stakeEntityOf(p) {
+    if(!p) return null;
+    let id = p.id;
+    if(id === undefined || id === null) { const q = _stake.list.find((l) => _stakeKey(l) === _stakeKey(p)); if(q) id = q.id; }
+    const i = (id === undefined || id === null) ? -1 : entityIndexById(id);
+    return i >= 0 ? entities[i] : null;
+}
+// 記録 { time, X, Y（実測・m）, dX, dY（実測 − 計画）, dist, acc } または { time }（位置を測らずに済みにしたとき）
+function _stakeRec(p) { const e = _stakeEntityOf(p); return e ? (e.stake || null) : (_stake.loose.get(_stakeKey(p)) || null); }
+function _stakeIsDone(p) { return !!_stakeRec(p); }
+function _stakeSetRec(p, rec) {
+    const e = _stakeEntityOf(p);
+    if(e) {
+        saveUndo();
+        if(rec) e.stake = rec; else delete e.stake;
+        if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    } else if(rec) _stake.loose.set(_stakeKey(p), rec);
+    else _stake.loose.delete(_stakeKey(p));
+}
 
 // 打つ杭の順番: 範囲選択した測点、無ければ図面のすべての測点（座標一覧と同じ並び）
 function _stakeBuildList() {
@@ -27,7 +56,7 @@ function _stakeBuildList() {
     if(cmdState.highlightIdx >= 0) sel.add(cmdState.highlightIdx);
     const all = collectSurveyPoints();
     const picked = sel.size ? all.filter((p) => sel.has(p.idx)) : [];
-    return (picked.length ? picked : all).map((p) => ({ x: p.x, y: p.y, name: p.name || String(p.num || ''), z: p.z }));
+    return (picked.length ? picked : all).map((p) => ({ x: p.x, y: p.y, name: p.name || String(p.num || ''), z: p.z, id: p.id }));
 }
 window.showStakePanel = function() {
     _stake.list = _stakeBuildList();
@@ -44,26 +73,52 @@ function _stakeGo(i) {
     if(!n) return;
     _stake.idx = ((i % n) + n) % n;
     const p = _stake.list[_stake.idx];
-    _cogo.slots.KT = { x: p.x, y: p.y, name: p.name, snapped: true };
+    _cogo.slots.KT = { x: p.x, y: p.y, name: p.name, snapped: true, id: p.id };
     _stake.near = false;
 }
 window.stakeStep = function(d) { _stakeGo(_stake.idx + d); _stakeRender(); renderOverlay(); };
-// 済みにして、次の済んでいない杭へ（もう一度押すと済みを取り消す）
+// 済みにして記録を残し、次の済んでいない杭へ（済んだ杭でもう一度押すと、記録を消して取り消す）。
+// 現在地から案内しているときは、現在地と杭の差（実測 − 計画）・精度も記録する
 window.stakeToggleDone = function() {
     const t = _stakeTarget();
     if(!t) return;
-    const k = _stakeKey(t);
-    if(_stake.done.has(k)) { _stake.done.delete(k); _stakeRender(); renderOverlay(); return; }
-    _stake.done.add(k);
-    addCommandLog(`-> 杭打ち: ${t.name || '(点名なし)'} を済みにしました`);
+    if(_stakeIsDone(t)) {
+        if(!confirm(`${t.name || 'この杭'} の記録を消して、済みを取り消しますか？`)) return;
+        _stakeSetRec(t, null);
+        _stakeRender(); renderOverlay();
+        return;
+    }
+    const rec = { time: new Date().toISOString() };
+    const f = (_stake.mode === 'gnss' && typeof _gnss !== 'undefined' && _gnss.on) ? _gnss.fix : null;
+    if(f) {
+        const m = wcsToSurvey(f.x, f.y), d = wcsToSurvey(t.x, t.y);
+        Object.assign(rec, { X: m.X, Y: m.Y, dX: m.X - d.X, dY: m.Y - d.Y, dist: Math.hypot(m.X - d.X, m.Y - d.Y), acc: f.acc || 0 });
+    }
+    _stakeSetRec(t, rec);
+    addCommandLog(`-> 杭打ち: ${t.name || '(点名なし)'} を済みにしました` +
+        (rec.dist !== undefined ? `（差 ΔX ${_cogoSigned(rec.dX)} ΔY ${_cogoSigned(rec.dY)}・${cogoFix(rec.dist, 3)}m、精度 ±${cogoFix(rec.acc, 1)}m）` : ''));
     const n = _stake.list.length;
     for(let s = 1; s <= n; s++) {
         const j = (_stake.idx + s) % n;
-        if(!_stake.done.has(_stakeKey(_stake.list[j]))) { _stakeGo(j); break; }
+        if(!_stakeIsDone(_stake.list[j])) { _stakeGo(j); break; }
     }
-    if(n && _stake.list.every((p) => _stake.done.has(_stakeKey(p)))) showToast('順番の杭はすべて済みました', 3000);
+    if(n && _stake.list.every((p) => _stakeIsDone(p))) showToast('順番の杭はすべて済みました', 3000);
     _stakeRender();
     renderOverlay();
+};
+// 杭打ちの記録を CSV に出す（順番の杭のうち記録のあるもの）
+window.stakeExportRecords = function() {
+    const rows = _stake.list.map((p) => ({ p, r: _stakeRec(p) })).filter((x) => x.r);
+    if(!rows.length) { showToast('杭打ちの記録がありません', 2500); return; }
+    const q = (s) => /[",\r\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s);
+    const L = ['杭,計画X,計画Y,実測X,実測Y,ΔX(実測-計画),ΔY(実測-計画),差,精度,日時'];
+    rows.forEach(({ p, r }) => {
+        const d = wcsToSurvey(p.x, p.y), has = r.dist !== undefined;
+        L.push([q(p.name || ''), cogoFix(d.X, 3), cogoFix(d.Y, 3), has ? cogoFix(r.X, 3) : '', has ? cogoFix(r.Y, 3) : '', has ? cogoFix(r.dX, 3) : '', has ? cogoFix(r.dY, 3) : '',
+            has ? cogoFix(r.dist, 3) : '', has ? cogoFix(r.acc, 1) : '', q(_stakeFmtTime(r.time))].join(','));
+    });
+    downloadBlob(new Blob(['\uFEFF' + L.join('\r\n') + '\r\n'], { type: 'text/csv' }), `${_baseName()}_杭打ち記録.csv`);
+    addCommandLog(`-> 杭打ちの記録を CSV に出しました（${rows.length}点）`);
 };
 window.stakeSetMode = function(m) {
     if(cogoIsPicking() && _cogo.pick && _cogo.pick.owner === 'stake') { _cogo.pick = null; resetCommand(); }
@@ -86,7 +141,7 @@ window.stakeShowTarget = function() {
 function _stakeCountText() {
     const n = _stake.list.length;
     if(!n) return '順番の杭はありません（点名で指定）';
-    const d = _stake.list.filter((p) => _stake.done.has(_stakeKey(p))).length;
+    const d = _stake.list.filter((p) => _stakeIsDone(p)).length;
     return `${_stake.idx + 1} / ${n}（済 ${d}）`;
 }
 function _stakeRender() {
@@ -94,7 +149,7 @@ function _stakeRender() {
     if(_stake.mode === 'ts') h += _cogoSlotHtml('KS', 'stake') + _cogoSlotHtml('KB', 'stake');
     h += _cogoSlotHtml('KT', 'stake');
     const t = _stakeTarget(), dis = _stake.list.length ? '' : 'disabled';
-    const isDone = t && _stake.done.has(_stakeKey(t));
+    const isDone = t && _stakeIsDone(t);
     h += `<div class="stake-nav">
         <button class="prop-btn btn-sub" onclick="stakeStep(-1)" ${dis} aria-label="前の杭">◀</button>
         <div id="stake-count" class="stake-count">${_stakeCountText()}</div>
@@ -110,7 +165,16 @@ function _stakeUpdate() {
     if(!box) return;
     const t = _stakeTarget();
     if(!t) { box.innerHTML = _cogoNote('打つ杭を、点名・「X,Y」で入れるか 📍 で図面から指定します。範囲選択した測点を順番に打てます（◀ ▶）。'); return; }
-    box.innerHTML = _stake.mode === 'ts' ? _stakeTsHtml(t) : _stakeGnssHtml(t);
+    box.innerHTML = (_stake.mode === 'ts' ? _stakeTsHtml(t) : _stakeGnssHtml(t)) + _stakeRecHtml(t) +
+        (_stake.list.some((p) => _stakeIsDone(p)) ? '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="stakeExportRecords()">📄 杭打ち記録 CSV</button></div>' : '');
+}
+// いまの杭の記録
+function _stakeRecHtml(t) {
+    const r = _stakeRec(t);
+    if(!r) return '';
+    if(r.dist === undefined) return `<div class="stake-rec">✓ 済（${_stakeFmtTime(r.time)}）</div>`;
+    return `<div class="stake-rec">✓ 記録 ${_stakeFmtTime(r.time)}<br>実測 X ${cogoFix(r.X, 3)}&nbsp;&nbsp;Y ${cogoFix(r.Y, 3)}<br>` +
+        `差（実測−計画） ΔX ${_cogoSigned(r.dX)}&nbsp;&nbsp;ΔY ${_cogoSigned(r.dY)}（${cogoFix(r.dist, 3)} m）・精度 ±${cogoFix(r.acc, 1)} m</div>`;
 }
 // 現在地（GNSS）が更新されたとき（cad-survey.js から）
 function stakeOnGnss() { if(_stakePanelOpen() && _stake.mode === 'gnss') { _stakeUpdate(); } }
@@ -220,7 +284,7 @@ function _stakeTsHtml(t) {
         const rows = _stake.list.slice(0, 300).map((p) => {
             const q = stakeFromStation(d.st, d.bs, wcsToSurvey(p.x, p.y));
             const k = _stakeKey(p);
-            return `<tr class="${k === cur ? 'stake-cur' : ''}"><td class="c">${_stake.done.has(k) ? '✓ ' : ''}${escapeHtml(p.name || '')}</td><td class="r">${cogoFmtDms(q.ang)}</td><td class="r">${cogoFix(q.dist, 3)}</td></tr>`;
+            return `<tr class="${k === cur ? 'stake-cur' : ''}"><td class="c">${_stakeIsDone(p) ? '✓ ' : ''}${escapeHtml(p.name || '')}</td><td class="r">${cogoFmtDms(q.ang)}</td><td class="r">${cogoFix(q.dist, 3)}</td></tr>`;
         }).join('');
         h += `<div class="cogo-table-wrap"><table class="cogo-table"><thead><tr><th>杭</th><th>夾角</th><th>水平距離</th></tr></thead><tbody>${rows}</tbody></table></div>`;
         h += `<div class="cogo-btns"><button class="prop-btn" onclick="stakePlaceTable()">📋 杭打ち表を図面に置く</button><button class="prop-btn btn-sub" onclick="stakeExportCsv()">📄 CSV出力</button></div>`;
@@ -273,7 +337,7 @@ function drawStakeOverlay() {
     if(_stake.list.length <= 2000) _stake.list.forEach((p) => {
         const s = wcsToScreen(p.x, p.y);
         if(s.x < -20 || s.y < -20 || s.x > canvas.width + 20 || s.y > canvas.height + 20) return;
-        if(_stake.done.has(_stakeKey(p))) {
+        if(_stakeIsDone(p)) {
             ctx.strokeStyle = green; ctx.lineWidth = 2.5;
             ctx.beginPath(); ctx.moveTo(s.x - 6, s.y); ctx.lineTo(s.x - 2, s.y + 5); ctx.lineTo(s.x + 7, s.y - 6); ctx.stroke();
         } else {

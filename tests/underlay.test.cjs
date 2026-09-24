@@ -129,11 +129,37 @@ describe('背景地図・下絵', () => {
         await new Promise((r2) => setTimeout(r2, 30));
         assert.equal(await app.eval(`_dbGet(STORE_AUTOSAVE, 'underlay')`), null);
     });
+    it('PDF を下絵にする: ページが複数なら何ページ目か聞き、そのページを画像にする。読めないときは知らせる', async () => {
+        // pdf.js・画像にする処理の代わり（jsdom には無い）
+        app.eval(`window.__pages = []; window.__prompt = null;
+            window.loadPdfJs = async () => ({ getDocument: () => ({ promise: Promise.resolve({ numPages: 3,
+                getPage: async (n) => { window.__pages.push(n); return { getViewport: ({ scale }) => ({ width: 842 * scale, height: 595 * scale }), render: () => ({ promise: Promise.resolve() }) }; } }) }) });
+            if(!Blob.prototype.arrayBuffer) Blob.prototype.arrayBuffer = function () { return new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsArrayBuffer(this); }); };
+            HTMLCanvasElement.prototype.toBlob = function (cb) { cb(new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' })); };
+            URL.createObjectURL = () => 'blob:test'; URL.revokeObjectURL = () => {};`);
+        app.window.prompt = (msg) => { app.window.__prompt = msg; return '２'; }; // 全角でもよい
+        const ok = await app.eval(`ulLoadPdfFile(new File([new Uint8Array([37, 80, 68, 70])], 'kouzu.pdf', { type: 'application/pdf' }))`);
+        assert.equal(ok, true);
+        assert.match(app.window.__prompt, /1〜3/);
+        assert.deepEqual(app.val('window.__pages'), [2]);
+        const img = app.val('({ w: _ul.img.w, h: _ul.img.h, name: _ul.img.name, mime: _ul.img.mime })');
+        assert.deepEqual(img, { w: 4096, h: Math.round(595 * 4096 / 842), name: 'kouzu.pdf（2ページ）', mime: 'image/png' });
+        // 読めない PDF
+        app.eval(`window.loadPdfJs = async () => { throw new Error('壊れた PDF'); }`);
+        assert.equal(await app.eval(`ulLoadPdfFile(new File(['x'], 'bad.pdf'))`), false);
+        assert.match(app.eval(`document.getElementById('cad-toast').textContent`), /PDF を読み込めませんでした: 壊れた PDF/);
+    });
+    it('保存した地図の枚数（保存できない環境ではそう知らせる）', async () => {
+        app.eval('showUnderlayPanel()');
+        await new Promise((r) => setTimeout(r, 20));
+        assert.equal(app.eval(`document.getElementById('ul-tile-count').textContent`), '（この端末では保存しません）');
+        assert.match(app.eval(`document.getElementById('property-panel-content').textContent`), /画像・PDF を読み込む/);
+    });
     it('パネル・コマンド・系番号の案内', () => {
         app.eval(`processCommand('MAP')`);
         assert.equal(app.eval(`document.getElementById('property-panel-title').textContent`), '🗺 地図・下絵');
         assert.match(app.eval(`document.getElementById('property-panel-content').textContent`), /IX系/);
-        assert.match(app.eval(`document.getElementById('property-panel-content').textContent`), /画像を読み込む/);
+        assert.match(app.eval(`document.getElementById('property-panel-content').textContent`), /画像・PDF を読み込む/);
         app.eval(`localStorage.removeItem('cad_gnss_zone'); ulSetMap('std')`);
         assert.equal(app.eval(`document.getElementById('property-panel-title').textContent`), '🛰 系番号の選択'); // 系番号を選ぶ画面
         app.eval('setGnssZone(9)');

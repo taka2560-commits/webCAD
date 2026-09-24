@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 // DWG読込エンジンなど、初回起動時にはプリキャッシュしない大きなファイル
-const LAZY_ASSET_RE = /libredwg/i;
+const LAZY_ASSET_RE = /libredwg|pdf/i; // DWG 読込エンジン・PDF 表示エンジン（pdf.js）
 
 function shortHash(data) {
     return createHash('sha256').update(data).digest('hex').slice(0, 10);

@@ -54,8 +54,8 @@ function showOptionsPanel(){
         </div>
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
             <div style="font-size:11px;color:#aaa;font-weight:700;">オフライン・データ</div>
-            <div id="opt-dwg-status" style="font-size:11px;color:#ddd;">DWG読込エンジン: 確認中…</div>
-            <button class="prop-btn btn-sub" id="opt-dwg-cache-btn" onclick="cacheDwgEngine()" style="display:none;">DWG読込エンジンを端末に保存（初回のみ数MB）</button>
+            <div id="opt-dwg-status" style="font-size:11px;color:#ddd;">DWG・PDF の読込エンジン: 確認中…</div>
+            <button class="prop-btn btn-sub" id="opt-dwg-cache-btn" onclick="cacheDwgEngine()" style="display:none;">DWG・PDF の読込エンジンを端末に保存（初回のみ数MB）</button>
             <div id="opt-autosave-status" style="font-size:11px;color:#ddd;">自動保存: 確認中…</div>
             <div id="opt-storage-status" style="font-size:11px;color:#888;">保存領域: 確認中…</div>
             <button class="prop-btn btn-warn" onclick="if(window.cadErrors) window.cadErrors.show()">⚠ エラーログ（<span class="cad-err-count">${window.cadErrors ? window.cadErrors.count() : 0}</span>件）</button>
@@ -107,11 +107,11 @@ async function refreshOfflineStatus() {
     if(binfo) binfo.textContent = `バージョン: build ${bi.id}${bi.at ? '（' + new Date(bi.at).toLocaleString('ja-JP') + '）' : ''}`;
 
     _swRequest('lazy-status').then(r => {
-        if(!r.ok) { _setDwgStatus('DWG読込エンジン: 状態を確認できません', true); return; }
-        if(r.total === 0) _setDwgStatus('DWG読込エンジン: 同梱済み', false);
-        else if(r.cached >= r.total) _setDwgStatus('DWG読込エンジン: 端末に保存済み（オフラインでもDWGを開けます）', false);
-        else _setDwgStatus('DWG読込エンジン: 未保存（電波のある場所で1回DWGを開くか、下のボタンで保存）', true);
-    }).catch(() => _setDwgStatus('DWG読込エンジン: オフライン機能が無効です（開発版、または初回表示）', false));
+        if(!r.ok) { _setDwgStatus('DWG・PDF の読込エンジン: 状態を確認できません', true); return; }
+        if(r.total === 0) _setDwgStatus('DWG・PDF の読込エンジン: 同梱済み', false);
+        else if(r.cached >= r.total) _setDwgStatus('DWG・PDF の読込エンジン: 端末に保存済み（オフラインでも DWG・PDF の下絵を開けます）', false);
+        else _setDwgStatus('DWG・PDF の読込エンジン: 未保存（電波のある場所で1回 DWG・PDF を開くか、下のボタンで保存）', true);
+    }).catch(() => _setDwgStatus('DWG・PDF の読込エンジン: オフライン機能が無効です（開発版、または初回表示）', false));
 
     if(typeof window.getStorageStatus === 'function') {
         const s = await window.getStorageStatus();
@@ -129,12 +129,12 @@ async function refreshOfflineStatus() {
     }
 }
 window.cacheDwgEngine = async function() {
-    _setDwgStatus('DWG読込エンジン: 保存中…（数MBの通信があります）', false);
+    _setDwgStatus('DWG・PDF の読込エンジン: 保存中…（数MBの通信があります）', false);
     try {
         const r = await _swRequest('lazy-cache');
         if(!r.ok) throw new Error(r.error || '保存に失敗しました');
-        _setDwgStatus('DWG読込エンジン: 端末に保存済み（オフラインでもDWGを開けます）', false);
-        showToast('DWG読込エンジンを端末に保存しました');
+        _setDwgStatus('DWG・PDF の読込エンジン: 端末に保存済み（オフラインでも DWG・PDF の下絵を開けます）', false);
+        showToast('DWG・PDF の読込エンジンを端末に保存しました');
     } catch(err) {
         _setDwgStatus('DWG読込エンジン: 保存に失敗しました（電波を確認してください）', true);
         if(window.cadErrors) window.cadErrors.record('offline', 'DWG読込エンジンの保存に失敗: ' + (err && err.message || err), '', { silent: true });

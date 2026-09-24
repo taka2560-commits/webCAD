@@ -20,7 +20,7 @@ describe('杭打ちナビ', () => {
             entities.length = 0; undoStack.length = 0; redoStack.length = 0;
             layers.splice(0, layers.length, { name: '0', color: '#00ffff', visible: true }); currentLayerIndex = 0;
             view = { x: 400, y: 300, scale: 4, rotation: 0 };
-            _cogo.slots = {}; _cogo.pick = null; _stake.list = []; _stake.idx = -1; _stake.done = new Set(); _stake.mode = 'gnss'; _stake.compass = false; _stake.heading = null; _stake.near = false;
+            _cogo.slots = {}; _cogo.pick = null; _stake.list = []; _stake.idx = -1; _stake.loose = new Map(); _stake.mode = 'gnss'; _stake.compass = false; _stake.heading = null; _stake.near = false;
             _gnss.on = false; _gnss.fix = null;
             addSurveyData([{ num: '1', name: 'A', X: 0, Y: 0, z: 10 }, { num: '2', name: 'B', X: 10, Y: 0, z: 11 }, { num: '3', name: 'K1', X: 0, Y: 10, z: 12.5 }, { num: '4', name: 'K2', X: -10, Y: 0 }], []);
             undoStack.length = 0;
@@ -48,8 +48,8 @@ describe('杭打ちナビ', () => {
         assert.match(panelText(), /2 \/ 2（済 1）/);
         app.eval('stakeToggleDone()');
         assert.match(app.eval(`document.getElementById('cad-toast').textContent`), /すべて済みました/);
-        app.eval('stakeToggleDone()'); // もう一度押すと取り消し
-        assert.equal(app.eval('_stake.done.size'), 1);
+        app.eval('stakeToggleDone()'); // もう一度押すと取り消し（記録を消す）
+        assert.equal(app.eval('_stake.list.filter(p => _stakeIsDone(p)).length'), 1);
         app.eval(`cmdState.selectedIndices = []; cmdState.highlightIdx = -1; showStakePanel()`);
         assert.equal(app.eval('_stake.list.length'), 4);
     });
@@ -72,6 +72,25 @@ describe('杭打ちナビ', () => {
         assert.equal(vib, 1);
         // 矢印は北が上（東の杭なら 90°）
         assert.equal(app.eval(`document.getElementById('stake-arrow-g').getAttribute('transform')`), 'rotate(90.0)');
+    });
+    it('杭打ちの記録: 現在地との差（実測−計画）を測点に残す（保存・↩ で戻る）。CSV に出す', async () => {
+        app.eval(`showStakePanel(); stakeStep(2)`); // K1（X 0, Y 10 → 図面の x 10, y 0）
+        assert.equal(app.eval('_cogo.slots.KT.name'), 'K1');
+        app.eval(`_gnss.on = true; _gnss.fix = { x: 9, y: 0.5, X: 0.5, Y: 9, acc: 2.5 }; stakeToggleDone()`);
+        const e = app.val(`entities.find(e => e.type === 'POINT' && e.name === 'K1')`);
+        assert.ok(e.stake && Math.abs(e.stake.dX - 0.5) < 1e-9 && Math.abs(e.stake.dY + 1) < 1e-9 && Math.abs(e.stake.dist - Math.hypot(0.5, 1)) < 1e-9 && e.stake.acc === 2.5, JSON.stringify(e.stake));
+        assert.ok(app.val(`_buildSaveData('t')`).entities.some((x) => x.name === 'K1' && x.stake), '保存データに記録が無い');
+        // 記録は済みの杭を選び直すと見える
+        app.eval(`stakeStep(-1)`);
+        assert.equal(app.eval('_cogo.slots.KT.name'), 'K1');
+        const t = app.eval(`document.getElementById('property-panel-content').textContent`);
+        assert.match(t, /差（実測−計画） ΔX \+0\.500\s+ΔY -1\.000（1\.118 m）・精度 ±2\.5 m/);
+        app.eval(`window.__dl = downloadBlob; downloadBlob = (b, n) => { window.__blob = b; window.__name = n; }; stakeExportRecords(); downloadBlob = window.__dl;`);
+        assert.match(app.eval('window.__name'), /_杭打ち記録\.csv$/);
+        const csv = await app.eval('new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsText(window.__blob); })');
+        assert.match(csv, /K1,0\.000,10\.000,0\.500,9\.000,0\.500,-1\.000,1\.118,2\.5,/);
+        app.eval('undo()');
+        assert.equal(app.eval(`!!entities.find(e => e.type === 'POINT' && e.name === 'K1').stake`), false);
     });
     it('🧭 向きに合わせる: 端末の向き（iPhone の webkitCompassHeading）の分だけ矢印を回す', async () => {
         app.eval(`showStakePanel(); _cogo.slots.KT = { x: 10, y: 0, name: 'K1', snapped: true }; _gnss.on = true; _gnss.fix = { x: 0, y: 0, X: 0, Y: 0, acc: 3 }; _stakeUpdate()`);
@@ -125,7 +144,7 @@ describe('杭打ちナビ', () => {
     it('重ね表示・杭を中央に・コマンド・手順カード', () => {
         app.eval(`processCommand('STAKE')`);
         assert.equal(panelTitle(), '📍 杭打ち');
-        app.eval(`_stake.done.add(_stakeKey(_stake.list[1])); _gnss.on = true; _gnss.fix = { x: 5, y: 5, X: 5, Y: 5, acc: 4 }; _drawFrame(false)`);
+        app.eval(`_stakeSetRec(_stake.list[1], { time: new Date().toISOString() }); _gnss.on = true; _gnss.fix = { x: 5, y: 5, X: 5, Y: 5, acc: 4 }; _drawFrame(false)`);
         app.eval(`stakeSetMode('ts'); cogoSlotTyped('KS', 'A', 'stake'); cogoSlotTyped('KB', 'B', 'stake'); _drawFrame(false)`);
         app.eval('stakeShowTarget()');
         const t = app.val('_cogo.slots.KT'), s = app.val(`wcsToScreen(${t.x}, ${t.y})`);
