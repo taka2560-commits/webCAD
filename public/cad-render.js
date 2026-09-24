@@ -102,6 +102,7 @@ function _drawFrame(overlayOnly) {
         drawRubberBand(); drawSnapMarker(); drawCrosshair();
         if(typeof drawSurveyOverlays === 'function') drawSurveyOverlays(); // 現在地（GNSS）・一覧で選んだ点の目印
         if(typeof drawMeasureOverlay === 'function') drawMeasureOverlay(); // 基点測定（基点からのX・Y・直線距離）
+        if(typeof drawCogoOverlay === 'function') drawCogoOverlay(); // 測量計算（指定した点・補助線・計算した点）
         
         // 範囲選択矩形描画
         drawSelectionRect();

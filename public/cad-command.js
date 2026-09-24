@@ -288,6 +288,8 @@ function _handlePointInputCore(wcs, fromMouse) {
         return;
     }
 
+    // 測量計算の点の指定・区画のタップは cad-cogo-ui.js へ
+    if(typeof handleCogoPointInput === 'function' && handleCogoPointInput(m, wcs)) return;
     // 寸法コマンドの入力処理は cad-dimension.js へ委譲
     if(typeof handleDimPointInput==='function') handleDimPointInput(m, wcs);
 }
@@ -827,11 +829,14 @@ function processCommand(cmdText) {
     else if(cmd==='REDO') { redo(); }
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
     else if(cmd==='CANCEL') {
+        const wasCogo = typeof cogoIsPicking === 'function' && cogoIsPicking(); // 測量計算の点の指定中なら、やめたあとパネルに戻る
         // ポリラインは描いた部分を残して終わる（2点以上あるとき）
         if(cmdState.mode === 'WAITING_PLINE_NEXT' && cmdState.points.length >= 2) finishPline(false); else resetCommand();
+        if(wasCogo) cogoPickCancelled();
     }
     else if(cmd==='ERRORS'||cmd==='ERRLOG') { if(window.cadErrors) window.cadErrors.show(); }
     else if(typeof processSurveyCommand === 'function' && processSurveyCommand(cmd)) { /* 測量コマンド（座標一覧・SIMA/CSV出力・GNSS）処理済み */ }
+    else if(typeof processCogoCommand === 'function' && processCogoCommand(cmd)) { /* 測量計算（求積・逆計算・点の追加・交点）処理済み */ }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
     else { addCommandLog(`不明なコマンドです "${cmdText}"`); resetCommand(); }
 }

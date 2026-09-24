@@ -457,6 +457,29 @@
         .prop-btn.btn-sub:hover { background:#3a4049; }
         .prop-btn.btn-warn { background:rgba(255,204,0,0.08); color:#ffcc00; border:1px solid rgba(255,204,0,0.5); border-radius:var(--r-sub); min-height:36px; font-weight:600; }
         .prop-btn.btn-warn:hover { background:rgba(255,204,0,0.16); }
+        /* 測量計算（🧮）パネル: 計算した値は水色（測定・寸法と同じ）、指定した点は緑 */
+        .cogo-seg { display:flex; gap:4px; }
+        .cogo-seg .prop-btn { flex:1; min-width:0; margin-top:0; padding:6px 0; font-size:12px; font-weight:600; border-radius:6px; white-space:nowrap; }
+        .prop-row.cogo-row { margin-bottom:0; }
+        .prop-label.cogo-label { flex:0 0 84px; width:84px; font-size:11px; }
+        .cogo-slot { display:flex; flex-direction:column; gap:2px; }
+        .prop-btn.cogo-pick { flex:0 0 auto; margin-top:0; min-height:32px; padding:4px 10px; }
+        .cogo-xy { font-family:Consolas,monospace; font-size:11px; color:var(--green); padding-left:92px; }
+        .cogo-result { display:flex; flex-direction:column; gap:8px; }
+        .cogo-note { font-size:11px; color:var(--dim); line-height:1.5; }
+        .cogo-warn { font-size:11px; color:#ffcc00; line-height:1.5; }
+        .cogo-kv { display:grid; grid-template-columns:auto 1fr; gap:3px 10px; font-size:12px; }
+        .cogo-kv > div:nth-child(odd) { color:var(--dim); }
+        .cogo-kv > div:nth-child(even) { font-family:Consolas,monospace; color:#e0e0e0; text-align:right; }
+        .cogo-kv > div.cogo-big { color:var(--cyan); font-weight:bold; font-size:13px; }
+        .cogo-btns { display:flex; flex-wrap:wrap; gap:6px; }
+        .cogo-btns .prop-btn { flex:1 1 45%; margin-top:0; min-height:36px; font-size:12px; }
+        .cogo-table-wrap { overflow:auto; max-height:34vh; border:1px solid var(--border-2); border-radius:var(--r-sub); }
+        .cogo-table { border-collapse:collapse; font-size:11px; font-family:Consolas,monospace; white-space:nowrap; }
+        .cogo-table th { position:sticky; top:0; background:#2a2e35; color:var(--dim); font-weight:600; padding:4px 6px; border-bottom:1px solid var(--border-1); }
+        .cogo-table td { padding:3px 6px; border-bottom:1px solid var(--border-3); color:#e0e0e0; }
+        .cogo-table td.r { text-align:right; }
+        .cogo-table td.c { text-align:center; }
     </style>
 </head>
 <body>
@@ -504,6 +527,7 @@
             <div class="menu-section-title">測量</div>
             <div class="menu-btn-grid">
                 <button class="menu-item-btn" onclick="showCoordListPanel(); toggleTopMenu();">📍 座標一覧</button>
+                <button class="menu-item-btn" onclick="showCogoPanel(); toggleTopMenu();" title="求積（座標法）・逆計算・点の追加（方向角と距離）・交点">🧮 測量計算</button>
                 <button class="menu-item-btn" onclick="toggleGnss(); toggleTopMenu();">🛰 現在地</button>
                 <button class="menu-item-btn" onclick="exportSima(); toggleTopMenu();">SIMA 出力</button>
                 <button class="menu-item-btn" onclick="exportCoordCsv(); toggleTopMenu();">座標CSV 出力</button>
@@ -794,6 +818,8 @@
     <script src="cad-input.js"></script>
     <script src="cad-panels.js"></script>
     <script src="cad-survey.js"></script>
+    <script src="cad-cogo.js"></script>
+    <script src="cad-cogo-ui.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-boot.js"></script>
