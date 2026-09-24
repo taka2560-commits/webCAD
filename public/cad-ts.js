@@ -4,7 +4,9 @@
 //         「図面に取り込む」で測点にする（元に戻すは1回）。
 //   送信: 機械を「既知点 → 通信入力 → S type」にしてから「測点を送る」。SDR33 の既知点（08KI）を STX〜ETX で送る。
 //         機械が XOFF（受信の一時停止）を返したら、XON が来るまで待つ。
-//   Web Serial が使えるのは PC の Chrome・Edge と Android の Chrome。iPhone・iPad では SDR ファイルで受け渡しする。
+//   Web Serial が使えるのは PC の Chrome・Edge と Android の Chrome。iPhone・iPad ではファイル（SIMA・SDR）で受け渡しする。
+//   受信した生データ: 届いたバイトを制御文字も見える形で残す（測るたびの出力「HVD アウト」「NEZ アウト」の形式を実機で確かめるため。
+//                     その形式は機械の説明書に無く、別冊のコミュニケーションマニュアルにしか載っていない）。
 // SDR の読み書きは cad-sdr.js。
 
 const TS_TITLE = '📡 TS連携';
@@ -14,7 +16,11 @@ const _ts = {
     port: null, reader: null, reading: false, xoff: false, sending: false,
     parser: null, pending: null, // 受信中の SDR（sdrParser）と、取り込み待ちの結果（parseSdr と同じ形）
     buf: '', rxBytes: 0, rxLines: 0, uiTimer: null,
+    raw: [], rawCur: '', rawTimer: null, rawOpen: false, // 受信した生データ（[{ t: 日時, s: 見える形の文字列 }]）と、組み立て中の行
 };
+const TS_RAW_MAX = 300;       // 残す行の数
+const TS_RAW_IDLE_MS = 300;   // この間なにも届かなければ、そこで1行とする（CR・LF で終わらない出力もあるため）
+const TS_CTRL_NAMES = { 0x00: 'NUL', 0x02: 'STX', 0x03: 'ETX', 0x04: 'EOT', 0x05: 'ENQ', 0x06: 'ACK', 0x0a: 'LF', 0x0d: 'CR', 0x11: 'XON', 0x13: 'XOFF', 0x15: 'NAK', 0x1b: 'ESC' };
 function _tsOpts() {
     const def = { baudRate: 9600, dataBits: 8, parity: 'none', stopBits: 1 };
     try { return Object.assign(def, JSON.parse(localStorage.getItem(TS_OPTS_KEY) || '{}')); } catch { return def; }
@@ -30,9 +36,10 @@ function _tsSel(id, label, list, cur) {
 }
 function _tsRender() {
     const o = _tsOpts();
-    let h = '<div class="ts-sec">SDR ファイル（USB メモリ・SD カード）</div>' +
-        '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="tsOpenSdrFile()">📁 SDR を開く</button><button class="prop-btn btn-sub" onclick="exportSdr33()">📄 SDR33 で書き出す</button></div>' +
-        _cogoNote('機械の現場データ（SDR33・SDR2x）を開くと、器械点・後視・観測から座標を計算して測点にします。書き出したファイルは、機械で既知点・杭打ち点として読み込めます。') +
+    let h = '<div class="ts-sec">ファイル（USB メモリ・SD カード）</div>' +
+        '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="tsOpenSdrFile()">📁 SIMA・SDR を開く</button><button class="prop-btn btn-sub" onclick="exportSima()">📄 SIMA で書き出す</button></div>' +
+        '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="exportSdr33()">📄 SDR33 で書き出す</button></div>' +
+        _cogoNote('SIMA（.sim）は測点・区画をそのまま受け渡します。SDR（SDR33・SDR2x）の現場データは、器械点・後視・観測から座標を計算して測点にします。書き出したファイルは、機械で既知点・杭打ち点として読み込めます。') +
         '<div class="ts-sec">通信（USB ケーブル・Bluetooth）</div>';
     if(!tsSerialAvailable()) {
         h += _cogoNote('このブラウザでは機械と直接つなげません。PC の Chrome・Edge、Android の Chrome で使えます（iPhone・iPad は SDR ファイルで受け渡しします）。');
@@ -49,6 +56,13 @@ function _tsRender() {
             _cogoNote('受信: 機械で「データ → 現場 → 通信出力 → S type（SDR33）」。届いた点はその場で図面に重ねて表示します。<br>送信: 機械を「既知点 → 通信入力 → S type」にしてから 📤（範囲選択した測点、無ければすべて）。');
     }
     h += '<div id="ts-result" class="cogo-result"></div>';
+    if(_ts.port || _ts.raw.length) {
+        h += `<details class="ts-raw" ${_ts.rawOpen ? 'open' : ''} ontoggle="tsRawToggle(this.open)"><summary>🔍 受信した生データ（形式の確認用）<span id="ts-raw-n"></span></summary>` +
+            '<pre id="ts-raw" class="ts-raw-pre"></pre>' +
+            '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="tsCopyRaw()">📋 コピー</button><button class="prop-btn btn-sub" onclick="tsClearRaw()">消す</button></div>' +
+            _cogoNote('機械から届いたデータを、そのまま表示します（&lt;CR&gt;・&lt;LF&gt;・&lt;ETX&gt; などは制御文字）。測るたびの出力（HVD アウト・NEZ アウト）の形式を確かめるときに使います。') +
+            '</details>';
+    }
     showPropertyPanel(TS_TITLE, h);
     _tsUpdateResult();
 }
@@ -72,6 +86,7 @@ function _tsCurrent() {
 }
 function _tsUpdateResult() {
     const rx = document.getElementById('ts-rx'); if(rx) rx.textContent = _tsRxText();
+    _tsUpdateRaw();
     const box = document.getElementById('ts-result');
     if(!box) return;
     const r = _tsCurrent();
@@ -156,9 +171,62 @@ async function _tsReadLoop(port) {
         }
     }
 }
+// ===== 受信した生データ（形式の確認用） =====
+// 届いたバイトを、制御文字も見える形（<CR> <LF> <STX> <ETX> <ACK>、ほかは <1F> のような16進）で残す。
+// 行の区切り: LF のあと、または TS_RAW_IDLE_MS のあいだ何も届かなかったとき
+function _tsRawFeed(bytes) {
+    for(let i = 0; i < bytes.length; i++) {
+        const b = bytes[i];
+        _ts.rawCur += (b >= 0x20 && b <= 0x7e) ? String.fromCharCode(b) : '<' + (TS_CTRL_NAMES[b] || b.toString(16).toUpperCase().padStart(2, '0')) + '>';
+        if(b === 0x0a || _ts.rawCur.length > 2000) _tsRawFlush();
+    }
+    clearTimeout(_ts.rawTimer);
+    _ts.rawTimer = _ts.rawCur ? setTimeout(_tsRawFlush, TS_RAW_IDLE_MS) : null;
+}
+function _tsRawFlush() {
+    clearTimeout(_ts.rawTimer); _ts.rawTimer = null;
+    if(!_ts.rawCur) return;
+    _ts.raw.push({ t: new Date(), s: _ts.rawCur });
+    _ts.rawCur = '';
+    if(_ts.raw.length > TS_RAW_MAX) _ts.raw.splice(0, _ts.raw.length - TS_RAW_MAX);
+    _tsScheduleUi();
+}
+// 受信した生データの文字列（時刻つき。1行ずつ）
+function tsRawText() {
+    const p2 = (n) => String(n).padStart(2, '0');
+    return _ts.raw.map((r) => `${p2(r.t.getHours())}:${p2(r.t.getMinutes())}:${p2(r.t.getSeconds())}.${String(r.t.getMilliseconds()).padStart(3, '0')}  ${r.s}`).join('\n');
+}
+function _tsUpdateRaw() {
+    const pre = document.getElementById('ts-raw');
+    const n = document.getElementById('ts-raw-n');
+    if(n) n.textContent = _ts.raw.length ? `（${_ts.raw.length}行）` : '';
+    if(!pre) return;
+    const lines = tsRawText().split('\n');
+    pre.textContent = _ts.raw.length ? lines.slice(-80).join('\n') : '（まだ何も届いていません）';
+    pre.scrollTop = pre.scrollHeight;
+}
+window.tsRawToggle = function(open) { _ts.rawOpen = !!open; };
+window.tsCopyRaw = async function() {
+    const text = tsRawText();
+    if(!text) { showToast('まだ何も届いていません', 2500); return false; }
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast(`受信した生データ ${_ts.raw.length}行をコピーしました`, 2500);
+        return true;
+    } catch {
+        // コピーできない環境: 表示を選んだ状態にする（長押し・Ctrl+C でコピー）
+        const pre = document.getElementById('ts-raw');
+        if(pre && window.getSelection) { pre.textContent = text; const r = document.createRange(); r.selectNodeContents(pre); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+        showToast('自動でコピーできませんでした。選んだ文字をコピーしてください', 3500);
+        return false;
+    }
+};
+window.tsClearRaw = function() { _ts.raw = []; _ts.rawCur = ''; clearTimeout(_ts.rawTimer); _ts.rawTimer = null; _tsUpdateRaw(); };
+
 // 届いたバイト列を行に分けて読む（XON/XOFF は送信の一時停止・再開の合図）
 function tsReceiveBytes(bytes) {
     _ts.rxBytes += bytes.length;
+    _tsRawFeed(bytes);
     for(let i = 0; i < bytes.length; i++) {
         const b = bytes[i];
         if(b === 0x13) { _ts.xoff = true; continue; }

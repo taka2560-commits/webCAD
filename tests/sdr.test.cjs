@@ -233,6 +233,31 @@ describe('TS連携: ファイルと通信', () => {
         assert.equal(app.eval('_ts.port'), null);
         delete app.window.navigator.serial;
     });
+    it('受信した生データ: 制御文字を見える形で残し、LF か間が空いた所で区切る。コピー・消す', async () => {
+        app.eval('tsClearRaw(); showTsPanel()');
+        app.window.__b = bytes('\x02\r\n08KIP1\r\n\x0300000\r\n'); app.eval('tsReceiveBytes(window.__b)');
+        assert.deepEqual(app.val('_ts.raw.map(r => r.s)'), ['<STX><CR><LF>', '08KIP1<CR><LF>', '<ETX>00000<CR><LF>']);
+        // CR・LF で終わらない出力（測るたびの出力の形式は機械しだい）は、間が空いた所で1行にする
+        app.window.__b = bytes('d+0001234').concat([0x82, 0x03]); app.eval('tsReceiveBytes(window.__b)');
+        assert.equal(app.eval('_ts.raw.length'), 3);
+        await new Promise((r) => setTimeout(r, 400));
+        assert.equal(app.eval('_ts.raw[3].s'), 'd+0001234<82><ETX>');
+        // パネル: 生データの欄（時刻つき）と、ファイルの SIMA のボタン
+        app.eval('showTsPanel(); tsRawToggle(true); showTsPanel()');
+        const panel = app.eval(`document.getElementById('property-panel-content').textContent`);
+        assert.match(panel, /受信した生データ/); assert.match(panel, /SIMA で書き出す/); assert.match(panel, /SIMA・SDR を開く/);
+        assert.match(app.eval(`document.getElementById('ts-raw').textContent`), /\d\d:\d\d:\d\d\.\d{3} {2}08KIP1<CR><LF>/);
+        assert.equal(app.eval(`document.querySelector('.ts-raw').open`), true, '開いた状態を覚える');
+        // コピー
+        let copied = null;
+        Object.defineProperty(app.window.navigator, 'clipboard', { value: { writeText: async (t) => { copied = t; } }, configurable: true });
+        assert.equal(await app.eval('tsCopyRaw()'), true);
+        assert.equal(copied.split('\n').length, 4); assert.match(copied, /<STX><CR><LF>/);
+        delete app.window.navigator.clipboard;
+        app.eval('tsClearRaw()');
+        assert.equal(app.eval('_ts.raw.length'), 0);
+        assert.match(app.eval(`document.getElementById('ts-raw').textContent`), /まだ何も届いていません/);
+    });
     it('コマンド（TS・SDROUT）とヘルプ', () => {
         app.eval(`processCommand('TS')`);
         assert.equal(app.eval(`document.getElementById('property-panel-title').textContent`), '📡 TS連携');
