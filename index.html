@@ -495,6 +495,23 @@
         .stake-dir { font-size:12px; color:#e0e0e0; }
         .stake-here { font-size:13px; font-weight:700; color:var(--green); }
         .cogo-table tr.stake-cur td { background:rgba(0,255,255,0.12); }
+        /* 写真・メモ（📷）パネル */
+        .ph-list { display:flex; flex-direction:column; gap:4px; max-height:46vh; overflow:auto; }
+        .ph-row { display:flex; align-items:center; gap:8px; text-align:left; background:#2a2e35; color:#e0e0e0; border:1px solid var(--border-3); border-radius:var(--r-sub); padding:6px 8px; cursor:pointer; font:inherit; }
+        .ph-row:hover { background:#3a4049; }
+        .ph-no { flex:0 0 auto; min-width:22px; height:22px; border-radius:11px; background:#ff9f43; color:#1b1b1b; font-weight:800; font-size:12px; display:inline-flex; align-items:center; justify-content:center; padding:0 4px; }
+        .ph-main { flex:1; min-width:0; display:flex; flex-direction:column; }
+        .ph-t { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ph-m { font-size:11px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ph-d { flex:0 0 auto; font-size:10px; color:var(--mute); }
+        .ph-head { display:flex; align-items:center; gap:8px; font-size:12px; }
+        .ph-text { width:100%; box-sizing:border-box; resize:vertical; min-height:64px; font-size:13px; }
+        .ph-thumbs { display:flex; flex-wrap:wrap; gap:6px; }
+        .ph-th { position:relative; width:84px; height:84px; border-radius:var(--r-sub); overflow:hidden; border:1px solid var(--border-1); }
+        .ph-th img { width:100%; height:100%; object-fit:cover; cursor:zoom-in; display:block; }
+        .ph-th button { position:absolute; top:2px; right:2px; width:22px; height:22px; border-radius:11px; border:none; background:rgba(0,0,0,0.6); color:#fff; font-size:12px; cursor:pointer; padding:0; }
+        .ph-miss { display:flex; align-items:center; justify-content:center; font-size:10px; color:#ffcc00; text-align:center; padding:4px; cursor:pointer; }
+        .ph-big { width:100%; border-radius:var(--r-sub); cursor:zoom-out; display:block; }
     </style>
 </head>
 <body>
@@ -546,6 +563,7 @@
                 <button class="menu-item-btn" onclick="showCogoPanel(); toggleTopMenu();" title="求積（座標法）・逆計算・点の追加（方向角と距離）・交点">🧮 測量計算</button>
                 <button class="menu-item-btn" onclick="showTsPanel(); toggleTopMenu();" title="ソキアのトータルステーションと SDR ファイル・通信（USB・Bluetooth）で受け渡し">📡 TS連携</button>
                 <button class="menu-item-btn" onclick="showStakePanel(); toggleTopMenu();" title="杭を順に選び、現在地（GNSS）または器械点から、距離と向き・夾角を案内">📍 杭打ち</button>
+                <button class="menu-item-btn" onclick="showPhotoPanel(); toggleTopMenu();" title="図面の場所にピンを立てて、メモと写真を付ける（写真台帳 PDF）">📷 写真・メモ</button>
                 <button class="menu-item-btn" onclick="toggleGnss(); toggleTopMenu();">🛰 現在地</button>
                 <button class="menu-item-btn" onclick="exportSima(); toggleTopMenu();">SIMA 出力</button>
                 <button class="menu-item-btn" onclick="exportCoordCsv(); toggleTopMenu();">座標CSV 出力</button>
@@ -844,6 +862,7 @@
     <script src="cad-stake.js"></script>
     <script src="cad-print.js"></script>
     <script src="cad-underlay.js"></script>
+    <script src="cad-photo.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-boot.js"></script>

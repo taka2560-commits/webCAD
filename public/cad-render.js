@@ -108,6 +108,7 @@ function _drawFrame(overlayOnly) {
         if(typeof drawStakeOverlay === 'function') drawStakeOverlay(); // 杭打ち（順番の杭・済み・いまの杭・案内の線）
         if(typeof drawPrintOverlay === 'function') drawPrintOverlay(); // 印刷の枠（用紙・表題欄・方位記号の場所）
         if(typeof drawUnderlayOverlay === 'function') drawUnderlayOverlay(); // 下絵を2点で合わせる途中の印
+        if(typeof drawPhotoPins === 'function') drawPhotoPins(); // 現場写真・メモのピン
         
         // 範囲選択矩形描画
         drawSelectionRect();

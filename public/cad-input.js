@@ -55,6 +55,8 @@ function setupEventListeners() {
             if (cmdState.mode!=='IDLE' && !isSelectMode) { // Left click for point input when not in IDLE and not select mode
                 const pt=getInputPoint(); handlePointInput(pt, true);
             } else {
+                // 現場写真・メモのピン（通常画面で何もしていないとき）
+                if(cmdState.mode === 'IDLE' && typeof photoPinTap === 'function' && photoPinTap(mouse.screenX, mouse.screenY)) return;
                 const idx = hitTestEntity(mouse.screenX, mouse.screenY);
                 if(idx >= 0) {
                     if (cmdState.mode === 'IDLE') {
@@ -444,7 +446,7 @@ function setupEventListeners() {
                 }
             } else if(!touchState.hasMoved) {
                 // 短いタップでIDLEモード: エンティティ選択/選択解除（グループ選択ONならブロック全体）
-                selectEntityAt(mouse.screenX, mouse.screenY);
+                if(!(typeof photoPinTap === 'function' && photoPinTap(mouse.screenX, mouse.screenY))) selectEntityAt(mouse.screenX, mouse.screenY);
             } else if(!document.body.classList.contains('fullscreen-mode') && typeof guideNotify === 'function') {
                 guideNotify('idleDrag'); // 1本指でなぞった（画面を動かしたかったのかもしれない）
             }

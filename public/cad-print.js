@@ -66,34 +66,48 @@ function printColor(hex, mode) {
     return [r, g, b];
 }
 /**
- * 1ページの PDF を作る。page: { W, H（pt）, content（描画命令の文字列） }、info: { title }
- * compress: CompressionStream があれば Flate で縮める。戻り値は Uint8Array
+ * PDF を作る。doc: 1ページなら { W, H（pt）, content（描画命令の文字列）, images }、複数ページなら { pages: [同じ形, …] }。
+ *   images: [{ name（描画命令で /名前 Do と使う）, jpeg（Uint8Array）, w, h（画素） }]（JPEG をそのまま入れる）
+ * info: { title }。compress: CompressionStream があれば描画命令を Flate で縮める。戻り値は Uint8Array
+ * 1ページ目の番号の並び（1〜10）は、以前の1ページだけの PDF と同じ。2ページ目以降・画像はその後ろに足す。
  */
-async function pdfBuild(page, info, compress) {
+async function pdfBuild(doc, info, compress) {
     const enc = new window.TextEncoder();
-    let body = enc.encode(page.content), filter = '';
-    if(compress && typeof window.CompressionStream === 'function') {
+    const pages = doc.pages || [doc];
+    const deflate = async (u8) => {
+        if(!compress || typeof window.CompressionStream !== 'function') return null;
         try {
             const cs = new window.CompressionStream('deflate');
-            const buf = await new window.Response(new Blob([body]).stream().pipeThrough(cs)).arrayBuffer();
-            body = new Uint8Array(buf); filter = ' /Filter /FlateDecode';
-        } catch { /* 縮められなければそのまま */ }
-    }
+            return new Uint8Array(await new window.Response(new Blob([u8]).stream().pipeThrough(cs)).arrayBuffer());
+        } catch { return null; } // 縮められなければそのまま
+    };
     const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
     const date = `D:${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
     const font = 'HeiseiKakuGo-W5';
-    const objs = [
-        '<< /Type /Catalog /Pages 2 0 R /ViewerPreferences << /PrintScaling /None >> >>',
-        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pdfNum(page.W)} ${pdfNum(page.H)}] /Resources << /Font << /F1 5 0 R >> /ExtGState << /GS0 8 0 R /GS1 9 0 R >> >> /Contents 4 0 R >>`,
-        null, // 4: 描画命令（ストリーム）
-        `<< /Type /Font /Subtype /Type0 /BaseFont /${font} /Encoding /UniJIS-UCS2-HW-H /DescendantFonts [6 0 R] >>`,
-        `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /${font} /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >> /FontDescriptor 7 0 R /DW 1000 /W [231 389 500] >>`,
-        `<< /Type /FontDescriptor /FontName /${font} /Flags 4 /FontBBox [-92 -250 1010 922] /ItalicAngle 0 /Ascent 752 /Descent -271 /CapHeight 737 /StemV 114 >>`,
-        '<< /Type /ExtGState /ca 1 /CA 1 >>',
-        '<< /Type /ExtGState /ca 0.3 >>',
-        `<< /Title <FEFF${pdfHexText(info.title || '')}> /Creator (Web CAD) /Producer (Web CAD) /CreationDate (${date}) >>`,
-    ];
+    // 番号: 1 目録, 2 ページの束, 3・4 1ページ目と描画命令, 5〜7 フォント, 8・9 透明度, 10 情報, 11〜 2ページ目以降（ページ・描画命令）と画像
+    const pageNo = [3], contNo = [4];
+    let next = 11;
+    for(let i = 1; i < pages.length; i++) { pageNo.push(next++); contNo.push(next++); }
+    const imgNo = pages.map((pg) => (pg.images || []).map(() => next++));
+    const objs = new Array(next - 1).fill(null); // objs[番号 - 1] = 文字列、またはストリーム { dict, data }
+    objs[0] = '<< /Type /Catalog /Pages 2 0 R /ViewerPreferences << /PrintScaling /None >> >>';
+    objs[1] = `<< /Type /Pages /Kids [${pageNo.map((n) => n + ' 0 R').join(' ')}] /Count ${pages.length} >>`;
+    objs[4] = `<< /Type /Font /Subtype /Type0 /BaseFont /${font} /Encoding /UniJIS-UCS2-HW-H /DescendantFonts [6 0 R] >>`;
+    objs[5] = `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /${font} /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >> /FontDescriptor 7 0 R /DW 1000 /W [231 389 500] >>`;
+    objs[6] = `<< /Type /FontDescriptor /FontName /${font} /Flags 4 /FontBBox [-92 -250 1010 922] /ItalicAngle 0 /Ascent 752 /Descent -271 /CapHeight 737 /StemV 114 >>`;
+    objs[7] = '<< /Type /ExtGState /ca 1 /CA 1 >>';
+    objs[8] = '<< /Type /ExtGState /ca 0.3 >>';
+    objs[9] = `<< /Title <FEFF${pdfHexText(info.title || '')}> /Creator (Web CAD) /Producer (Web CAD) /CreationDate (${date}) >>`;
+    for(let i = 0; i < pages.length; i++) {
+        const pg = pages[i], imgs = pg.images || [];
+        const xo = imgs.length ? ` /XObject << ${imgs.map((im, j) => `/${im.name} ${imgNo[i][j]} 0 R`).join(' ')} >>` : '';
+        objs[pageNo[i] - 1] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pdfNum(pg.W)} ${pdfNum(pg.H)}] /Resources << /Font << /F1 5 0 R >> /ExtGState << /GS0 8 0 R /GS1 9 0 R >>${xo} >> /Contents ${contNo[i]} 0 R >>`;
+        const raw = enc.encode(pg.content), z = await deflate(raw);
+        objs[contNo[i] - 1] = { dict: z ? ' /Filter /FlateDecode' : '', data: z || raw };
+        imgs.forEach((im, j) => {
+            objs[imgNo[i][j] - 1] = { dict: ` /Type /XObject /Subtype /Image /Width ${im.w} /Height ${im.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode`, data: im.jpeg };
+        });
+    }
     const chunks = [], offsets = [];
     let len = 0;
     const push = (u8) => { chunks.push(u8); len += u8.length; };
@@ -102,15 +116,15 @@ async function pdfBuild(page, info, compress) {
     push(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a])); // バイナリを含むことの印（%âãÏÓ）
     objs.forEach((o, i) => {
         offsets.push(len);
-        if(o === null) {
-            pushS(`${i + 1} 0 obj\n<< /Length ${body.length}${filter} >>\nstream\n`);
-            push(body);
+        if(o && typeof o === 'object') {
+            pushS(`${i + 1} 0 obj\n<< /Length ${o.data.length}${o.dict} >>\nstream\n`);
+            push(o.data);
             pushS('\nendstream\nendobj\n');
         } else pushS(`${i + 1} 0 obj\n${o}\nendobj\n`);
     });
     const xref = len;
     pushS(`xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offsets.map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join(''));
-    pushS(`trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info ${objs.length} 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+    pushS(`trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info 10 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
     const out = new Uint8Array(len);
     let pos = 0;
     chunks.forEach((c) => { out.set(c, pos); pos += c.length; });
@@ -239,6 +253,29 @@ function printCompose(o, center, rot, meta) {
             out.push('/GS0 gs');
         }
     };
+    // 現場写真・メモのピンは、写真台帳と同じ番号の丸で描く
+    const pinNo = new Map();
+    entities.forEach((e) => { if(e && e.type === 'PIN') pinNo.set(e, pinNo.size + 1); });
+    const drawPin = (e) => {
+        const s = T(e.x, e.y), r = 1.8 * k, cy = s[1] + r + 1.2 * k;
+        out.push('1 1 1 rg');
+        fill = '';
+        out.push(`${M(s)} m ${M([s[0], cy - r])} l S`);
+        arcPathPt(s[0], cy, r);
+        out.push('b');
+        setFill([0, 0, 0]);
+        const lab = String(pinNo.get(e));
+        out.push(`BT /F1 ${pdfNum(2.2 * k)} Tf 1 0 0 1 ${pdfNum(s[0] - pdfTextWidth(lab, 2.2 * k) / 2)} ${pdfNum(cy - 0.8 * k)} Tm <${pdfHexText(lab)}> Tj ET`);
+    };
+    // 用紙の pt で円を描く（ピン用）
+    const arcPathPt = (cx, cy, r) => {
+        const kk = 0.5522847498;
+        out.push(`${pdfNum(cx + r)} ${pdfNum(cy)} m`);
+        [[0, 1], [-1, 0], [0, -1], [1, 0]].reduce((prev, cur) => {
+            out.push(`${pdfNum(cx + r * (prev[0] - kk * prev[1]))} ${pdfNum(cy + r * (prev[1] + kk * prev[0]))} ${pdfNum(cx + r * (cur[0] + kk * cur[1]))} ${pdfNum(cy + r * (cur[1] - kk * cur[0]))} ${pdfNum(cx + r * cur[0])} ${pdfNum(cy + r * cur[1])} c`);
+            return cur;
+        }, [1, 0]);
+    };
     setW(0.2);
     entities.forEach((e) => {
         if(!e || e.hidden) return;
@@ -246,7 +283,7 @@ function printCompose(o, center, rot, meta) {
         if(outside(e)) return;
         const c = printColor(getEntityColor(e), o.color);
         setStroke(c);
-        drawShape(e, c);
+        if(e.type === 'PIN') drawPin(e); else drawShape(e, c);
         count++;
     });
     out.push('Q');

@@ -778,6 +778,7 @@ function exportDxf() {
             else if(e.type === 'DIMENSION') { d.setActiveLayer('寸法'); writeDim(e); drawn = false; }
             // 塗りつぶしは HATCH（単色）として出力
             else if(e.type === 'HATCH') { drawn = !!(e.target && writeHatch(e.target)); if(!drawn) skipped++; }
+            else if(e.type === 'PIN') { drawn = false; } // 現場写真・メモのピンはアプリだけのもの（DXF には出さない）
             else { drawn = false; skipped++; }
 
             if(drawn) applyEntityColor(e.color);
