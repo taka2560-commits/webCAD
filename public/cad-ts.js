@@ -17,6 +17,7 @@ const _ts = {
     parser: null, pending: null, // 受信中の SDR（sdrParser）と、取り込み待ちの結果（parseSdr と同じ形）
     buf: '', rxBytes: 0, rxLines: 0, uiTimer: null,
     raw: [], rawCur: '', rawTimer: null, rawOpen: false, // 受信した生データ（[{ t: 日時, s: 見える形の文字列 }]）と、組み立て中の行
+    howtoOpen: false, // 「つなぎ方」を開いているか
 };
 const TS_RAW_MAX = 300;       // 残す行の数
 const TS_RAW_IDLE_MS = 300;   // この間なにも届かなければ、そこで1行とする（CR・LF で終わらない出力もあるため）
@@ -42,14 +43,14 @@ function _tsRender() {
         _cogoNote('SIMA（.sim）は測点・区画をそのまま受け渡します。SDR（SDR33・SDR2x）の現場データは、器械点・後視・観測から座標を計算して測点にします。書き出したファイルは、機械で既知点・杭打ち点として読み込めます。') +
         '<div class="ts-sec">通信（USB ケーブル・Bluetooth）</div>';
     if(!tsSerialAvailable()) {
-        h += _cogoNote('このブラウザでは機械と直接つなげません。PC の Chrome・Edge、Android の Chrome で使えます（iPhone・iPad は SDR ファイルで受け渡しします）。');
+        h += _cogoNote('このブラウザでは機械と直接つなげません。PC の Chrome・Edge（117 以降）、Android の Chrome（137 以降）で使えます。iPhone・iPad は、ファイル（SIMA・SDR）で受け渡します。');
     } else if(!_ts.port) {
         h += _tsSel('ts-baud', 'ボーレート', TS_BAUDS.map((b) => [b, b + ' bps']), o.baudRate) +
             _tsSel('ts-bits', 'データ長', [[8, '8 ビット'], [7, '7 ビット']], o.dataBits) +
             _tsSel('ts-parity', 'パリティ', [['none', 'なし'], ['even', '偶数'], ['odd', '奇数']], o.parity) +
             _tsSel('ts-stop', 'ストップビット', [[1, '1 ビット'], [2, '2 ビット']], o.stopBits) +
             '<button class="prop-btn" onclick="tsConnect()">🔌 機械とつなぐ</button>' +
-            _cogoNote('Bluetooth は、先に端末の設定で機械とペアリングしておきます（ボーレートなどの設定は使いません）。ケーブルのときは、機械の通信設定と同じにします。');
+            _tsHowTo();
     } else {
         h += `<div class="ts-status"><span class="ts-dot"></span>つながっています&nbsp;&nbsp;<span id="ts-rx">${_tsRxText()}</span></div>` +
             '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="tsSendPoints()">📤 測点を送る</button><button class="prop-btn btn-sub" onclick="tsDisconnect()">切断</button></div>' +
@@ -66,6 +67,23 @@ function _tsRender() {
     showPropertyPanel(TS_TITLE, h);
     _tsUpdateResult();
 }
+// つなぎ方（ソキア iM-100。取扱説明書の9章「外部機器との接続」、FIELD-TERRACE の接続設定、カタログより）
+function _tsHowTo() {
+    return `<details class="ts-howto" ${_ts.howtoOpen ? 'open' : ''} ontoggle="tsHowtoToggle(this.open)"><summary>📖 つなぎ方（ソキア iM-100）</summary>` +
+        '<div class="ts-howto-body">' +
+        '<b>Bluetooth</b>（Android の Chrome・PC の Chrome／Edge）<ol>' +
+        '<li>機械: 〔設定〕→「通信条件」→「通信設定」で、通信モードを「Bluetooth」、通信タイプを「S タイプ」にする（チェックサム・Xon/Xoff は「ナシ」）。</li>' +
+        '<li>端末の Bluetooth の設定で、機械とペアリングしておく（最初の1回）。機械の Bluetooth アドレス（12桁）は、通信設定の「Bluetooth」に出ます。</li>' +
+        '<li>機械: 観測画面の4ページ目の Bluetooth のキーで待ち受けにする（マークが点滅し、短い音）。</li>' +
+        '<li>ここで「🔌 機械とつなぐ」→ 機械を選ぶ（長い音でつながります）。ボーレートなどの設定は使いません。</li></ol>' +
+        '<b>ケーブル（RS-232C）</b>（PC）<ol>' +
+        '<li>機械の電源を切り、ケーブル DOC210（D-sub 9ピン）でつなぐ。PC にシリアルの端子が無ければ USB 変換アダプタを使う。外部電源と一緒に使うときは Y ケーブル（EDC211・EDC212）。</li>' +
+        '<li>機械: 通信モードを「RS232C」にし、上のボーレートなどを機械と同じにする（機械の初期値は 9600 bps・8 ビット・なし・1 ビット）。</li>' +
+        '<li>「🔌 機械とつなぐ」→ COM ポートを選ぶ。</li></ol>' +
+        _cogoNote('Bluetooth が届くのは約10m。金属・コンクリートは電波を通さず、雨・霧・人の体でも短くなるので、見通しのよい高い所で使います。通信中に機械の通信設定を変えると切れます。Android では切れたことが分からない場合があるので、そのときは「切断」→「機械とつなぐ」でつなぎ直します。') +
+        '</div></details>';
+}
+window.tsHowtoToggle = function(open) { _ts.howtoOpen = !!open; };
 function _tsRxText() { return _ts.rxLines ? `受信 ${_ts.rxLines}行` : '受信待ち'; }
 window.tsSetOpt = function() {
     const v = (id) => { const el = document.getElementById(id); return el ? el.value : null; };

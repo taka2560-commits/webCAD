@@ -258,6 +258,20 @@ describe('TS連携: ファイルと通信', () => {
         assert.equal(app.eval('_ts.raw.length'), 0);
         assert.match(app.eval(`document.getElementById('ts-raw').textContent`), /まだ何も届いていません/);
     });
+    it('つなぎ方（iM-100）: つなぐ前のパネルに手順を出し、開いた状態を覚える。ヘルプにも', () => {
+        Object.defineProperty(app.window.navigator, 'serial', { value: { requestPort: async () => { throw new Error('x'); } }, configurable: true });
+        try {
+            app.eval('_ts.port = null; tsHowtoToggle(false); showTsPanel()');
+            const text = app.eval(`document.querySelector('.ts-howto').textContent`);
+            ['つなぎ方', 'Bluetooth', 'S タイプ', 'ペアリング', '4ページ目', '待ち受け', 'DOC210', 'RS232C', '約10m'].forEach((w) => assert.ok(text.includes(w), w));
+            assert.equal(app.eval(`document.querySelector('.ts-howto').open`), false);
+            app.eval('tsHowtoToggle(true); showTsPanel()');
+            assert.equal(app.eval(`document.querySelector('.ts-howto').open`), true);
+        } finally { delete app.window.navigator.serial; app.eval('tsHowtoToggle(false)'); }
+        app.eval('showTsPanel()');
+        assert.match(app.eval(`document.getElementById('property-panel-content').textContent`), /Android の Chrome（137 以降）/);
+        assert.ok(app.eval(`GUIDE_TOPICS.some(t => /トータルステーション/.test(t.title) && /待ち受け/.test(t.text))`));
+    });
     it('コマンド（TS・SDROUT）とヘルプ', () => {
         app.eval(`processCommand('TS')`);
         assert.equal(app.eval(`document.getElementById('property-panel-title').textContent`), '📡 TS連携');
