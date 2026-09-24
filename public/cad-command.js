@@ -839,6 +839,7 @@ function processCommand(cmdText) {
     else if(typeof processCogoCommand === 'function' && processCogoCommand(cmd)) { /* 測量計算（求積・逆計算・点の追加・交点）処理済み */ }
     else if(typeof processTsCommand === 'function' && processTsCommand(cmd)) { /* トータルステーション連携（TS・SDROUT）処理済み */ }
     else if(typeof processStakeCommand === 'function' && processStakeCommand(cmd)) { /* 杭打ちナビ（STAKE）処理済み */ }
+    else if(typeof processPrintCommand === 'function' && processPrintCommand(cmd)) { /* 印刷・PDF（PRINT）処理済み */ }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
     else { addCommandLog(`不明なコマンドです "${cmdText}"`); resetCommand(); }
 }

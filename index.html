@@ -460,6 +460,7 @@
         /* 測量計算（🧮）パネル: 計算した値は水色（測定・寸法と同じ）、指定した点は緑 */
         .cogo-seg { display:flex; gap:4px; }
         .cogo-seg .prop-btn { flex:1; min-width:0; margin-top:0; padding:6px 0; font-size:12px; font-weight:600; border-radius:6px; white-space:nowrap; }
+        .prop-row .cogo-seg { flex:1; min-width:0; }
         .prop-row.cogo-row { margin-bottom:0; }
         .prop-label.cogo-label { flex:0 0 84px; width:84px; font-size:11px; }
         .cogo-slot { display:flex; flex-direction:column; gap:2px; }
@@ -533,6 +534,7 @@
             <div class="menu-btn-grid">
                 <button class="menu-item-btn" onclick="showProjectList(); toggleTopMenu();">📂 保存一覧</button>
                 <button class="menu-item-btn" onclick="exportDxf(); toggleTopMenu();" title="AutoCAD・Jw_cad などで開けます（DWG では書き出せません）">DXF 出力</button>
+                <button class="menu-item-btn" onclick="showPrintPanel(); toggleTopMenu();" title="用紙と縮尺を決めて PDF にする（図枠・表題欄・方位記号つき）">🖨 印刷・PDF</button>
                 <button class="menu-item-btn danger" onclick="closeDrawing(); toggleTopMenu();">✕ 図面を閉じる</button>
             </div>
         </div>
@@ -839,6 +841,7 @@
     <script src="cad-sdr.js"></script>
     <script src="cad-ts.js"></script>
     <script src="cad-stake.js"></script>
+    <script src="cad-print.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-boot.js"></script>
