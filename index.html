@@ -480,6 +480,10 @@
         .cogo-table td { padding:3px 6px; border-bottom:1px solid var(--border-3); color:#e0e0e0; }
         .cogo-table td.r { text-align:right; }
         .cogo-table td.c { text-align:center; }
+        /* TS連携（📡）パネル */
+        .ts-sec { font-size:11px; font-weight:700; color:var(--dim); border-bottom:1px solid var(--border-2); padding-bottom:2px; }
+        .ts-status { font-size:12px; color:#e0e0e0; display:flex; align-items:center; gap:6px; }
+        .ts-dot { width:8px; height:8px; border-radius:50%; background:var(--highlight-color); box-shadow:0 0 6px var(--highlight-color); }
     </style>
 </head>
 <body>
@@ -528,6 +532,7 @@
             <div class="menu-btn-grid">
                 <button class="menu-item-btn" onclick="showCoordListPanel(); toggleTopMenu();">📍 座標一覧</button>
                 <button class="menu-item-btn" onclick="showCogoPanel(); toggleTopMenu();" title="求積（座標法）・逆計算・点の追加（方向角と距離）・交点">🧮 測量計算</button>
+                <button class="menu-item-btn" onclick="showTsPanel(); toggleTopMenu();" title="ソキアのトータルステーションと SDR ファイル・通信（USB・Bluetooth）で受け渡し">📡 TS連携</button>
                 <button class="menu-item-btn" onclick="toggleGnss(); toggleTopMenu();">🛰 現在地</button>
                 <button class="menu-item-btn" onclick="exportSima(); toggleTopMenu();">SIMA 出力</button>
                 <button class="menu-item-btn" onclick="exportCoordCsv(); toggleTopMenu();">座標CSV 出力</button>
@@ -820,6 +825,8 @@
     <script src="cad-survey.js"></script>
     <script src="cad-cogo.js"></script>
     <script src="cad-cogo-ui.js"></script>
+    <script src="cad-sdr.js"></script>
+    <script src="cad-ts.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-boot.js"></script>

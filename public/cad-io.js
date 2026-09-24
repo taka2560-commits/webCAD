@@ -1137,7 +1137,7 @@ function processIOCommand(cmd) {
 // ===== ファイル入力イベント =====
 function setupFileIO() {
     const fileInput = document.getElementById('dxf-file-input');
-    fileInput.setAttribute('accept', '.dxf,.dwg,.sim,.csv,.txt');
+    fileInput.setAttribute('accept', '.dxf,.dwg,.sim,.csv,.txt,.sdr');
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if(!file) return;
@@ -1148,9 +1148,10 @@ function setupFileIO() {
         }
         else if(ext === 'sim' && typeof loadSimaFile === 'function') { _prepareImportTarget(); loadSimaFile(file); }
         else if((ext === 'csv' || ext === 'txt') && typeof loadCoordCsvFile === 'function') { _prepareImportTarget(); loadCoordCsvFile(file); }
+        else if(ext === 'sdr' && typeof loadSdrFile === 'function') { _prepareImportTarget(); loadSdrFile(file); } // トータルステーションの現場データ（SDR33・SDR2x）
         else {
             addCommandLog(`未対応の形式です: .${ext}`);
-            if(typeof showToast === 'function') showToast(`未対応の形式です（.${ext}）\nDXF・DWG・SIMA（.sim）・座標CSVを開けます`, 4000);
+            if(typeof showToast === 'function') showToast(`未対応の形式です（.${ext}）\nDXF・DWG・SIMA（.sim）・座標CSV・SDR（.sdr）を開けます`, 4000);
         }
         fileInput.value = ''; // リセット
     });

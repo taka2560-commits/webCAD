@@ -448,8 +448,9 @@ window.showCoordListPanel = function() {
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
             <button class="prop-btn btn-sub" style="flex:1;" onclick="exportCoordCsv()">📄 CSV出力</button>
             <button class="prop-btn btn-sub" style="flex:1;" onclick="exportSima()">📄 SIMA出力</button>
+            <button class="prop-btn btn-sub" style="flex:1;" onclick="exportSdr33()" title="ソキアのトータルステーション用（既知点・杭打ち点）">📄 SDR33出力</button>
         </div>
-        <div style="font-size:10px;color:#666;margin-top:6px;">SIMA・座標CSVは「開く」から読み込めます</div>`;
+        <div style="font-size:10px;color:#666;margin-top:6px;">SIMA・座標CSV・SDR は「開く」から読み込めます</div>`;
     showPropertyPanel('📍 座標一覧', html);
     window.updateCoordListContent();
 };
