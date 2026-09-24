@@ -13,6 +13,7 @@ const DISPLAY_PREF_DEFS = {
     coordFont:     { label: '座標の文字',     def: 'm',   options: [['s', '小', 0.85], ['m', '中', 1], ['l', '大', 1.3], ['xl', '特大', 1.6]] },
     coordDecimals: { label: '座標の桁',       def: 'std', options: [['std', '標準', null], ['0', '1', 0], ['1', '0.1', 1], ['2', '0.01', 2], ['3', '0.001', 3]] },
     dimText:       { label: '寸法の文字',     def: 'm',   options: [['s', '小', 0.8], ['m', '中', 1], ['l', '大', 1.3], ['xl', '特大', 1.6]] },
+    dimDecimals:   { label: '寸法の桁',       def: 'auto', options: [['auto', '自動', null], ['0', '1', 0], ['1', '0.1', 1], ['2', '0.01', 2], ['3', '0.001', 3]] },
     snapRange:     { label: '吸着の範囲',     def: 'm',   options: [['s', '狭い', 0.6], ['m', '標準', 1], ['l', '広い', 1.6], ['xl', '最大', 2.4]] },
 };
 
@@ -82,6 +83,9 @@ function snapRadiusPx() {
     return base * (displayPref('snapRange') || 1);
 }
 
+// 図形を押して選べる範囲（画面上の半径px）。指はマウスより位置がずれるので広げる
+function hitRadiusPx() { return (typeof isMobile === 'function' && isMobile()) ? 12 : ERASE_R; }
+
 // ===== 反映 =====
 // 座標の文字の大きさは CSS 変数（--coord-scale）で、ステータスバー・全画面の座標表示に効かせる
 function applyDisplayPrefs() {
@@ -98,6 +102,7 @@ window.setDisplayPref = function(name, key) {
     applyDisplayPrefs();
     document.querySelectorAll(`.opt-pref-btn[data-pref="${name}"]`).forEach(b => b.classList.toggle('active', b.dataset.key === key));
     if(name === 'coordDecimals' || name === 'coordFont') refreshCoordDisplay();
+    if(name === 'dimDecimals' && typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch(); // 寸法の文字を描き直す
     if(name === 'loupeSize' || name === 'loupeZoom') showPrefPreview('loupe');
     else if(name === 'snapRange') showPrefPreview('snap');
     if(typeof render === 'function') render();
@@ -126,7 +131,7 @@ function displayPrefsSectionHtml() {
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
             <div style="font-size:11px;color:#aaa;font-weight:700;">表示・操作（この端末に保存）</div>
             ${rows}
-            <div style="color:#888;font-size:10px;">座標の桁「標準」は、ステータスバーが整数・ルーペが小数2桁です</div>
+            <div style="color:#888;font-size:10px;">座標の桁「標準」は、ステータスバーが整数・ルーペが小数2桁です。寸法の桁「自動」は小数3桁まで（末尾の0は省く）です</div>
             <button class="prop-btn btn-sub" onclick="resetDisplayPrefs()">表示・操作を初期値に戻す</button>
         </div>`;
 }

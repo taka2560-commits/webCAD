@@ -293,7 +293,40 @@ function _handlePointInputCore(wcs, fromMouse) {
 }
 
 // ===== オフセット処理 =====
-function isOffsetable(e) { return e.type==='LINE'||e.type==='CIRCLE'||e.type==='ARC'||e.type==='RECTANG'; }
+function isOffsetable(e) { return e.type==='LINE'||e.type==='CIRCLE'||e.type==='ARC'||e.type==='RECTANG'||(e.type==='PLINE'&&!!e.points&&e.points.length>=2); }
+
+// ポリラインを距離 d だけずらした頂点の列（d > 0 で進む向きの左側）。
+// 各区間を平行にずらし、となり合う区間は延長して交わる点で結ぶ（尖りすぎる角は2点で面取り）
+function offsetPolylinePoints(points, closed, d) {
+    const P = [];
+    points.forEach(p => { const q = P[P.length - 1]; if(!q || Math.hypot(p.x - q.x, p.y - q.y) > 1e-12) P.push({ x: p.x, y: p.y }); });
+    if(closed && P.length > 2 && Math.hypot(P[0].x - P[P.length - 1].x, P[0].y - P[P.length - 1].y) <= 1e-12) P.pop();
+    const m = P.length;
+    if(m < 2 || (closed && m < 3)) return null;
+    const n = closed ? m : m - 1;
+    const segs = [];
+    for(let i = 0; i < n; i++) {
+        const a = P[i], b = P[(i + 1) % m], len = Math.hypot(b.x - a.x, b.y - a.y);
+        const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, ox = -uy * d, oy = ux * d;
+        segs.push({ ax: a.x + ox, ay: a.y + oy, bx: b.x + ox, by: b.y + oy, ux, uy });
+    }
+    const join = (s1, s2) => {
+        const cr = s1.ux * s2.uy - s1.uy * s2.ux;
+        if(Math.abs(cr) < 1e-9) return [{ x: s2.ax, y: s2.ay }]; // まっすぐ続く
+        const t = ((s2.ax - s1.ax) * s2.uy - (s2.ay - s1.ay) * s2.ux) / cr;
+        const ix = s1.ax + s1.ux * t, iy = s1.ay + s1.uy * t;
+        if(Math.hypot(ix - s1.bx, iy - s1.by) > 4 * Math.abs(d)) return [{ x: s1.bx, y: s1.by }, { x: s2.ax, y: s2.ay }];
+        return [{ x: ix, y: iy }];
+    };
+    const out = [];
+    if(closed) { for(let i = 0; i < n; i++) out.push(...join(segs[(i - 1 + n) % n], segs[i])); }
+    else {
+        out.push({ x: segs[0].ax, y: segs[0].ay });
+        for(let i = 1; i < n; i++) out.push(...join(segs[i - 1], segs[i]));
+        out.push({ x: segs[n - 1].bx, y: segs[n - 1].by });
+    }
+    return out;
+}
 function createOffsetEntity(e, d, wx, wy) {
     const copy = JSON.parse(JSON.stringify(e));
     delete copy.bbox; // 元図形のbboxを引き継ぐとスナップ/描画カリングが誤判定する
@@ -312,6 +345,19 @@ function createOffsetEntity(e, d, wx, wy) {
         const cross = dx*vy - dy*vx; // Z成分：正なら左側
         const sign = cross > 0 ? 1 : -1;
         copy.x1 += nx*d*sign; copy.y1 += ny*d*sign; copy.x2 += nx*d*sign; copy.y2 += ny*d*sign;
+        return copy;
+    } else if(e.type==='PLINE') {
+        // 押した点に一番近い区間の、どちら側か（左なら +、右なら −）
+        const P = e.points, n = e.closed ? P.length : P.length - 1;
+        let best = Infinity, side = 1;
+        for(let i = 0; i < n; i++) {
+            const a = P[i], b = P[(i + 1) % P.length];
+            const dd = distPointToSeg(wx, wy, a.x, a.y, b.x, b.y);
+            if(dd < best) { best = dd; side = ((b.x - a.x) * (wy - a.y) - (b.y - a.y) * (wx - a.x)) >= 0 ? 1 : -1; }
+        }
+        const pts = offsetPolylinePoints(P, !!e.closed, d * side);
+        if(!pts || pts.length < 2) return null;
+        copy.points = pts;
         return copy;
     } else if(e.type==='RECTANG') {
         const cx=(e.x1+e.x2)/2, cy=(e.y1+e.y2)/2;
@@ -358,6 +404,18 @@ function rotateEntity(e, cx, cy, angle) {
         const nx = rx(e.x, e.y), ny = ry(e.x, e.y);
         e.x = nx; e.y = ny;
         if(e.type === 'TEXT') e.rotation = (e.rotation || 0) + angle;
+    } else if(e.type === 'DIMENSION') {
+        // 測った点・引出線などの位置を回す（同じ点を2回回さないよう、回した点を覚えておく）
+        const done = new Set();
+        [e.p1, e.p2, e.center, e.vertex, e.arm1, e.arm2, e.point, e.leader, e.leaderX, e.leaderY, e.leaderCoord].forEach(p => {
+            if(!p || done.has(p)) return;
+            done.add(p);
+            const nx = rx(p.x, p.y), ny = ry(p.x, p.y); p.x = nx; p.y = ny;
+        });
+        if(e.subType === 'LINEAR') e.dimRot = (e.dimRot || 0) + angle;          // 測る向き（横・縦）も一緒に回す
+        if(e.subType === 'RADIUS' || e.subType === 'DIAMETER') e.angle = (e.angle || 0) + angle;
+    } else if(e.type === 'HATCH') {
+        if(e.target) rotateEntity(e.target, cx, cy, angle); // 塗りつぶしの範囲
     }
 }
 
@@ -574,11 +632,12 @@ function isPointOnSegment(px, py, x1, y1, x2, y2, tol = 0.001) { return distPoin
 function processCommand(cmdText) {
     const cmd = cmdText.toUpperCase().trim();
     const coordMatch = cmd.match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
-    if(coordMatch) { const ux=parseFloat(coordMatch[1]),uy=parseFloat(coordMatch[3]); const w=ucsToWcs(ux,uy); handlePointInput(w, true); return; }
-    // 相対座標「@x,y」: 直前に入力した点から（並びは絶対座標と同じ）
+    // 「X,Y」の順（画面の座標表示と同じ。X＝北、Y＝東）。以前は「東,北」の順で、表示と逆になっていた
+    if(coordMatch) { const X=parseFloat(coordMatch[1]), Y=parseFloat(coordMatch[3]); const w=ucsToWcs(Y, X); handlePointInput(w, true); return; }
+    // 相対座標「@X,Y」: 直前に入力した点から、北へ X・東へ Y（並びは絶対座標と同じ）
     const relMatch = cmd.match(/^@\s*(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
     if(relMatch) {
-        const w = relativeCommandPoint(parseFloat(relMatch[1]), parseFloat(relMatch[3]));
+        const w = relativeCommandPoint(parseFloat(relMatch[3]), parseFloat(relMatch[1]));
         if(w && cmdState.mode !== 'IDLE') handlePointInput(w, true); else addCommandLog('-> 相対座標の基準になる点がありません（先に1点を入力してください）');
         return;
     }
@@ -649,6 +708,7 @@ function processCommand(cmdText) {
     }
     else if(cmd==='L'||cmd==='LINE') { cmdState.mode='WAITING_LINE_P1'; setPrompt('1点目:'); setActiveTool('LINE'); addCommandLog('-> 1点目を指定'); }
     else if(cmd==='C'||cmd==='CIRCLE') {
+        materializeSizeDefault('radius', 40); // 一度も変えていなければ、画面に合った半径にする
         const isAuto = lastParams.circleMode === 'auto';
         const rVal = parseFloat(lastParams.radius) || 50;
         if (isAuto) {
@@ -690,6 +750,7 @@ function processCommand(cmdText) {
         setActiveTool('TEXT'); 
         addCommandLog('-> 文字の内容と高さを設定');
         
+        materializeSizeDefault('textHeight', 18); // 一度も変えていなければ、画面で読める大きさにする
         const lastH = lastParams.textHeight || 20;
         const lastStr = lastParams.textStr || 'テキスト';
         const lastCont = lastParams.textCont !== false;
@@ -697,11 +758,11 @@ function processCommand(cmdText) {
         const html = `
             <div class="prop-row">
                 <label>文字内容:</label>
-                <input type="text" id="prop-text-val" value="${lastStr}" placeholder="入力...">
+                <input type="text" id="prop-text-val" value="${escapeHtml(lastStr)}" placeholder="入力...">
             </div>
             <div class="prop-row">
                 <label>高さ:</label>
-                <input type="number" id="prop-text-h" value="${lastH}" min="1">
+                <input type="number" id="prop-text-h" value="${lastH}" min="0.001" step="any">
             </div>
             <div class="prop-row">
                 <label>連続配置:</label>

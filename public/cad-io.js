@@ -153,6 +153,13 @@ function dxfLayerIndex(name) {
     return idx;
 }
 
+// DXF の単位（$INSUNITS）とオプションの「図面の1単位」が違うときの案内（同じ・不明なら空文字）
+function _dxfUnitNote(dxf) {
+    const u = dxf && dxf.header && dxf.header.$INSUNITS;
+    const fileUnit = u === 4 ? 'mm' : u === 6 ? 'm' : null;
+    if(!fileUnit || typeof getSurveyUnit !== 'function' || getSurveyUnit() === fileUnit) return '';
+    return `このDXFの単位は ${fileUnit} です（オプションの「図面の1単位」は 1${getSurveyUnit()}）。測定・SIMA の値を合わせるには、オプションで 1${fileUnit} にしてください`;
+}
 function importDxfData(dxf, opts) {
     opts = opts || {};
     if(!opts.skipUndo) saveUndo();
@@ -260,7 +267,9 @@ function importDxfData(dxf, opts) {
         let msg = `読み込み完了: ${importCount}個の図形`;
         if(skipTotal > 0) msg += `（未対応 ${skipTotal}個）`;
         if(autoHidden.length > 0) msg += `\n重い画層を自動非表示: ${autoHidden.length}件`;
-        showToast(msg, 4000);
+        const unitNote = _dxfUnitNote(dxf);
+        if(unitNote) { msg += '\n' + unitNote; addCommandLog('-> ' + unitNote); }
+        showToast(msg, unitNote ? 7000 : 4000);
     }
     return { importCount, skipStats };
 }
@@ -645,7 +654,8 @@ function exportDxf() {
     }
     try {
         const d = new window.Drawing();
-        d.setUnits('Millimeters');
+        const unitMm = (typeof getSurveyUnit === 'function') && getSurveyUnit() === 'mm';
+        d.setUnits(unitMm ? 'Millimeters' : 'Meters');
         // 画層登録（カラー対応）
         layers.forEach(l => { try { d.addLayer(l.name, hexToAci(l.color), 'CONTINUOUS'); } catch(e){} });
         // 寸法出力用の画層を事前登録（未定義のままsetActiveLayerするとエクスポート全体が失敗する）
@@ -677,6 +687,56 @@ function exportDxf() {
         const H_ALIGN = { left: 'left', center: 'center', right: 'right' };
         const V_ALIGN = { bottom: 'baseline', middle: 'middle', top: 'top' };
         let skipped = 0;
+        // dxf-writer に無い図形（塗りつぶしの HATCH、矢印の SOLID）は、線を1本追加してから
+        // その出力内容を差し替えて書く（図形番号・所属は dxf-writer がそのまま管理する）
+        const addRaw = (writeBody) => {
+            d.drawLine(0, 0, 0, 0);
+            const shape = d.activeLayer.shapes[d.activeLayer.shapes.length - 1];
+            shape.tags = (m) => {
+                m.push(5, shape.handle); m.push(330, shape.ownerObjectHandle);
+                writeBody(m, shape.layer.name);
+            };
+            return shape;
+        };
+        const writeSolidTriangle = (p1, p2, p3) => addRaw((m, layer) => {
+            m.push(100, 'AcDbEntity'); m.push(8, layer); m.push(100, 'AcDbTrace');
+            [[10, p1], [11, p2], [12, p3], [13, p3]].forEach(([c, p]) => { m.push(c, p.x); m.push(c + 10, p.y); m.push(c + 20, 0); });
+        });
+        // 先頭の「0 HATCH / 0 SOLID」は tags の最初に出す必要があるため、差し替えた関数の前に追加する
+        const withType = (shape, type) => { const body = shape.tags; shape.tags = (m) => { m.push(0, type); body(m); }; return shape; };
+        const writeHatch = (tgt) => {
+            let ring = null, circle = null;
+            if(tgt.type === 'RECTANG') ring = [{ x: tgt.x1, y: tgt.y1 }, { x: tgt.x2, y: tgt.y1 }, { x: tgt.x2, y: tgt.y2 }, { x: tgt.x1, y: tgt.y2 }];
+            else if(tgt.type === 'PLINE' && tgt.points && tgt.points.length >= 3) ring = tgt.points;
+            else if(tgt.type === 'CIRCLE') circle = tgt;
+            if(!ring && !circle) return false;
+            withType(addRaw((m, layer) => {
+                m.push(100, 'AcDbEntity'); m.push(8, layer); m.push(100, 'AcDbHatch');
+                m.push(10, 0); m.push(20, 0); m.push(30, 0); m.push(210, 0); m.push(220, 0); m.push(230, 1);
+                m.push(2, 'SOLID'); m.push(70, 1); m.push(71, 0); m.push(91, 1);
+                if(circle) {
+                    m.push(92, 1); m.push(93, 1); m.push(72, 2);
+                    m.push(10, circle.cx); m.push(20, circle.cy); m.push(40, circle.radius); m.push(50, 0); m.push(51, 360); m.push(73, 1);
+                } else {
+                    m.push(92, 3); m.push(72, 0); m.push(73, 1); m.push(93, ring.length);
+                    ring.forEach(p => { m.push(10, p.x); m.push(20, p.y); });
+                }
+                m.push(97, 0); m.push(75, 0); m.push(76, 1); m.push(98, 0);
+            }), 'HATCH');
+            return true;
+        };
+        // 寸法: 画面と同じ形（寸法線・補助線・矢印・文字）で出力する。文字の高さは図面の大きさから決める
+        const dimK = (typeof dimExportTextHeight === 'function' ? dimExportTextHeight() : 2.5) / DIM_TEXT_SIZE;
+        const writeDim = (e) => {
+            const P = dimExportPrims(e, dimK);
+            P.lines.forEach(l => d.drawLine(l.x1, l.y1, l.x2, l.y2));
+            P.arcs.forEach(a => d.drawArc(a.cx, a.cy, a.r, a.sa * 180 / Math.PI, a.ea * 180 / Math.PI));
+            P.arrows.forEach(a => {
+                const c = Math.cos(a.a), s = Math.sin(a.a), bx = a.x - a.size * c, by = a.y - a.size * s, w = a.size / 3;
+                withType(writeSolidTriangle({ x: a.x, y: a.y }, { x: bx - w * s, y: by + w * c }, { x: bx + w * s, y: by - w * c }), 'SOLID');
+            });
+            P.texts.forEach(t => d.drawText(t.x, t.y, t.h, t.ang * 180 / Math.PI, String(t.s), t.ha, t.va));
+        };
 
         // エンティティ出力
         entities.forEach(e => {
@@ -714,9 +774,11 @@ function exportDxf() {
                 d.drawText(e.x, e.y, e.height || 2.5, (e.rotation || 0) * 180 / Math.PI, String(e.text || '').replace(/\n/g, ' '),
                     H_ALIGN[e.halign] || 'left', V_ALIGN[e.valign] || 'baseline');
             }
-            // 寸法は補助線+テキストとして出力
-            else if(e.type === 'DIMENSION') { exportDimAsDxf(d, e); drawn = false; }
-            else { drawn = false; if(e.type !== 'HATCH') skipped++; }
+            // 寸法は画面と同じ形の線・矢印・文字として出力（画層「寸法」）
+            else if(e.type === 'DIMENSION') { d.setActiveLayer('寸法'); writeDim(e); drawn = false; }
+            // 塗りつぶしは HATCH（単色）として出力
+            else if(e.type === 'HATCH') { drawn = !!(e.target && writeHatch(e.target)); if(!drawn) skipped++; }
+            else { drawn = false; skipped++; }
 
             if(drawn) applyEntityColor(e.color);
         });
@@ -727,37 +789,6 @@ function exportDxf() {
     } catch(err) {
         addCommandLog(`エラー: DXFエクスポートに失敗 - ${err.message}`);
         console.error('DXFエクスポートエラー:', err);
-    }
-}
-
-function exportDimAsDxf(d, e) {
-    d.setActiveLayer('寸法');
-    // 寸法は基本図形（線分+テキスト）に分解して出力
-    if(e.subType === 'LINEAR' || e.subType === 'ALIGNED') {
-        d.drawLine(e.p1.x, e.p1.y, e.p2.x, e.p2.y);
-        const val = dist(e.p1.x, e.p1.y, e.p2.x, e.p2.y);
-        d.drawText((e.p1.x+e.p2.x)/2, (e.p1.y+e.p2.y)/2 + (e.offset ?? 5), 3, 0, e.textOverride || val.toFixed(2));
-    }
-    else if(e.subType === 'RADIUS') { d.drawText(e.center.x, e.center.y, 3, 0, e.textOverride || 'R'+e.radius.toFixed(2)); }
-    else if(e.subType === 'DIAMETER') { d.drawText(e.center.x, e.center.y, 3, 0, e.textOverride || '⌀'+(e.radius*2).toFixed(2)); }
-    else if(e.subType === 'ANGULAR') {
-        const a1 = Math.atan2(e.arm1.y-e.vertex.y, e.arm1.x-e.vertex.x);
-        const a2 = Math.atan2(e.arm2.y-e.vertex.y, e.arm2.x-e.vertex.x);
-        let deg = Math.abs(a2-a1)*180/Math.PI; if(deg>180) deg=360-deg;
-        d.drawText(e.vertex.x, e.vertex.y, 3, 0, e.textOverride || deg.toFixed(1)+'°');
-    }
-    else if(e.subType === 'ORDINATE') {
-        const u = wcsToUcs(e.point.x, e.point.y);
-        if(e.leaderCoord) {
-            // 新形式: 引出線でXY両方を表示するタイプ
-            d.drawLine(e.point.x, e.point.y, e.leaderCoord.x, e.leaderCoord.y);
-            const label = e.textOverride || `X:${dimFormat(u.y)} Y:${dimFormat(u.x)}`;
-            d.drawText(e.leaderCoord.x, e.leaderCoord.y, 3, 0, label);
-        } else if(e.leader) {
-            // 旧形式: X/Y片側のみのタイプ
-            const val = e.isX ? u.x : u.y;
-            d.drawText(e.leader.x, e.leader.y, 3, 0, e.textOverride || val.toFixed(2));
-        }
     }
 }
 
@@ -1069,9 +1100,9 @@ function convertDwgDatabaseToApp(db) {
 
 // ===== DWGエクスポート =====
 async function exportDwg() {
-    addCommandLog('注意: DWG形式での保存は現在DXF形式にフォールバックされます。');
+    addCommandLog('注意: DWG形式では書き出せません。DXF形式で保存します（AutoCAD・Jw_cad などで開けます）');
+    if(typeof showToast === 'function') showToast('DWG では書き出せないため、DXF で保存しました\n（AutoCAD・Jw_cad などで開けます）', 5000);
     exportDxf();
-    addCommandLog('-> DXF形式として保存されました');
 }
 
 // エクスポート時のファイル名（図面名があればそれを使う）

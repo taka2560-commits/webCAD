@@ -573,7 +573,6 @@ const GUIDE_TIPS = {
     idleDrag: { text: '画面を動かすには、2本指でスライドします（1本指でなぞるのは、位置や座標を読むときです）', max: 3 },
     dimConfirm: { text: '寸法・測定の点は、指を離したあと ☑確定 を押すと決まります', max: 3 },
     stuck: { text: '手順は上の説明のとおりです。やめるときは ❌終了、または同じボタンをもう一度押します', max: 2 },
-    longPress: { text: '長押しで削除しました。戻すときは ↩（元に戻す）を押します', max: 3 },
 };
 let _tipIdleDrags = [], _tipDimTouches = 0, _tipStuckTimer = null, _tipTimer = null;
 function guideShowTip(id) {
@@ -602,8 +601,6 @@ function _guideTipsOnEvent(type) {
         if(cmdState.mode === 'WAITING_DIMMEAS_TO') return; // 測定中は指を離して読むのが正しい使い方
         _tipDimTouches++;
         if(_tipDimTouches >= 2) { _tipDimTouches = 0; guideShowTip('dimConfirm'); }
-    } else if(type === 'longPressDelete') {
-        guideShowTip('longPress');
     }
 }
 // コマンドの最初の段階（点の指定を待っている）で止まっていたら一言
@@ -630,9 +627,10 @@ const GUIDE_TOPICS = [
     { title: '座標一覧・SIMA／CSV 出力', text: '⋯ メニューの 📍座標一覧 で測点を検索し、タップでその点へ移動できます。SIMA 出力・座標CSV 出力 で書き出せます（SIMA は Shift-JIS）。' },
     { title: '現在地（GNSS）', text: '⋯ メニューの 🛰現在地 で、スマホの位置を図面の上に表示します。初回は図面の系番号（平面直角座標）を選びます。精度はスマホの GPS しだい（数m）です。' },
     { title: '保存とオフライン', text: '作業中の図面は自動で保存され、次に開いたときに復元できます。💾保存 で名前を付けて保存し、⋯ の 📂保存一覧 から開けます。一度開けば、電波が無い所でも動きます。' },
+    { title: '座標で点を入れる', text: 'コマンド欄に「X,Y」の順（X＝北・Y＝東。画面の座標表示と同じ）で入れます。例: 100,200 → X（北）100・Y（東）200。\n「@5,-3」のように @ を付けると、直前の点から北へ5・西へ3 の点になります。OSNAP の ▼ の「相対入力」では、距離と方向角でも入れられます。' },
     { title: 'パネルの移動', tour: 'panel', text: 'パネルの見出し（⠿ の帯）をつまむと動かせます。ダブルタップで画面の中央に戻ります。' },
     { title: '表示の設定', tour: 'prefs', text: 'オプションの「表示・操作」で、ルーペの大きさ・座標の文字の大きさと桁・寸法の文字・吸着の範囲を変えられます。' },
-    { title: '困ったとき', text: '間違えたら ↩（元に戻す）。コマンドをやめるときは ❌終了 か、同じボタンをもう一度。図面が見えなくなったら 🔍全体。うまく動かないときは オプションの「エラーログ」を見てください。' },
+    { title: '困ったとき', text: '間違えたら ↩（元に戻す）。文字・寸法を長押しすると消えます（通常画面で何もしていないときだけ）。コマンドをやめるときは ❌終了、同じボタンをもう一度、または Esc キー。図面が見えなくなったら 🔍全体。うまく動かないときは オプションの「エラーログ」を見てください。' },
 ];
 const GUIDE_COMMANDS = [
     ['LINE', 'L', '線分'], ['PLINE', 'PL', 'ポリライン'], ['RECTANG', 'REC', '長方形'], ['CIRCLE', 'C', '円'], ['ARC', 'A', '円弧'], ['TEXT', 'T', '文字'],

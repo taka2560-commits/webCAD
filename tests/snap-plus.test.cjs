@@ -310,10 +310,11 @@ describe('スナップの追加分', () => {
         assert.ok(near(app.eval(`parseAzimuth("123°45′06″")`), 123 + 45 / 60 + 6 / 3600));
         assert.ok(Number.isNaN(app.eval('parseAzimuth("")')));
     });
-    it('コマンド欄の「@x,y」は直前の点からの相対座標', () => {
+    it('コマンド欄の「@X,Y」は直前の点から北へ X・東へ Y の相対座標', () => {
+        // 「10,20」= X（北）10・Y（東）20 → 図面の座標 (x=20, y=10)。「@5,-3」= 北へ5・西へ3 → (17, 15)
         app.eval(`processCommand('LINE'); processCommand('10,20'); processCommand('@5,-3');`);
         const ln = app.val('entities[entities.length - 1]');
-        assert.deepEqual([ln.x1, ln.y1, ln.x2, ln.y2], [10, 20, 15, 17]);
+        assert.deepEqual([ln.x1, ln.y1, ln.x2, ln.y2], [20, 10, 17, 15]);
     });
 
     // ---- パネルと保存 ----

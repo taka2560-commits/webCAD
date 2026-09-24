@@ -253,13 +253,13 @@ describe('操作ガイド: 操作中のヒントと一言', () => {
         assert.ok(hint(), '止まっていたので手順カードを出し直す');
         app.eval('GUIDE_STUCK_MS = 25000;');
     });
-    it('長押しで削除したら「↩ で戻せる」と一言', () => {
-        app.eval(`guideNotify('longPressDelete')`);
-        assert.match(app.eval(`document.getElementById('guide-tip').textContent`), /↩/);
+    it('長押しで削除したときは、一言ではなくトーストで知らせる（二重に出さない）', () => {
+        app.eval(`document.getElementById('guide-tip') && (document.getElementById('guide-tip').style.display = 'none'); guideNotify('longPressDelete')`);
+        assert.notEqual(app.eval(`(document.getElementById('guide-tip') || { style: {} }).style.display`), 'block');
     });
     it('同じ一言は決まった回数までしか出さない', () => {
-        for (let i = 0; i < 5; i++) app.eval(`guideShowTip('longPress')`);
-        assert.equal(JSON.parse(app.eval(`localStorage.getItem('cad_guide')`)).tips.longPress, 3);
+        for (let i = 0; i < 5; i++) app.eval(`guideShowTip('dimConfirm')`);
+        assert.equal(JSON.parse(app.eval(`localStorage.getItem('cad_guide')`)).tips.dimConfirm, 3);
     });
 
     it('ヘルプ: ツアー・機能ごとの説明・コマンド一覧・ヒントの設定', () => {

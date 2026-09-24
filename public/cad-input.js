@@ -193,7 +193,16 @@ function setupEventListeners() {
         else if(e.type === 'ARC') { const c = wcsToScreen(e.cx, e.cy); const r = e.radius * view.scale; return {minX:c.x-r, minY:c.y-r, maxX:c.x+r, maxY:c.y+r}; }
         else if(e.type === 'RECTANG') { pts = [wcsToScreen(e.x1, e.y1), wcsToScreen(e.x2, e.y1), wcsToScreen(e.x2, e.y2), wcsToScreen(e.x1, e.y2)]; }
         else if(e.type === 'PLINE' && e.points.length > 0) { pts = e.points.map(p => wcsToScreen(p.x, p.y)); }
-        else if(e.type === 'ELLIPSE') { const c = wcsToScreen(e.cx, e.cy); const rx = e.rx * view.scale, ry = e.ry * view.scale; return {minX:c.x-rx, minY:c.y-ry, maxX:c.x+rx, maxY:c.y+ry}; }
+        else if(e.type === 'ELLIPSE') { for(let i = 0; i < 36; i++) { const p = _ellPt(e, i * Math.PI / 18); pts.push(wcsToScreen(p.x, p.y)); } }
+        else if(e.type === 'HATCH' && e.target) { return getEntityScreenBBox(e.target); }
+        else if(e.type === 'DIMENSION' && e._hits && e._hits.length) {
+            // 寸法は最後に描いた形（寸法線・円・文字の位置）の範囲
+            e._hits.forEach(h => {
+                if(h.type === 'seg') pts.push(h.p1, h.p2);
+                else if(h.type === 'circle') pts.push({ x: h.c.x - h.r, y: h.c.y - h.r }, { x: h.c.x + h.r, y: h.c.y + h.r });
+                else if(h.type === 'text') pts.push({ x: h.p.x - 12, y: h.p.y - 8 }, { x: h.p.x + 12, y: h.p.y + 8 });
+            });
+        }
         else if(e.type === 'TEXT') {
             const p = wcsToScreen(e.x, e.y); const b = textLocalBox(e); const k = view.scale;
             const th = -(view.rotation + (e.rotation || 0)), c = Math.cos(th), s = Math.sin(th);
@@ -219,6 +228,7 @@ function setupEventListeners() {
             touchState.isDragging = false; touchState.hasMoved = false;
             touchState.isPinch = false; touchState.isSelecting = false;
             touchState.showLoupe = false;
+            touchState.multi = false; // この操作の途中で2本目の指が触れたか（触れたら指を全部離すまで点を入れない）
 
             // 座標更新
             mouse.screenX = tx; mouse.screenY = ty;
@@ -241,9 +251,12 @@ function setupEventListeners() {
                 cmdState.highlightIdx = hitTestEntity(tx, ty);
             }
 
-            // 長押しタイマーの設定 (0.6秒)
-            touchState.pressTimer = setTimeout(() => {
-                if(!touchState.hasMoved && !touchState.isPinch) {
+            // 長押しタイマーの設定 (0.6秒)。文字・寸法を長押しすると削除する（通常画面の待機中だけ）
+            const canLongPressDelete = () => cmdState.mode === 'IDLE' && !document.body.classList.contains('fullscreen-mode')
+                && !touchState.multi && !(typeof guideTourActive === 'function' && guideTourActive());
+            if(canLongPressDelete()) touchState.pressTimer = setTimeout(() => {
+                touchState.pressTimer = null;
+                if(!touchState.hasMoved && !touchState.isPinch && canLongPressDelete()) {
                     const idx = hitTestEntity(touchState.startX, touchState.startY);
                     if(idx >= 0) {
                         const hitEnt = entities[idx];
@@ -252,6 +265,7 @@ function setupEventListeners() {
                             entities.splice(idx, 1);
                             const name = hitEnt.type === 'TEXT' ? `文字 "${hitEnt.text}"` : `寸法 (${hitEnt.subType || '不明'})`;
                             addCommandLog(`-> 長押しにより ${name} を削除しました`);
+                            if(typeof showToast === 'function') showToast(`🗑 ${name} を削除しました（↩ で元に戻せます）`, 3500);
                             if(typeof guideNotify === 'function') guideNotify('longPressDelete');
                             cmdState.highlightIdx = -1;
                             if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
@@ -273,6 +287,10 @@ function setupEventListeners() {
             render();
         } else if(e.touches.length === 2) {
             touchState.isPinch = true; touchState.showLoupe = false; touchState.isSelecting = false;
+            // #5 2本指の操作になったら、指を全部離すまで点の入力・なぞり（トリム）・長押しをしない
+            touchState.multi = true;
+            if(touchState.pressTimer) { clearTimeout(touchState.pressTimer); touchState.pressTimer = null; }
+            if(touchState.isTrimming) { touchState.isTrimming = false; cmdState.trimPath = []; }
             const t1 = e.touches[0], t2 = e.touches[1];
             touchState.lastDist = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
             touchState.lastMid = { x: (t1.clientX+t2.clientX)/2, y: (t1.clientY+t2.clientY)/2 };
@@ -281,6 +299,7 @@ function setupEventListeners() {
 
     canvas.addEventListener('touchmove', (e) => {
         e.preventDefault();
+        if(e.touches.length === 1 && touchState.multi) return; // ピンチのあとに残った指（点を入れない）
         if(e.touches.length === 1 && !touchState.isPinch) {
             const touch = e.touches[0];
             const rect = canvas.getBoundingClientRect();
@@ -384,7 +403,14 @@ function setupEventListeners() {
         
         if(touchState.pressTimer) { clearTimeout(touchState.pressTimer); touchState.pressTimer = null; }
 
-        if(e.touches.length === 0 && !touchState.isPinch) {
+        // #5 ピンチをした操作では、指を全部離しても点を入れない（指を1本ずつ離したときに点が入っていた）
+        if(e.touches.length === 0 && touchState.multi) {
+            touchState.multi = false; touchState.showLoupe = false; touchState.isDragging = false; touchState.hasMoved = false;
+            touchState.isSelecting = false;
+            if(!cmdState.mode.startsWith('WAITING_DIM') && window.hideFsCoordTooltip) window.hideFsCoordTooltip();
+            render();
+        }
+        else if(e.touches.length === 0 && !touchState.isPinch) {
             touchState.showLoupe = false;
             // 全画面座標ツールチップ: 寸法モード中は消さない（スナップ位置を確認できるように）
             const isDimModeActive = cmdState.mode.startsWith('WAITING_DIM');
@@ -437,13 +463,35 @@ function setupEventListeners() {
         }
     }, {passive:false});
 
+    canvas.addEventListener('touchcancel', () => {
+        if(touchState.pressTimer) { clearTimeout(touchState.pressTimer); touchState.pressTimer = null; }
+        touchState.showLoupe = false; touchState.isDragging = false; touchState.hasMoved = false;
+        touchState.isPinch = false; touchState.isSelecting = false; touchState.multi = false;
+        if(touchState.isTrimming) { touchState.isTrimming = false; cmdState.trimPath = []; }
+        touchState.lastDist = 0; touchState.lastMid = null;
+        if(!cmdState.mode.startsWith('WAITING_DIM') && window.hideFsCoordTooltip) window.hideFsCoordTooltip();
+        render();
+    }, {passive:true});
+
     commandInput.addEventListener('keydown',(e)=>{
         if(e.key==='Enter'){const v=commandInput.value.trim(); if(v){addCommandLog(v);processCommand(v);commandInput.value='';} else{if(cmdState.mode==='WAITING_LINE_P2'){resetCommand();addCommandLog('-> LINE終了');}else if(cmdState.mode==='WAITING_PLINE_NEXT'){finishPline(false);}}}
-        if(e.key==='Escape'){if(cmdState.mode!=='IDLE'){addCommandLog('* キャンセル *');resetCommand();}}
+        if(e.key==='Escape'){if(cmdState.mode!=='IDLE'){addCommandLog('* キャンセル *');processCommand('CANCEL');}}
     });
     window.addEventListener('keydown',(e)=>{
-        if(e.ctrlKey&&e.key==='z'){e.preventDefault();undo();}
-        if(e.ctrlKey&&e.key==='y'){e.preventDefault();redo();}
+        const t = e.target;
+        if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return; // 入力欄の中（文字の取り消しなど）
+        const k = (e.key || '').toLowerCase();
+        if((e.ctrlKey || e.metaKey) && k==='z'){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); return; }
+        if((e.ctrlKey || e.metaKey) && k==='y'){ e.preventDefault(); redo(); return; }
+        if(e.key === 'Escape') {
+            // スナップの設定パネル → コマンド → 選択 → パネル の順に閉じる
+            const op = document.getElementById('osnap-panel');
+            if(op && op.style.display === 'block') { op.style.display = 'none'; return; }
+            if(cmdState.mode !== 'IDLE') { addCommandLog('* キャンセル *'); processCommand('CANCEL'); return; }
+            if((cmdState.selectedIndices || []).length || cmdState.highlightIdx >= 0) { clearSelection(); if(typeof updateSelectionBar === 'function') updateSelectionBar(); render(); return; }
+            const pp = document.getElementById('property-panel');
+            if(pp && pp.style.display === 'flex') hidePropertyPanel();
+        }
     });
 }
 

@@ -7,8 +7,17 @@ const DIM_ARROW_SIZE = 10;   // スクリーンピクセル（同上）
 const DIM_EXT_OVERSHOOT = 5; // 補助線のオーバーシュート(px)
 const DIM_EXT_GAP = 3;      // 補助線の測定点からの隙間(px)
 
-// ===== 寸法値フォーマット（mm単位、小数点なし） =====
-function dimFormat(val) { return Math.round(val).toString(); }
+// ===== 寸法値フォーマット =====
+// 以前は常に整数へ丸めていたため、1単位＝1m の図面では 12.345m が「12」になっていた。
+// 既定（自動）は小数3桁まで表示し、末尾の0は省く（mm の図面の 1500 は「1500」のまま）。
+// オプション「寸法の桁」で 1 / 0.1 / 0.01 / 0.001 に固定できる。
+function dimFormat(val) {
+    if(typeof val !== 'number' || !isFinite(val)) return '';
+    const d = (typeof displayPref === 'function') ? displayPref('dimDecimals') : null;
+    if(d !== null && d !== undefined) { const s = val.toFixed(d); return /^-0(\.0*)?$/.test(s) ? s.slice(1) : s; }
+    const r = Math.round(val * 1000) / 1000;
+    return String(Object.is(r, -0) ? 0 : r);
+}
 function dimFormatAngle(deg) { return deg.toFixed(1) + '°'; }
 
 // ===== 矢印描画 =====
@@ -24,7 +33,9 @@ function drawDimText(text, x, y, angle, color) {
     ctx.save(); ctx.fillStyle = color || ctx.strokeStyle || DIM_COLOR; ctx.font = dimSizePx(DIM_TEXT_SIZE)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
     ctx.translate(x, y);
     let a = angle || 0;
-    if(a > Math.PI/2 || a < -Math.PI/2) a += Math.PI;
+    while(a > Math.PI) a -= Math.PI * 2;
+    while(a <= -Math.PI) a += Math.PI * 2;
+    if(a > Math.PI/2 - 1e-9 || a < -Math.PI/2 - 1e-9) a += Math.PI; // 逆さま・上から下へ読む向きにしない
     ctx.rotate(a);
     ctx.fillText(text, 0, -3);
     ctx.restore();
@@ -35,64 +46,69 @@ function _addHitSeg(e, sc1, sc2) { if(e){ if(!e._hits) e._hits=[]; e._hits.push(
 function _addHitCircle(e, sc, radiusPx) { if(e){ if(!e._hits) e._hits=[]; e._hits.push({type:'circle', c:sc, r:radiusPx}); } }
 function _addHitText(e, sc) { if(e){ if(!e._hits) e._hits=[]; e._hits.push({type:'text', p:sc}); } }
 
-// ===== 共通：DIMLINEAR描画ロジック =====
-function _drawDimLinearCore(p1, p2, offset, dimDir, color, textOverride, e) {
-    if(e) e._hits = [];
-    const s1 = wcsToScreen(p1.x, p1.y), s2 = wcsToScreen(p2.x, p2.y);
-    const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
-    ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
-    const dx = Math.abs(p2.x - p1.x), dy = Math.abs(p2.y - p1.y);
-    const isHoriz = (dimDir === 'H') || (!dimDir && dx >= dy);
-    const offsetPx = offset * view.scale;
-
-    let dl1, dl2;
-    if(isHoriz) {
-        const dimY = s1.y - offsetPx;
-        dl1 = {x: s1.x, y: dimY}; dl2 = {x: s2.x, y: dimY};
-        ctx.beginPath(); ctx.moveTo(s1.x, s1.y - DIM_EXT_GAP * Math.sign(offset)); ctx.lineTo(dl1.x, dl1.y - DIM_EXT_OVERSHOOT * Math.sign(offset)); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(s2.x, s2.y - DIM_EXT_GAP * Math.sign(offset)); ctx.lineTo(dl2.x, dl2.y - DIM_EXT_OVERSHOOT * Math.sign(offset)); ctx.stroke();
-    } else {
-        const dimX = s1.x + offsetPx;
-        dl1 = {x: dimX, y: s1.y}; dl2 = {x: dimX, y: s2.y};
-        ctx.beginPath(); ctx.moveTo(s1.x + DIM_EXT_GAP * Math.sign(offset), s1.y); ctx.lineTo(dl1.x + DIM_EXT_OVERSHOOT * Math.sign(offset), dl1.y); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(s2.x + DIM_EXT_GAP * Math.sign(offset), s2.y); ctx.lineTo(dl2.x + DIM_EXT_OVERSHOOT * Math.sign(offset), dl2.y); ctx.stroke();
+// ===== 平行寸法・整列寸法の形（図面の座標で組み立てる） =====
+// 以前は画面の縦横で描いていたため、画面を回転（PLAN）すると寸法線の向きがずれていた。
+// 図面の座標で形を作り、画面に写すので、画面の回転・回転コマンド・DXF出力で同じ形になる。
+//   u: 測る向き、n: 寸法線をずらす向き（offset の正の向き）
+//   平行寸法（LINEAR）: 横(H) u=(1,0) n=(0,1)、縦(V) u=(0,1) n=(1,0)。回転コマンドで回した分（dimRot）だけ両方を回す
+//   整列寸法（ALIGNED）: u = 1点目→2点目、n = u の右側
+function _dimLineFrame(kind, p1, p2, dimDir, rot) {
+    if(kind === 'ALIGNED') {
+        const dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy) || 1;
+        const u = { x: dx / len, y: dy / len };
+        return { u, n: { x: u.y, y: -u.x } };
     }
-    ctx.beginPath(); ctx.moveTo(dl1.x, dl1.y); ctx.lineTo(dl2.x, dl2.y); ctx.stroke();
-    _addHitSeg(e, dl1, dl2);
-    const ang = Math.atan2(dl2.y - dl1.y, dl2.x - dl1.x);
-    drawArrowHead(dl1.x, dl1.y, ang, dimSizePx(DIM_ARROW_SIZE));
-    drawArrowHead(dl2.x, dl2.y, ang + Math.PI, dimSizePx(DIM_ARROW_SIZE));
-    const val = isHoriz ? Math.abs(p2.x - p1.x) : Math.abs(p2.y - p1.y);
-    const text = textOverride || dimFormat(val);
-    const tx = (dl1.x+dl2.x)/2, ty = (dl1.y+dl2.y)/2;
-    drawDimText(text, tx, ty, isHoriz ? 0 : -Math.PI/2, resolvedColor);
-    _addHitText(e, {x:tx, y:ty});
+    const H = (dimDir === 'H') || (!dimDir && Math.abs(p2.x - p1.x) >= Math.abs(p2.y - p1.y));
+    let u = H ? { x: 1, y: 0 } : { x: 0, y: 1 }, n = H ? { x: 0, y: 1 } : { x: 1, y: 0 };
+    if(rot) {
+        const c = Math.cos(rot), s = Math.sin(rot), R = (v) => ({ x: v.x * c - v.y * s, y: v.x * s + v.y * c });
+        u = R(u); n = R(n);
+    }
+    return { u, n };
 }
-
-// ===== 共通：DIMALIGNED描画ロジック =====
-function _drawDimAlignedCore(p1, p2, offset, color, textOverride, e) {
+// k: 画面の1pxが図面の何単位か（画面: 1/view.scale、DXF出力: 文字の高さに合わせる）
+function dimLinePrims(kind, p1, p2, offset, dimDir, rot, k) {
+    const { u, n } = _dimLineFrame(kind, p1, p2, dimDir, rot);
+    const along = (p2.x - p1.x) * u.x + (p2.y - p1.y) * u.y;
+    const dl1 = { x: p1.x + offset * n.x, y: p1.y + offset * n.y };
+    const dl2 = { x: dl1.x + along * u.x, y: dl1.y + along * u.y };
+    const lines = [];
+    // 補助線: 測った点の少し先（隙間）から、寸法線を少し越えるところまで
+    const ext = (p, dl) => {
+        const t = (dl.x - p.x) * n.x + (dl.y - p.y) * n.y;
+        if(Math.abs(t) < 1e-12) return;
+        const sg = Math.sign(t);
+        lines.push({ x1: p.x + n.x * sg * DIM_EXT_GAP * k, y1: p.y + n.y * sg * DIM_EXT_GAP * k,
+                     x2: dl.x + n.x * sg * DIM_EXT_OVERSHOOT * k, y2: dl.y + n.y * sg * DIM_EXT_OVERSHOOT * k });
+    };
+    ext(p1, dl1); ext(p2, dl2);
+    const dirA = Math.atan2(dl2.y - dl1.y, dl2.x - dl1.x);
+    return {
+        lines, dim: { x1: dl1.x, y1: dl1.y, x2: dl2.x, y2: dl2.y },
+        arrows: [{ x: dl1.x, y: dl1.y, a: dirA }, { x: dl2.x, y: dl2.y, a: dirA + Math.PI }], // a: 矢印の先が向く方向
+        textAt: { x: (dl1.x + dl2.x) / 2, y: (dl1.y + dl2.y) / 2 }, textAngle: dirA,
+        value: kind === 'ALIGNED' ? Math.hypot(p2.x - p1.x, p2.y - p1.y) : Math.abs(along),
+    };
+}
+function _drawDimLineCore(kind, p1, p2, offset, dimDir, color, textOverride, e) {
     if(e) e._hits = [];
-    const s1 = wcsToScreen(p1.x, p1.y), s2 = wcsToScreen(p2.x, p2.y);
     const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
     ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
-    const ddx = s2.x - s1.x, ddy = s2.y - s1.y;
-    const len = Math.sqrt(ddx*ddx + ddy*ddy) || 1;
-    const nx = -ddy/len, ny = ddx/len;
-    const offPx = offset * view.scale;
-    const dl1 = {x: s1.x + nx*offPx, y: s1.y + ny*offPx};
-    const dl2 = {x: s2.x + nx*offPx, y: s2.y + ny*offPx};
-    ctx.beginPath(); ctx.moveTo(s1.x + nx*DIM_EXT_GAP, s1.y + ny*DIM_EXT_GAP); ctx.lineTo(dl1.x + nx*DIM_EXT_OVERSHOOT, dl1.y + ny*DIM_EXT_OVERSHOOT); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(s2.x + nx*DIM_EXT_GAP, s2.y + ny*DIM_EXT_GAP); ctx.lineTo(dl2.x + nx*DIM_EXT_OVERSHOOT, dl2.y + ny*DIM_EXT_OVERSHOOT); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(dl1.x, dl1.y); ctx.lineTo(dl2.x, dl2.y); ctx.stroke();
-    _addHitSeg(e, dl1, dl2);
-    const ang = Math.atan2(dl2.y - dl1.y, dl2.x - dl1.x);
-    drawArrowHead(dl1.x, dl1.y, ang, dimSizePx(DIM_ARROW_SIZE));
-    drawArrowHead(dl2.x, dl2.y, ang + Math.PI, dimSizePx(DIM_ARROW_SIZE));
-    const val = dist(p1.x, p1.y, p2.x, p2.y);
-    const tx = (dl1.x+dl2.x)/2, ty = (dl1.y+dl2.y)/2;
-    drawDimText(textOverride || dimFormat(val), tx, ty, ang, resolvedColor);
-    _addHitText(e, {x:tx, y:ty});
+    const P = dimLinePrims(kind, p1, p2, offset, dimDir, e && e.dimRot, 1 / (view.scale || 1));
+    const rot = view.rotation || 0;
+    P.lines.forEach(l => { const a = wcsToScreen(l.x1, l.y1), b = wcsToScreen(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); });
+    const d1 = wcsToScreen(P.dim.x1, P.dim.y1), d2 = wcsToScreen(P.dim.x2, P.dim.y2);
+    ctx.beginPath(); ctx.moveTo(d1.x, d1.y); ctx.lineTo(d2.x, d2.y); ctx.stroke();
+    _addHitSeg(e, d1, d2);
+    P.arrows.forEach(ar => { const s = wcsToScreen(ar.x, ar.y); drawArrowHead(s.x, s.y, -(ar.a + rot), dimSizePx(DIM_ARROW_SIZE)); });
+    const t = wcsToScreen(P.textAt.x, P.textAt.y);
+    drawDimText(textOverride || dimFormat(P.value), t.x, t.y, -(P.textAngle + rot), resolvedColor);
+    _addHitText(e, t);
 }
+// ===== 共通：DIMLINEAR描画ロジック =====
+function _drawDimLinearCore(p1, p2, offset, dimDir, color, textOverride, e) { _drawDimLineCore('LINEAR', p1, p2, offset, dimDir, color, textOverride, e); }
+// ===== 共通：DIMALIGNED描画ロジック =====
+function _drawDimAlignedCore(p1, p2, offset, color, textOverride, e) { _drawDimLineCore('ALIGNED', p1, p2, offset, null, color, textOverride, e); }
 
 // ===== 共通：DIMRADIUS描画ロジック =====
 function _drawDimRadiusCore(center, radius, angle, color, textOverride, e) {
@@ -101,7 +117,7 @@ function _drawDimRadiusCore(center, radius, angle, color, textOverride, e) {
     ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
     const sc = wcsToScreen(center.x, center.y);
     const a = angle || 0;
-    const ep = {x: sc.x + radius*view.scale*Math.cos(a), y: sc.y - radius*view.scale*Math.sin(a)};
+    const ep = wcsToScreen(center.x + radius * Math.cos(a), center.y + radius * Math.sin(a));
     ctx.beginPath(); ctx.moveTo(sc.x, sc.y); ctx.lineTo(ep.x, ep.y); ctx.stroke();
     _addHitSeg(e, sc, ep);
     const ang = Math.atan2(ep.y - sc.y, ep.x - sc.x);
@@ -118,9 +134,8 @@ function _drawDimDiameterCore(center, radius, angle, color, textOverride, e) {
     ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
     const sc = wcsToScreen(center.x, center.y);
     const a = angle || 0;
-    const r = radius * view.scale;
-    const ep1 = {x: sc.x + r*Math.cos(a), y: sc.y - r*Math.sin(a)};
-    const ep2 = {x: sc.x - r*Math.cos(a), y: sc.y + r*Math.sin(a)};
+    const ep1 = wcsToScreen(center.x + radius * Math.cos(a), center.y + radius * Math.sin(a));
+    const ep2 = wcsToScreen(center.x - radius * Math.cos(a), center.y - radius * Math.sin(a));
     ctx.beginPath(); ctx.moveTo(ep1.x, ep1.y); ctx.lineTo(ep2.x, ep2.y); ctx.stroke();
     _addHitSeg(e, ep1, ep2);
     const ang = Math.atan2(ep1.y - ep2.y, ep1.x - ep2.x);
@@ -177,6 +192,102 @@ function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
     _addHitText(e, {x: sl.x + textSide * 40 * dk, y: sl.y - 10});
 }
 
+// 角度寸法の形: 辺1の角度 a1 と、辺1から辺2までの小さい方の回転 d（-π〜π、反時計回りが正）
+function dimAngularGeom(e) {
+    const a1 = Math.atan2(e.arm1.y - e.vertex.y, e.arm1.x - e.vertex.x);
+    const a2 = Math.atan2(e.arm2.y - e.vertex.y, e.arm2.x - e.vertex.x);
+    let d = a2 - a1;
+    while(d > Math.PI) d -= Math.PI * 2;
+    while(d <= -Math.PI) d += Math.PI * 2;
+    return { a1, d };
+}
+
+// ===== DXF出力用: 寸法を「図面の座標の線・弧・矢印・文字」に分ける =====
+// 画面と同じ形にする。k は画面の1pxが図面の何単位か（DXFでは文字の高さに合わせて決める）
+// 文字の向きは、図面の座標で逆さまにならない向き（-90°より大きく90°以下）にそろえる
+function _dimUpright(a) {
+    while(a > Math.PI) a -= Math.PI * 2;
+    while(a <= -Math.PI) a += Math.PI * 2;
+    if(a > Math.PI / 2 + 1e-9) a -= Math.PI;
+    else if(a <= -Math.PI / 2 + 1e-9) a += Math.PI;
+    return a;
+}
+function dimExportPrims(e, k) {
+    const out = { lines: [], arcs: [], arrows: [], texts: [] };
+    const th = dimSizePx(DIM_TEXT_SIZE) * k, as = dimSizePx(DIM_ARROW_SIZE) * k;
+    // 線の上（画面の3px）に、線の向きの文字を置く
+    const textOn = (s, x, y, ang) => {
+        const a = _dimUpright(ang);
+        out.texts.push({ s, x: x - Math.sin(a) * 3 * k, y: y + Math.cos(a) * 3 * k, h: th, ang: a, ha: 'center', va: 'bottom' });
+    };
+    const arrow = (x, y, a) => out.arrows.push({ x, y, a, size: as });
+    const st = e.subType;
+    if(st === 'LINEAR' || st === 'ALIGNED') {
+        const P = dimLinePrims(st, e.p1, e.p2, e.offset ?? 30, e.dimDir, e.dimRot, k);
+        out.lines.push(...P.lines, P.dim);
+        P.arrows.forEach(a => arrow(a.x, a.y, a.a));
+        textOn(e.textOverride || dimFormat(P.value), P.textAt.x, P.textAt.y, P.textAngle);
+    } else if(st === 'RADIUS' || st === 'DIAMETER') {
+        const c = e.center, r = e.radius, a0 = e.angle || 0, cs = Math.cos(a0), sn = Math.sin(a0);
+        const ep = { x: c.x + r * cs, y: c.y + r * sn };
+        if(st === 'RADIUS') {
+            out.lines.push({ x1: c.x, y1: c.y, x2: ep.x, y2: ep.y });
+            arrow(ep.x, ep.y, a0 + Math.PI);
+            textOn(e.textOverride || ('R' + dimFormat(r)), (c.x + ep.x) / 2, (c.y + ep.y) / 2, a0);
+        } else {
+            const ep2 = { x: c.x - r * cs, y: c.y - r * sn };
+            out.lines.push({ x1: ep2.x, y1: ep2.y, x2: ep.x, y2: ep.y });
+            arrow(ep.x, ep.y, a0 + Math.PI); arrow(ep2.x, ep2.y, a0);
+            textOn(e.textOverride || ('⌀' + dimFormat(r * 2)), c.x, c.y, a0);
+        }
+    } else if(st === 'ANGULAR') {
+        const v = e.vertex, R = e.arcRadius || 40, g = dimAngularGeom(e), ae = g.a1 + g.d;
+        out.lines.push({ x1: v.x, y1: v.y, x2: e.arm1.x, y2: e.arm1.y }, { x1: v.x, y1: v.y, x2: e.arm2.x, y2: e.arm2.y });
+        // DXF の円弧は反時計回り（開始角→終了角）
+        out.arcs.push({ cx: v.x, cy: v.y, r: R, sa: g.d > 0 ? g.a1 : ae, ea: g.d > 0 ? ae : g.a1 });
+        const s = g.d > 0 ? 1 : -1;
+        arrow(v.x + R * Math.cos(g.a1), v.y + R * Math.sin(g.a1), g.a1 - s * Math.PI / 2);
+        arrow(v.x + R * Math.cos(ae), v.y + R * Math.sin(ae), ae + s * Math.PI / 2);
+        const am = g.a1 + g.d / 2;
+        out.texts.push({ s: e.textOverride || dimFormatAngle(Math.abs(g.d) * 180 / Math.PI), x: v.x + R * Math.cos(am), y: v.y + R * Math.sin(am) + 3 * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
+    } else if(st === 'ORDINATE') {
+        const p = e.point, u = wcsToUcs(p.x, p.y), L = e.leaderCoord || e.leaderX;
+        if(L) {
+            // 引出線と下線。文字は下線の上に2段（上: X＝北、下: Y＝東）
+            const dk = dimSizePx(DIM_TEXT_SIZE) / DIM_TEXT_SIZE, side = (L.x >= p.x) ? 1 : -1;
+            out.lines.push({ x1: p.x, y1: p.y, x2: L.x, y2: L.y }, { x1: L.x, y1: L.y, x2: L.x + side * 80 * dk * k, y2: L.y });
+            const cx = L.x + side * 40 * dk * k;
+            if(e.textOverride) out.texts.push({ s: e.textOverride, x: cx, y: L.y + 4 * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
+            else {
+                out.texts.push({ s: 'X: ' + dimFormat(u.y), x: cx, y: L.y + (4 + 14 * dk) * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
+                out.texts.push({ s: 'Y: ' + dimFormat(u.x), x: cx, y: L.y + 4 * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
+            }
+        } else if(e.leader) {
+            // 旧形式（X か Y の片方だけ）
+            const mid = e.isX ? { x: p.x, y: e.leader.y } : { x: e.leader.x, y: p.y };
+            out.lines.push({ x1: p.x, y1: p.y, x2: mid.x, y2: mid.y }, { x1: mid.x, y1: mid.y, x2: e.leader.x, y2: e.leader.y });
+            const s = e.textOverride || (e.isX ? 'Y=' + dimFormat(u.x) : 'X=' + dimFormat(u.y));
+            out.texts.push({ s, x: e.leader.x, y: e.leader.y + 3 * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
+        }
+    }
+    return out;
+}
+// DXF の寸法の文字の高さ（図面の単位）: 図面全体の大きさの約1/60 を、1・2・2.5・5 の切りのよい値にする
+function dimExportTextHeight() {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    entities.forEach(e => {
+        let b;
+        try { b = e.bbox || calcBBox(e); } catch { b = null; }
+        if(!b || !isFinite(b.minX) || !isFinite(b.maxX)) return;
+        minX = Math.min(minX, b.minX); minY = Math.min(minY, b.minY); maxX = Math.max(maxX, b.maxX); maxY = Math.max(maxY, b.maxY);
+    });
+    const ext = Math.max(maxX - minX, maxY - minY);
+    if(!(ext > 0) || !isFinite(ext)) return 2.5;
+    const raw = ext / 60, p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const m = raw / p;
+    return (m >= 5 ? 5 : m >= 2.5 ? 2.5 : m >= 2 ? 2 : 1) * p;
+}
+
 // ===== 寸法タイプ別描画（エンティティから呼ばれる） =====
 function drawDimLinear(e, color) { _drawDimLinearCore(e.p1, e.p2, e.offset ?? 30, e.dimDir, color||e.color, e.textOverride, e); }
 function drawDimAligned(e, color) { _drawDimAlignedCore(e.p1, e.p2, e.offset ?? 30, color||e.color, e.textOverride, e); }
@@ -191,18 +302,18 @@ function drawDimAngular(e, color) {
     const sa1 = wcsToScreen(e.arm1.x, e.arm1.y), sa2 = wcsToScreen(e.arm2.x, e.arm2.y);
     ctx.beginPath(); ctx.moveTo(sv.x, sv.y); ctx.lineTo(sa1.x, sa1.y); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(sv.x, sv.y); ctx.lineTo(sa2.x, sa2.y); ctx.stroke();
-    const angle1 = Math.atan2(-(e.arm1.y - e.vertex.y), e.arm1.x - e.vertex.x);
-    const angle2 = Math.atan2(-(e.arm2.y - e.vertex.y), e.arm2.x - e.vertex.x);
+    const rot = view.rotation || 0; // 画面上の角度 = -(図面の角度 + 画面の回転)
+    const angle1 = -(Math.atan2(e.arm1.y - e.vertex.y, e.arm1.x - e.vertex.x) + rot);
     const arcR = (e.arcRadius || 40) * view.scale;
-    ctx.beginPath(); ctx.arc(sv.x, sv.y, arcR, angle1, angle2, false); ctx.stroke();
-    drawArrowHead(sv.x + arcR*Math.cos(angle1), sv.y + arcR*Math.sin(angle1), angle1 - Math.PI/2, dimSizePx(DIM_ARROW_SIZE));
-    drawArrowHead(sv.x + arcR*Math.cos(angle2), sv.y + arcR*Math.sin(angle2), angle2 + Math.PI/2, dimSizePx(DIM_ARROW_SIZE));
-    const a1w = Math.atan2(e.arm1.y - e.vertex.y, e.arm1.x - e.vertex.x);
-    const a2w = Math.atan2(e.arm2.y - e.vertex.y, e.arm2.x - e.vertex.x);
-    let angleDeg = Math.abs(a2w - a1w) * 180 / Math.PI;
-    if(angleDeg > 180) angleDeg = 360 - angleDeg;
-    const text = e.textOverride || dimFormatAngle(angleDeg);
-    const midA = (angle1 + angle2) / 2;
+    // 2本の辺の間の小さい方の角に弧を描く（以前は辺を選んだ順によって反対側の大きな弧になっていた）
+    const g = dimAngularGeom(e);
+    const sweepCanvas = -g.d; // 図面の反時計回り = 画面の反時計回り（キャンバスの角度は逆向き）
+    ctx.beginPath(); ctx.arc(sv.x, sv.y, arcR, angle1, angle1 + sweepCanvas, g.d > 0); ctx.stroke();
+    const angle2b = angle1 + sweepCanvas, dirS = g.d > 0 ? 1 : -1;
+    drawArrowHead(sv.x + arcR*Math.cos(angle1), sv.y + arcR*Math.sin(angle1), angle1 + dirS * Math.PI/2, dimSizePx(DIM_ARROW_SIZE));
+    drawArrowHead(sv.x + arcR*Math.cos(angle2b), sv.y + arcR*Math.sin(angle2b), angle2b - dirS * Math.PI/2, dimSizePx(DIM_ARROW_SIZE));
+    const text = e.textOverride || dimFormatAngle(Math.abs(g.d) * 180 / Math.PI);
+    const midA = angle1 + sweepCanvas / 2;
     const tx = sv.x + arcR*Math.cos(midA), ty = sv.y + arcR*Math.sin(midA);
     drawDimText(text, tx, ty, 0, resolvedColor);
     
@@ -408,11 +519,12 @@ function drawMovePreview(e, dx, dy) {
         const c = wcsToScreen(e.cx+dx, e.cy+dy);
         ctx.beginPath(); ctx.arc(c.x,c.y,e.radius*view.scale,0,Math.PI*2); ctx.stroke();
     } else if(e.type === 'ARC') {
-        const c = wcsToScreen(e.cx+dx, e.cy+dy);
-        ctx.beginPath(); ctx.arc(c.x,c.y,e.radius*view.scale,-e.startAngle,-e.endAngle,!e.counterclockwise); ctx.stroke();
+        const c = wcsToScreen(e.cx+dx, e.cy+dy), rot = view.rotation || 0;
+        ctx.beginPath(); ctx.arc(c.x,c.y,e.radius*view.scale,-e.startAngle-rot,-e.endAngle-rot,e.counterclockwise !== false); ctx.stroke();
     } else if(e.type === 'RECTANG') {
-        const a = wcsToScreen(e.x1+dx, e.y1+dy), b = wcsToScreen(e.x2+dx, e.y2+dy);
-        ctx.beginPath(); ctx.rect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(b.x-a.x),Math.abs(b.y-a.y)); ctx.stroke();
+        // 4隅を結ぶ（画面が回転していても形どおりに出す）
+        const q = [[e.x1,e.y1],[e.x2,e.y1],[e.x2,e.y2],[e.x1,e.y2]].map(([x,y]) => wcsToScreen(x+dx, y+dy));
+        ctx.beginPath(); ctx.moveTo(q[0].x,q[0].y); for(let i=1;i<4;i++) ctx.lineTo(q[i].x,q[i].y); ctx.closePath(); ctx.stroke();
     } else if(e.type === 'PLINE' && e.points.length > 1) {
         ctx.beginPath();
         const f = wcsToScreen(e.points[0].x+dx, e.points[0].y+dy); ctx.moveTo(f.x,f.y);
@@ -420,12 +532,15 @@ function drawMovePreview(e, dx, dy) {
         if(e.closed) ctx.closePath(); ctx.stroke();
     } else if(e.type === 'ELLIPSE') {
         const c = wcsToScreen(e.cx+dx, e.cy+dy);
-        ctx.beginPath(); ctx.ellipse(c.x, c.y, e.rx*view.scale, e.ry*view.scale, -(e.rotation||0), 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(c.x, c.y, e.rx*view.scale, e.ry*view.scale, -(e.rotation||0) - (view.rotation||0), 0, Math.PI*2); ctx.stroke();
     } else if(e.type === 'TEXT') {
         const p = wcsToScreen(e.x+dx, e.y+dy);
         ctx.save();
         ctx.font = `${(e.height||10)*view.scale}px sans-serif`; ctx.fillStyle = '#ffff00';
-        ctx.fillText(e.text, p.x, p.y);
+        ctx.translate(p.x, p.y); ctx.rotate(-((view.rotation||0) + (e.rotation||0))); // 本体の文字と同じ向き
+        ctx.textAlign = (e.halign === 'center' || e.halign === 'right') ? e.halign : 'left';
+        ctx.textBaseline = (e.valign === 'top') ? 'top' : (e.valign === 'middle') ? 'middle' : 'alphabetic';
+        ctx.fillText(e.text, 0, 0);
         ctx.restore();
     } else if(e.type === 'POINT') {
         const p = wcsToScreen(e.x+dx, e.y+dy);
@@ -442,8 +557,10 @@ function drawMovePreview(e, dx, dy) {
 function drawDimMovePreview(e, dx, dy) {
     if(e.subType === 'LINEAR' || e.subType === 'ALIGNED') {
         const p1m = {x:e.p1.x+dx, y:e.p1.y+dy}, p2m = {x:e.p2.x+dx, y:e.p2.y+dy};
-        if(e.subType === 'LINEAR') _drawDimLinearCore(p1m, p2m, e.offset ?? 30, e.dimDir, '#ffff00', e.textOverride);
-        else _drawDimAlignedCore(p1m, p2m, e.offset ?? 30, '#ffff00', e.textOverride);
+        // 回した寸法（dimRot）の向きだけ渡す。本体を渡すと当たり判定が移動先の位置に書き換わる
+        const shape = { dimRot: e.dimRot };
+        if(e.subType === 'LINEAR') _drawDimLinearCore(p1m, p2m, e.offset ?? 30, e.dimDir, '#ffff00', e.textOverride, shape);
+        else _drawDimAlignedCore(p1m, p2m, e.offset ?? 30, '#ffff00', e.textOverride, shape);
     }
 }
 

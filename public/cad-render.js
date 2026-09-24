@@ -285,7 +285,9 @@ function drawOneEntity(e, color) {
     ctx.strokeStyle = adjustColorForBg(color || getEntityColor(e)); ctx.lineWidth = 1;
     if(e.type==='LINE') { const a=wcsToScreen(e.x1,e.y1),b=wcsToScreen(e.x2,e.y2); ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke(); }
     else if(e.type==='CIRCLE') { const c=wcsToScreen(e.cx,e.cy); ctx.beginPath();ctx.arc(c.x,c.y,e.radius*view.scale,0,Math.PI*2);ctx.stroke(); }
-    else if(e.type==='ARC') { const c=wcsToScreen(e.cx,e.cy); ctx.beginPath();ctx.arc(c.x,c.y,e.radius*view.scale,-e.startAngle + view.rotation,-e.endAngle + view.rotation,!e.counterclockwise);ctx.stroke(); }
+    // 画面上の角度 = -(図面の角度 + 画面の回転)（以前は回転を逆向きに足していて、PLAN で円弧がずれていた）
+    // 図面の反時計回り＝キャンバスの anticlockwise（y が逆向きのため）。以前は逆で、円弧の残りの側が描かれていた
+    else if(e.type==='ARC') { const c=wcsToScreen(e.cx,e.cy); ctx.beginPath();ctx.arc(c.x,c.y,e.radius*view.scale,-e.startAngle - view.rotation,-e.endAngle - view.rotation,e.counterclockwise !== false);ctx.stroke(); }
     else if(e.type==='RECTANG') { 
         const p1=wcsToScreen(e.x1,e.y1), p2=wcsToScreen(e.x2,e.y1);
         const p3=wcsToScreen(e.x2,e.y2), p4=wcsToScreen(e.x1,e.y2);
@@ -295,7 +297,7 @@ function drawOneEntity(e, color) {
     else if(e.type==='POINT') { const r=4; const p=wcsToScreen(e.x,e.y); ctx.beginPath();ctx.arc(p.x,p.y,r*0.4,0,Math.PI*2);ctx.stroke(); ctx.beginPath();ctx.moveTo(p.x-r,p.y);ctx.lineTo(p.x+r,p.y);ctx.moveTo(p.x,p.y-r);ctx.lineTo(p.x,p.y+r);ctx.stroke(); }
     else if(e.type==='ELLIPSE') {
         const c=wcsToScreen(e.cx,e.cy);
-        ctx.beginPath(); ctx.ellipse(c.x, c.y, e.rx*view.scale, e.ry*view.scale, -e.rotation, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(c.x, c.y, e.rx*view.scale, e.ry*view.scale, -(e.rotation || 0) - view.rotation, 0, Math.PI*2); ctx.stroke();
     }
     else if(e.type==='TEXT') {
         const p=wcsToScreen(e.x,e.y);
@@ -430,9 +432,9 @@ function drawEntities() {
         } else if(t === 'ARC') {
             begin(color, alpha);
             const cx = TX(e.cx, e.cy), cy = TY(e.cx, e.cy), r = e.radius * sc;
-            const a0 = -e.startAngle + rot, a1 = -e.endAngle + rot;
+            const a0 = -e.startAngle - rot, a1 = -e.endAngle - rot;
             ctx.moveTo(cx + r * Math.cos(a0), cy + r * Math.sin(a0));
-            ctx.arc(cx, cy, r, a0, a1, !e.counterclockwise);
+            ctx.arc(cx, cy, r, a0, a1, e.counterclockwise !== false);
         } else if(t === 'RECTANG') {
             begin(color, alpha);
             ctx.moveTo(TX(e.x1, e.y1), TY(e.x1, e.y1)); ctx.lineTo(TX(e.x2, e.y1), TY(e.x2, e.y1));
@@ -454,7 +456,7 @@ function drawEntities() {
             if(e.closed) ctx.closePath();
         } else if(t === 'ELLIPSE') {
             begin(color, alpha);
-            const cx = TX(e.cx, e.cy), cy = TY(e.cx, e.cy), th = -(e.rotation || 0);
+            const cx = TX(e.cx, e.cy), cy = TY(e.cx, e.cy), th = -(e.rotation || 0) - rot;
             ctx.moveTo(cx + e.rx * sc * Math.cos(th), cy + e.rx * sc * Math.sin(th));
             ctx.ellipse(cx, cy, e.rx * sc, e.ry * sc, th, 0, Math.PI * 2);
         } else if(t === 'POINT') {
@@ -532,7 +534,7 @@ function drawRubberBand() {
     else if(m==='WAITING_ARC_P3'&&cmdState.points.length===2) {
         const p1=cmdState.points[0],p2=cmdState.points[1],p3=mp;
         const cc=circumcenter(p1.x,p1.y,p2.x,p2.y,p3.x,p3.y);
-        if(cc){ const r=dist(cc.x,cc.y,p1.x,p1.y),sa=Math.atan2(p1.y-cc.y,p1.x-cc.x),ea=Math.atan2(p3.y-cc.y,p3.x-cc.x),ma=Math.atan2(p2.y-cc.y,p2.x-cc.x); const ccw=isAngleBetweenCCW(ma,sa,ea); const sc=wcsToScreen(cc.x,cc.y); ctx.beginPath();ctx.arc(sc.x,sc.y,r*view.scale,-sa,-ea,!ccw);ctx.stroke(); }
+        if(cc){ const r=dist(cc.x,cc.y,p1.x,p1.y),sa=Math.atan2(p1.y-cc.y,p1.x-cc.x),ea=Math.atan2(p3.y-cc.y,p3.x-cc.x),ma=Math.atan2(p2.y-cc.y,p2.x-cc.x); const ccw=isAngleBetweenCCW(ma,sa,ea); const sc=wcsToScreen(cc.x,cc.y); ctx.beginPath();ctx.arc(sc.x,sc.y,r*view.scale,-sa-view.rotation,-ea-view.rotation,ccw);ctx.stroke(); }
     }
     else if(m==='WAITING_PLINE_NEXT'&&cmdState.points.length>0) {
         ctx.beginPath(); const pts=cmdState.points; const f=wcsToScreen(pts[0].x,pts[0].y); ctx.moveTo(f.x,f.y);
@@ -547,7 +549,7 @@ function drawRubberBand() {
         const rx=dist(cx,cy,ex,ey), rot=Math.atan2(ey-cy, ex-cx);
         const ry=dist(cx,cy,mp.x,mp.y);
         const c=wcsToScreen(cx,cy);
-        ctx.beginPath(); ctx.ellipse(c.x, c.y, rx*view.scale, ry*view.scale, -rot, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(c.x, c.y, rx*view.scale, ry*view.scale, -rot - view.rotation, 0, Math.PI*2); ctx.stroke();
     }
     else if(m==='WAITING_TEXT_PLACE' && cmdState.textStr) {
         const targetPt = cmdState.previewWcs || mp;

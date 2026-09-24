@@ -198,6 +198,8 @@ function _hasUnsavedProjectChanges() { return entities.length > 0 && (!_currentP
 function _doAutoSave() {
     // 操作ガイドのツアー中は練習用の図面なので自動保存しない（利用者の図面の自動保存を上書きしない）
     if (typeof guideTourActive === 'function' && guideTourActive()) return Promise.resolve(false);
+    // 図形が無い（図面を閉じた直後など）ときは、前の図面の自動保存を消さない（誤って閉じたときに復元できるように）
+    if (entities.length === 0) { _savedSeq = _changeSeq; return Promise.resolve(false); }
     // 保存中なら、終わってから（まだ未保存の変更があれば）もう一度保存する
     if (_autoSavePending) {
         return _autoSavePending.then(() => (_hasUnsavedChanges() ? _doAutoSave() : true));

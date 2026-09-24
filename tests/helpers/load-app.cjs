@@ -52,6 +52,11 @@ function fakeContext2d(canvas) {
             state[k] = v;
             return true;
         },
+        // テストで差し替えたメソッドを delete で元（何もしない）に戻せるようにする
+        deleteProperty(t, k) {
+            delete state[k];
+            return true;
+        },
     });
 }
 

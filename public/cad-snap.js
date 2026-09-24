@@ -603,6 +603,8 @@ function updateSnapCycleButton() {
 // Tab キーで候補を切り替える（コマンドの途中だけ）
 document.addEventListener('keydown', (e) => {
     if(e.key !== 'Tab' || e.ctrlKey || e.altKey || e.metaKey) return;
+    const t = e.target;
+    if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return; // 入力欄では次の欄へ移る
     if(typeof cmdState === 'undefined' || cmdState.mode === 'IDLE') return;
     if(snapResult && snapResult.count > 1) { e.preventDefault(); window.cycleSnapCandidate(); }
 });

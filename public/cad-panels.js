@@ -350,9 +350,9 @@ window.updateLayerManagerContent = function() {
             html += `
             <div class="prop-row" style="margin-bottom:6px; display:flex; align-items:center; background:rgba(255,255,255,0.02); padding:4px 6px; border-radius:4px;">
                 <button class="status-btn" style="padding:2px 5px; margin-right:6px; font-size:12px; width:28px; text-align:center; background:rgba(0,255,136,0.1); border:1px solid rgba(0,255,136,0.3); color:#00ff88; border-radius:3px; cursor:pointer;" onclick="toggleLayerVisibility(${l.index})" title="非表示にする">👁️</button>
-                <div style="width:12px;height:12px;background-color:${l.color};border:1px solid rgba(255,255,255,0.2);border-radius:2px;margin-right:8px;box-shadow:0 0 3px rgba(0,0,0,0.5);"></div>
-                <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; font-size:12px; ${textStyle}" onclick="changeCurrentLayer('${l.index}')" title="クリックで作図画層に設定: ${l.name}">
-                    ${currentMark}${l.name}
+                <div style="width:12px;height:12px;background-color:${safeColor(l.color)};border:1px solid rgba(255,255,255,0.2);border-radius:2px;margin-right:8px;box-shadow:0 0 3px rgba(0,0,0,0.5);"></div>
+                <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; font-size:12px; ${textStyle}" onclick="changeCurrentLayer('${l.index}')" title="クリックで作図画層に設定: ${escapeHtml(l.name)}">
+                    ${currentMark}${escapeHtml(l.name)}
                 </div>
             </div>`;
         });
@@ -377,9 +377,9 @@ window.updateLayerManagerContent = function() {
             html += `
             <div class="prop-row" style="margin-bottom:6px; display:flex; align-items:center; background:rgba(255,255,255,0.01); padding:4px 6px; border-radius:4px;">
                 <button class="status-btn" style="padding:2px 5px; margin-right:6px; font-size:12px; width:28px; text-align:center; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); color:#888; border-radius:3px; cursor:pointer;" onclick="toggleLayerVisibility(${l.index})" title="表示する">➖</button>
-                <div style="width:12px;height:12px;background-color:${l.color};border:1px solid rgba(255,255,255,0.1);border-radius:2px;margin-right:8px;opacity:0.5;"></div>
-                <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; font-size:12px; ${textStyle}" onclick="changeCurrentLayer('${l.index}')" title="クリックで作図画層に設定: ${l.name}">
-                    ${currentMark}${l.name}
+                <div style="width:12px;height:12px;background-color:${safeColor(l.color)};border:1px solid rgba(255,255,255,0.1);border-radius:2px;margin-right:8px;opacity:0.5;"></div>
+                <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; font-size:12px; ${textStyle}" onclick="changeCurrentLayer('${l.index}')" title="クリックで作図画層に設定: ${escapeHtml(l.name)}">
+                    ${currentMark}${escapeHtml(l.name)}
                 </div>
             </div>`;
         });
@@ -414,8 +414,8 @@ window.updateLayerPanel = function() {
         const eyeIcon = l.visible !== false ? '👁️' : '➖';
         html += `<div class="prop-row" style="margin-bottom:8px; display:flex; align-items:center;">
             <button class="status-btn" style="padding:2px 5px; margin-right:5px; font-size:14px; width:30px; text-align:center;" onclick="toggleLayerVisibility(${i})" title="表示/非表示切替">${eyeIcon}</button>
-            <div style="width:12px;height:12px;background-color:${l.color};border:1px solid #777;border-radius:2px;margin-right:5px;"></div>
-            <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${l.name}">${l.name}</div>
+            <div style="width:12px;height:12px;background-color:${safeColor(l.color)};border:1px solid #777;border-radius:2px;margin-right:5px;"></div>
+            <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(l.name)}">${escapeHtml(l.name)}</div>
         </div>`;
     });
     list.innerHTML = html;
@@ -475,8 +475,8 @@ function updatePropertiesPanel() {
         }
         html += `<div class="prop-row"><div class="prop-label">画層</div>
             <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                <input class="prop-val" style="width:60px;" type="text" value="${layers[e.layer]?layers[e.layer].name:e.layer}" readonly title="画層名">
-                <input class="prop-val" type="color" value="${layerColor}" onchange="changeLayerColorGlobal('${e.layer}', this.value)" title="この画層の色を変更">
+                <input class="prop-val" style="width:60px;" type="text" value="${escapeHtml(layers[e.layer]?layers[e.layer].name:e.layer)}" readonly title="画層名">
+                <input class="prop-val" type="color" value="${safeColor(layerColor)}" onchange="changeLayerColorGlobal('${e.layer}', this.value)" title="この画層の色を変更">
                 <button class="status-btn" style="font-size:10px;padding:2px 6px;border:1px solid #666;border-radius:3px;" onclick="hideLayerOfSelected()" title="この画層のオブジェクトをすべて非表示">🚫画層非表示</button>
             </div>
         </div>`;

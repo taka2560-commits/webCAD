@@ -63,7 +63,7 @@ function intersectLineLine(x1,y1,x2,y2, x3,y3,x4,y4) {
 function isPointOnArc(e, px, py) {
     if(e.type !== 'ARC') return true;
     const a = Math.atan2(py - e.cy, px - e.cx);
-    const ccw = e.counterclockwise;
+    const ccw = e.counterclockwise !== false;
     return isAngleBetweenCCW(ccw ? a : -a, ccw ? e.startAngle : -e.startAngle, ccw ? e.endAngle : -e.endAngle);
 }
 // トリム・延長の境界として使える図形の線分（線・長方形・ポリライン）
@@ -101,6 +101,21 @@ function intersectSegWithEntity(x1, y1, x2, y2, other) {
 }
 
 // ===== ヒットテスト =====
+// 点 (x,y) が塗りつぶしの範囲（長方形・円・閉じたポリライン）の内側か
+function _pointInHatch(t, x, y) {
+    if(!t) return false;
+    if(t.type === 'CIRCLE') return Math.hypot(x - t.cx, y - t.cy) < t.radius;
+    let P = null;
+    if(t.type === 'RECTANG') P = [{ x: t.x1, y: t.y1 }, { x: t.x2, y: t.y1 }, { x: t.x2, y: t.y2 }, { x: t.x1, y: t.y2 }];
+    else if(t.type === 'PLINE' && t.points && t.points.length >= 3) P = t.points;
+    if(!P) return false;
+    let inside = false;
+    for(let i = 0, j = P.length - 1; i < P.length; j = i++) {
+        const a = P[i], b = P[j];
+        if(((a.y > y) !== (b.y > y)) && (x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x)) inside = !inside;
+    }
+    return inside;
+}
 function distPointToSeg(px,py,x1,y1,x2,y2) {
     const dx=x2-x1,dy=y2-y1,len2=dx*dx+dy*dy;
     if(len2===0) return dist(px,py,x1,y1);
@@ -108,10 +123,12 @@ function distPointToSeg(px,py,x1,y1,x2,y2) {
     return dist(px,py,x1+t*dx,y1+t*dy);
 }
 function hitTestEntity(sx,sy) {
-    let bestIdx=-1, bestD=ERASE_R;
+    // #10 指で押すときは範囲を広げる（以前は線から5px未満でないと選べなかった）
+    const hitR = (typeof hitRadiusPx === 'function') ? hitRadiusPx() : ERASE_R;
+    let bestIdx=-1, bestD=hitR;
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
     const wcs = screenToWcs(sx, sy);
-    const tolWcs = ERASE_R / view.scale;
+    const tolWcs = hitR / view.scale;
 
     _forEachCandidate(wcs.x - tolWcs, wcs.y - tolWcs, wcs.x + tolWcs, wcs.y + tolWcs, (e,i) => {
         if(!isVisible(e)) return;
@@ -125,10 +142,10 @@ function hitTestEntity(sx,sy) {
         let d = Infinity;
         if(e.type==='LINE') { const p1=wcsToScreen(e.x1,e.y1),p2=wcsToScreen(e.x2,e.y2); d=distPointToSeg(sx,sy,p1.x,p1.y,p2.x,p2.y); }
         else if(e.type==='CIRCLE') { const c=wcsToScreen(e.cx,e.cy); d=Math.abs(dist(sx,sy,c.x,c.y)-e.radius*view.scale); }
-        else if(e.type==='ARC') { const c=wcsToScreen(e.cx,e.cy); const ad=dist(sx,sy,c.x,c.y); const rd=e.radius*view.scale; d=Math.abs(ad-rd); const a=Math.atan2(-(sy-c.y),sx-c.x); const ccw=e.counterclockwise; if(!isAngleBetweenCCW(ccw?a:-a,ccw?e.startAngle:-e.startAngle,ccw?e.endAngle:-e.endAngle))d=Infinity; }
+        else if(e.type==='ARC') { const c=wcsToScreen(e.cx,e.cy); const ad=dist(sx,sy,c.x,c.y); const rd=e.radius*view.scale; d=Math.abs(ad-rd); const a=Math.atan2(wcs.y-e.cy,wcs.x-e.cx); const ccw=e.counterclockwise !== false; if(!isAngleBetweenCCW(ccw?a:-a,ccw?e.startAngle:-e.startAngle,ccw?e.endAngle:-e.endAngle))d=Infinity; }
         else if(e.type==='RECTANG') { const p1=wcsToScreen(e.x1,e.y1),p2=wcsToScreen(e.x2,e.y1),p3=wcsToScreen(e.x2,e.y2),p4=wcsToScreen(e.x1,e.y2); d=Math.min(distPointToSeg(sx,sy,p1.x,p1.y,p2.x,p2.y),distPointToSeg(sx,sy,p2.x,p2.y,p3.x,p3.y),distPointToSeg(sx,sy,p3.x,p3.y,p4.x,p4.y),distPointToSeg(sx,sy,p4.x,p4.y,p1.x,p1.y)); }
         else if(e.type==='PLINE') { for(let j=1;j<e.points.length;j++){const a=wcsToScreen(e.points[j-1].x,e.points[j-1].y),b=wcsToScreen(e.points[j].x,e.points[j].y);d=Math.min(d,distPointToSeg(sx,sy,a.x,a.y,b.x,b.y));} if(e.closed&&e.points.length>2){const a=wcsToScreen(e.points[e.points.length-1].x,e.points[e.points.length-1].y),b=wcsToScreen(e.points[0].x,e.points[0].y);d=Math.min(d,distPointToSeg(sx,sy,a.x,a.y,b.x,b.y));} }
-        else if(e.type==='ELLIPSE') { const c=wcsToScreen(e.cx,e.cy); d=Math.abs(dist(sx,sy,c.x,c.y)-(e.rx+e.ry)/2*view.scale); }
+        else if(e.type==='ELLIPSE') { const q = _ellNearest(e, wcs.x, wcs.y), s = wcsToScreen(q.x, q.y); d = dist(sx, sy, s.x, s.y); }
         else if(e.type==='TEXT') { d = textHitDistance(e, sx, sy); }
         else if(e.type==='POINT') { const p=wcsToScreen(e.x,e.y); d=dist(sx,sy,p.x,p.y); }
         else if(e.type==='HATCH') {
@@ -139,6 +156,7 @@ function hitTestEntity(sx,sy) {
                 for(let j=1;j<tgt.points.length;j++){const a=wcsToScreen(tgt.points[j-1].x,tgt.points[j-1].y),b=wcsToScreen(tgt.points[j].x,tgt.points[j].y);d=Math.min(d,distPointToSeg(sx,sy,a.x,a.y,b.x,b.y));}
                 if(tgt.points.length>2){const a=wcsToScreen(tgt.points[tgt.points.length-1].x,tgt.points[tgt.points.length-1].y),b=wcsToScreen(tgt.points[0].x,tgt.points[0].y);d=Math.min(d,distPointToSeg(sx,sy,a.x,a.y,b.x,b.y));}
             }
+            if(d >= hitR && _pointInHatch(tgt, wcs.x, wcs.y)) d = hitR - 0.01;
         }
         else if(e.type==='DIMENSION') {
             if(e._hits) {
@@ -155,10 +173,11 @@ function hitTestEntity(sx,sy) {
 }
 // 円/弧のヒット検出（寸法コマンド用）
 function hitTestCircleArc(sx,sy) {
-    let bestIdx=-1, bestD=ERASE_R*2;
+    const hitR = Math.max(ERASE_R * 2, (typeof hitRadiusPx === 'function') ? hitRadiusPx() : 0);
+    let bestIdx=-1, bestD=hitR;
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
     const wcs = screenToWcs(sx, sy);
-    const tolWcs = (ERASE_R*2) / view.scale;
+    const tolWcs = hitR / view.scale;
 
     entities.forEach((e,i) => {
         if(!isVisible(e)) return;

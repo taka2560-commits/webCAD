@@ -158,6 +158,20 @@ const DEFAULT_LAST_PARAMS = {
     textCont: true
 };
 
+// 画面上で px ぶんの長さを、切りのよい値（1・2・5 × 10のべき乗）にする。図面の単位（m・mm）によらず見やすい大きさ
+function suggestLengthForScreen(px) {
+    const raw = px / (view.scale || 1);
+    if(!(raw > 0) || !isFinite(raw)) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    let best = p, bestR = Infinity;
+    [1, 2, 5, 10].forEach(c => { const v = c * p, r = Math.abs(Math.log(raw / v)); if(r < bestR) { bestR = r; best = v; } });
+    return +best.toPrecision(6);
+}
+// 文字の高さ 20・円の半径 50 のような初期値のままなら、画面に合った大きさに置き換える
+// （以前は 1単位＝1m の図面でも 20m の文字・50m の円になっていた。変えた値はそのまま使う）
+function materializeSizeDefault(key, px) {
+    if(String(lastParams[key]) === String(DEFAULT_LAST_PARAMS[key])) lastParams[key] = String(suggestLengthForScreen(px));
+}
 let lastParams = (function() {
     try {
         const saved = localStorage.getItem('webcad_last_params');
@@ -422,6 +436,8 @@ function escapeHtml(s) {
     if(s === undefined || s === null) return '';
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
+// 色の値として使ってよいものだけを通す（取り込んだファイルの値を HTML の属性・style に入れるため）
+function safeColor(c) { return (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c)) ? c : '#ffffff'; }
 // 画面上部に一時的なメッセージを出す（コマンドラインが畳まれているスマホ向け）
 function showToast(msg, ms) {
     let t = document.getElementById('cad-toast');
@@ -720,6 +736,12 @@ function toggleCommand(cmd) {
 // 図面を閉じる（全オブジェクト削除 + 新規作成）
 function closeDrawing() {
     if(entities.length === 0) { addCommandLog('図面は空です'); return; }
+    // 以前は確認なしで全部消していた（アプリを閉じると ↩ でも戻せない）
+    const unsaved = (typeof _hasUnsavedProjectChanges === 'function') && _hasUnsavedProjectChanges();
+    const msg = unsaved
+        ? '保存していない変更があります。\n図面を閉じると、図形がすべて消えます（↩ で戻せるのは、アプリを閉じるまでです）。\n\n閉じますか？'
+        : '図面を閉じます（図形がすべて消えます）。よろしいですか？';
+    if(!confirm(msg)) { addCommandLog('-> 図面を閉じるのをやめました'); return; }
     saveUndo();
     entities.length = 0;
     layers.splice(0, layers.length, {name:'0', color:'#00ffff', visible:true});
