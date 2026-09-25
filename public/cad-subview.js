@@ -1,13 +1,14 @@
 // ===== Web CAD 別窓（小さな図面の窓） =====
 // cad-subview.js - 図面とは別の点の集まり（変換元の SIMA など）を、浮かぶ窓の中の小さな図面に表示する部品。
 //   窓: 今のフローティングパネルと同じく、見出しをつまんで動かす（位置を覚える・ダブルタップで戻す）。
-//       右下のつまみで大きさを変え、▁ でたたむ。スマホの縦画面では、最初は画面の下のほうに出す。
+//       右下のつまみで大きさを変え、▁ でたたむ。スマホの縦画面では、最初は画面の下のほうに出し、たたむと下に寄せる。
 //   中の図面: ホイール・2本指で拡大縮小、1本指・ドラッグで移動、タップで onTap（測量座標と画面の位置）。
 //   囲む: startShape('rect' | 'lasso', done) のあとの1回のドラッグで、四角・なぞった形を描き、done（測量座標の多角形）を呼ぶ。
 //   座標は測量座標（X＝北・Y＝東）。右が東、上が北（図面と同じ向き）。描くのは onDraw（g: 2D コンテキスト, api）。
 // （ブラウザでは同じスコープに読み込まれるため、関数・変数はそのまま共有される）
 
 const SUBVIEW_TAP_PX = 8; // これより動いたら、タップではなく移動
+const SUBVIEW_DOCK_BOTTOM = 120; // スマホでたたんだ窓を寄せる位置（画面の下からの間。☑確定 の帯・コマンドのボタンより上）
 function createSubView(opt) {
     const el = document.createElement('div');
     el.id = opt.id;
@@ -72,10 +73,32 @@ function createSubView(opt) {
         get shaping() { return !!shape; },
         setHint(t) { const hi = el.querySelector('.subview-hint'); if(hi) { hi.textContent = t || ''; hi.style.display = t ? '' : 'none'; } },
         setTitle(t) { el.querySelector('.subview-title').textContent = t || ''; },
-        setCollapsed(on) { el.classList.toggle('collapsed', !!on); if(!on) api.redraw(); api.fitPanel(); },
+        setCollapsed(on) {
+            on = !!on;
+            const was = api.collapsed;
+            el.classList.toggle('collapsed', on);
+            // スマホの幅では、たたんだ窓を画面の下に寄せる（図面とパネルを広く使える）。広げると元の位置に戻す
+            if(on && !was && window.innerWidth < 700 && api.isOpen()) {
+                el.dataset.dockFrom = el.style.top;
+                el.style.top = Math.max(60, window.innerHeight - SUBVIEW_DOCK_BOTTOM - (head.offsetHeight || 34)) + 'px';
+            } else if(!on && was && el.dataset.dockFrom !== undefined) {
+                el.style.top = el.dataset.dockFrom;
+                delete el.dataset.dockFrom;
+            }
+            if(!on) api.redraw();
+            api.fitPanel();
+        },
+        // (X, Y) を窓の真ん中に出す。minScale（1単位あたりの画素数）より小さく表示していれば、そこまで拡大する
+        centerOn(X, Y, minScale) {
+            if(!isFinite(X) || !isFinite(Y)) return;
+            v.X = X; v.Y = Y;
+            if(minScale > v.s && isFinite(minScale)) v.s = Math.min(1e6, minScale);
+            api.redraw();
+        },
         open() {
             if(!api.isOpen()) {
                 el.style.display = 'flex';
+                el.classList.remove('collapsed'); delete el.dataset.dockFrom; // 開くときは広げて出す
                 _subviewPlace(el, opt);
             }
             api.redraw();
@@ -89,7 +112,14 @@ function createSubView(opt) {
     el.addEventListener('pointerdown', () => { el.style.zIndex = '100003'; }, true);
     const pp = document.getElementById('property-panel');
     if(pp) pp.addEventListener('pointerdown', () => { el.style.zIndex = ''; }, true);
-    head.addEventListener('pointerup', () => setTimeout(api.fitPanel, 0)); // 動かしたあと
+    // 見出しで動かしたあと: パネルの高さを合わせ直す。たたんだまま動かしたら、広げてもその場所のまま
+    let headTop = null;
+    head.addEventListener('pointerdown', () => { headTop = el.style.top; });
+    head.addEventListener('pointerup', () => {
+        if(headTop !== null && el.style.top !== headTop) delete el.dataset.dockFrom;
+        headTop = null;
+        setTimeout(api.fitPanel, 0);
+    });
 
     // 見出しのボタン
     el.querySelectorAll('.subview-btn').forEach((b) => b.addEventListener('click', (e) => {
@@ -229,5 +259,5 @@ function _subviewPlace(el, opt) {
     el.style.height = Math.min(h, window.innerHeight - 40) + 'px';
     if(_panelSavedPos(el.dataset.posKey) || el.dataset.moved === '1') { applyPanelPosition(el); return; }
     el.style.left = left + 'px';
-    el.style.top = Math.max(60, window.innerHeight - (parseFloat(el.style.height) || h) - (narrow ? 84 : 80)) + 'px'; // 下の ☑確定 の帯に重ならないように
+    el.style.top = Math.max(60, window.innerHeight - (parseFloat(el.style.height) || h) - (narrow ? 96 : 80)) + 'px'; // 下のコマンドのボタンに重ならないように
 }

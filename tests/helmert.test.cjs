@@ -169,6 +169,9 @@ describe('ヘルマート変換: 画面', () => {
         const pts = ${JSON.stringify(corners)}.map(([X, Y]) => v.toScreen(X, Y));
         const ev = (type, p) => cv.dispatchEvent(new MouseEvent(type, { clientX: p.x, clientY: p.y, bubbles: true }));
         ev('pointerdown', pts[0]); pts.slice(1).forEach((p) => ev('pointermove', p)); ev('pointerup', pts[pts.length - 1]);`);
+    // パネルの要素のインラインの処理（onclick・onchange）を実行する（jsdom の設定ではインラインの処理が動かないため）
+    const inline = (sel, attr, prep = '') => app.run(`const el = document.querySelector(${JSON.stringify(sel)}); ${prep}
+        (new Function('event', el.getAttribute('${attr}'))).call(el, { stopPropagation() {}, target: el });`);
     const readBlob = (how) => app.eval(`new Promise(r => { const fr = new FileReader(); fr.onload = () => r(${how === 'bytes' ? 'Array.from(new Uint8Array(fr.result))' : 'fr.result'}); fr.${how === 'bytes' ? 'readAsArrayBuffer' : 'readAsText'}(window.__blob); })`);
     const capture = (call) => app.eval(`window.__dl = downloadBlob; downloadBlob = (b, n) => { window.__blob = b; window.__name = n; }; try { ${call}; } finally { downloadBlob = window.__dl; }`);
 
@@ -246,7 +249,7 @@ describe('ヘルマート変換: 画面', () => {
         drag('rect', [[10, -10], [60, 50]]); // T2・K1〜K4 が中
         assert.equal(app.val('_helm.range.kind'), 'rect');
         assert.deepEqual(app.val('_helmRangeIndices()'), [1, 4, 5, 6, 7]);
-        assert.match(panelText(), /範囲の中の点 5 \/ 9/);
+        assert.match(panelText(), /取り込む点 5 \/ 9（別窓の水色の枠/);
         const pts = () => app.val(`entities.filter(e => e.type === 'POINT' && !/^変換_/.test(layers[e.layer].name)).map(e => [e.name, e.x, e.y, e.layer])`);
         const before = pts();
         assert.equal(app.eval('helmImport()'), true);
@@ -266,6 +269,67 @@ describe('ヘルマート変換: 画面', () => {
         app.eval('undo(); undo()');
         assert.equal(app.eval(`entities.filter(e => /^変換_/.test((layers[e.layer] || {}).name || '')).length`), 0);
         assert.deepEqual(pts(), before);
+    });
+
+    it('SIMA の点の表: ☑ で取り込む点を1点ずつ選ぶ（四角で囲んだあとも直せる）・絞り込んでまとめて選ぶ／外す', () => {
+        app.eval('helmPairByName()');
+        const rows = () => app.val(`[...document.querySelectorAll('#helm-src-list tbody tr')].map(tr => +tr.dataset.i)`);
+        const box = (i) => app.eval(`document.querySelector('#helm-src-list tr[data-i="${i}"] input[type=checkbox]').checked`);
+        const rangeActive = () => app.eval(`document.querySelectorAll('#property-panel-content button.active[onclick^="helmSetRange"]').length`);
+        assert.deepEqual(rows(), [0, 1, 2, 3, 4, 5, 6, 7, 8]);
+        assert.ok(rows().every(box), '最初は全部を取り込む');
+        drag('rect', [[10, -10], [60, 50]]); // T2・K1〜K4
+        assert.equal(box(7), true); assert.equal(box(0), false);
+        // 表で K4 を外す
+        inline('#helm-src-list tr[data-i="7"] input[type=checkbox]', 'onchange', 'el.checked = false;');
+        assert.deepEqual(app.val('_helmRangeIndices()'), [1, 4, 5, 6]);
+        assert.equal(app.val('_helm.range.kind'), 'pick');
+        assert.match(panelText(), /取り込む点 4 \/ 9（表で選んだ点）/);
+        assert.equal(rangeActive(), 0, '範囲のボタンはどれも押していない形');
+        assert.equal(app.val('_helmRangeLots().length'), 0, '区画 1-1 は K4 が外れたので入らない');
+        // 絞り込み（点名・点番号の一部。大文字小文字は区別しない）→ 表に出ている点をまとめて選ぶ・外す
+        app.eval(`helmFilter('k')`);
+        assert.deepEqual(rows(), [4, 5, 6, 7]);
+        app.eval('helmTakeShown(true)');
+        assert.deepEqual(app.val('_helmRangeIndices()'), [1, 4, 5, 6, 7]);
+        assert.deepEqual(rows(), [4, 5, 6, 7], '選び直しても絞り込みはそのまま');
+        app.eval('helmTakeShown(false)');
+        assert.deepEqual(app.val('_helmRangeIndices()'), [1]);
+        app.eval(`helmFilter('9')`); // 点番号でも
+        assert.deepEqual(rows(), [8]);
+        // 全部を選び直すと「全部」に戻る
+        app.eval(`helmFilter(''); helmTakeShown(true)`);
+        assert.equal(app.val('_helm.take'), null); assert.equal(app.val('_helm.range'), null);
+        assert.equal(rangeActive(), 1);
+        app.eval(`helmFilter('zzz')`);
+        assert.match(app.eval(`document.getElementById('helm-src-list').textContent`), /当てはまる点がありません/);
+    });
+
+    it('SIMA の点の表: 📍 で張り合わせ点にする（図面で ☑確定）と表に組の番号が出る。行をタップすると別窓の真ん中に示す。開いた状態を覚える', () => {
+        app.eval(`helmTableToggle(true); _helmRerender();`);
+        assert.equal(app.eval(`document.querySelector('#property-panel-content details.helm-src').open`), true);
+        assert.equal(app.eval(`JSON.parse(localStorage.getItem('cad_helm_opts')).table`), true);
+        inline('#helm-src-list tr[data-i="3"] .helm-pin', 'onclick');
+        assert.equal(app.eval('cmdState.mode'), 'WAITING_DIMCOGO_PT');
+        assert.equal(app.eval('_helm.sel'), 3);
+        assert.equal(app.eval('_helm.focus'), -1, '📍 は行のタップ（示す）にならない');
+        pickDrawing(3);
+        assert.deepEqual(app.val('_helm.pairs.map(p => [p.si, p.dst.name])'), [[3, 'T4']]);
+        assert.equal(app.eval(`document.querySelector('#helm-src-list tr[data-i="3"] .helm-no').textContent`), '1');
+        // 行をタップ → 別窓の真ん中にその点（F1）
+        inline('#helm-src-list tr[data-i="8"]', 'onclick');
+        assert.equal(app.eval('_helm.focus'), 8);
+        assert.equal(app.eval(`document.querySelector('#helm-src-list tr[data-i="8"]').classList.contains('helm-focus')`), true);
+        const c = app.val(`(() => { const v = _helmView(), q = v.toScreen(150, 150); return [q.x, q.y, v.canvas.width / 2, v.canvas.height / 2]; })()`);
+        assert.ok(near(c[0], c[2]) && near(c[1], c[3]), JSON.stringify(c));
+        // チェックを外す（示す点はそのまま）
+        inline('#helm-src-list tr[data-i="0"] input[type=checkbox]', 'onchange', 'el.checked = false;');
+        assert.equal(app.eval('_helm.focus'), 8); assert.equal(app.val('_helmRangeIndices()').includes(0), false);
+        assert.equal(app.eval(`document.querySelector('#helm-src-list tr[data-i="8"]').classList.contains('helm-focus')`), true, '描き直しても示している行は同じ');
+        app.eval(`helmTableToggle(false)`);
+        assert.equal(app.eval(`JSON.parse(localStorage.getItem('cad_helm_opts')).table`), false);
+        app.eval('render(); _helmView().drawNow()');
+        assert.deepEqual(app.errors(), []);
     });
 
     it('範囲: なぞって囲む・「全部」に戻す・囲む途中でやめる', () => {
@@ -368,17 +432,21 @@ describe('ヘルマート変換: 画面', () => {
         app.eval(`document.querySelector('#helm-view .subview-btn[data-act="fold"]').click()`); assert.equal(collapsed(), false);
     });
 
-    it('スマホの幅: 図面の点を指定するあいだは別窓をたたみ、☑確定・❌終了で戻す', async () => {
+    it('スマホの幅: 図面の点を指定するあいだは別窓をたたんで下に寄せ、☑確定・❌終了で元の場所に戻す', async () => {
         const w0 = app.window.innerWidth;
+        const top = () => app.eval(`document.getElementById('helm-view').style.top`);
         Object.defineProperty(app.window, 'innerWidth', { value: 390, configurable: true });
         try {
+            const top0 = top();
             svTap(1);
             assert.equal(collapsed(), true);
+            assert.equal(top(), `${app.window.innerHeight - 120 - 34}px`, 'たたんだ窓は画面の下（☑確定 の帯より上）');
             assert.equal(app.eval(`document.getElementById('property-panel').style.display`), 'none', '図面が見えるようにパネルを隠す');
             await frames();
             assert.equal(viewShown(), true, '指定のあいだも（たたんで）出ている');
             pickDrawing(1);
             assert.equal(collapsed(), false);
+            assert.equal(top(), top0, '広げると元の場所');
             assert.equal(panelTitle(), '🧮 測量計算');
             assert.equal(app.val('_helm.pairs.length'), 1);
             // ❌終了でやめると、選んだ点も外す

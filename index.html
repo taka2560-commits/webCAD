@@ -519,6 +519,22 @@
         .subview.collapsed .subview-body { display:none; }
         .cogo-table tr.helm-flag td { color:#ffcc00; }
         .helm-x { background:none; border:none; color:#ff6b6b; cursor:pointer; font-size:12px; padding:0 4px; }
+        /* SIMA の点の表（☑ 取り込む点・📍 張り合わせ点にする・行のタップで別窓に示す） */
+        .helm-src summary { cursor:pointer; font-size:12px; color:var(--dim); }
+        .helm-src-body { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+        .helm-src-tools { display:flex; gap:6px; align-items:center; }
+        .helm-src-tools .prop-val { flex:1; min-width:0; }
+        .helm-src-tools .prop-btn { flex:0 0 auto; margin-top:0; min-height:32px; padding:4px 8px; font-size:12px; }
+        .helm-src-table tbody tr { cursor:pointer; }
+        .helm-src-table input[type="checkbox"] { width:16px; height:16px; margin:0; }
+        .cogo-table tr.helm-focus td { background:rgba(0,255,255,0.10); }
+        .cogo-table tr.helm-sel td { background:rgba(0,255,255,0.22); }
+        .helm-num { color:var(--dim); font-size:10px; }
+        .helm-pair { white-space:nowrap; }
+        .helm-no { display:inline-block; min-width:16px; padding:0 4px; margin-right:4px; border-radius:8px; background:#00ff88; color:#000; font-weight:700; font-size:10px; line-height:16px; text-align:center; }
+        .helm-no.warn { background:#ffcc00; }
+        .helm-no.off { background:#888888; }
+        .helm-pin { background:#2a2e35; border:1px solid var(--border-3); border-radius:6px; cursor:pointer; font-size:12px; padding:1px 5px; line-height:18px; }
         /* 写真・メモ（📷）パネル */
         .ph-list { display:flex; flex-direction:column; gap:4px; max-height:46vh; overflow:auto; }
         .ph-row { display:flex; align-items:center; gap:8px; text-align:left; background:#2a2e35; color:#e0e0e0; border:1px solid var(--border-3); border-radius:var(--r-sub); padding:6px 8px; cursor:pointer; font:inherit; }

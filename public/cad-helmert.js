@@ -7,6 +7,7 @@
 //         変換した点の精度の目安、
 //         張り合わせ点で囲んだ範囲の外（外挿）の知らせ
 //   範囲: 別窓で四角・なぞって囲んだ点だけを、取り込み・書き出しの対象にできる（張り合わせ点は範囲の外でもよい）
+//   表: SIMA の点の表で、取り込む点を1点ずつ選ぶ（☑・絞り込み）、張り合わせ点にする（📍）、別窓で示す（行をタップ）
 //   取り込み: 新しい画層「変換_（名前）」に入れる（元の図面の点はそのまま）。変換後の SIMA（書き出し・機械へ送る）・結果の CSV・結果の表
 // 計算は測量座標（X＝北・Y＝東、m）で、重心を引いてから行う（公共座標でも桁が落ちない）。回転角は方向角と同じく右回りが正。
 // （ブラウザでは同じスコープに読み込まれるため、関数・変数はそのまま共有される）
@@ -127,21 +128,39 @@ const HELM_OPTS_KEY = 'cad_helm_opts';
 const HELM_LAYER_COLOR = '#ff79c6';
 const HELM_LAYER_TABLE = '変換結果表';
 const HELM_HINT = '点をタップ → 図面で同じ点をなぞって ☑確定';
+const HELM_TABLE_MAX = 300; // SIMA の点の表に一度に出す行（多いときは絞り込む）
+const _helmOpts = (() => { try { return JSON.parse(localStorage.getItem(HELM_OPTS_KEY) || '{}') || {}; } catch { return {}; } })();
 const _helm = {
     src: null,       // 変換元 { name, title, points: [{ num, name, X, Y, z }], lots: [{ num, name, refs }] }
     pairs: [],       // 張り合わせ点の組 [{ si: 変換元の点の番号, dst: { X, Y, name }, use, res: { dX, dY, d, flag } }]
-    sel: -1,         // 別窓で選んだ変換元の点（図面の点を指定する前）
-    mode: (() => { try { return JSON.parse(localStorage.getItem(HELM_OPTS_KEY) || '{}').mode === 'rigid' ? 'rigid' : 'sim'; } catch { return 'sim'; } })(),
-    range: null,     // 取り込む範囲 { kind: 'rect' | 'lasso', poly: [{ X, Y }] }（変換元の座標）。null なら全部
+    sel: -1,         // 別窓・表で選んだ変換元の点（図面の点を指定する前）
+    mode: _helmOpts.mode === 'rigid' ? 'rigid' : 'sim',
+    take: null,      // 取り込む点（変換元の点の番号の Set）。null なら全部
+    range: null,     // 取り込む点の選び方 { kind: 'rect' | 'lasso', poly: [{ X, Y }]（別窓で囲んだ形） } または { kind: 'pick' }（表で選んだ）
     sol: null,       // 計算の結果（helmSolve）
     applied: '',     // 取り込んだ画層の名前
     folded: false,   // 図面で点を指定するあいだ、別窓をたたんだか
     viewClosed: false, // 別窓を ✕ で閉じた（「🗺 別窓を開く」まで出さない）
     shapeKind: '',   // 別窓で範囲を囲んでいる途中（'rect' | 'lasso'）
     rangeCache: null,
+    tableOpen: !!_helmOpts.table, // SIMA の点の表を開いているか（覚える）
+    filter: '',      // 表の絞り込み（点名・点番号の一部）
+    focus: -1,       // 表の行をタップして別窓で示している点
+    scroll: null,    // 図面の点を指定するあいだ、パネルと表のスクロールの位置を覚えておく
 };
+function _helmSaveOpts() { try { localStorage.setItem(HELM_OPTS_KEY, JSON.stringify({ mode: _helm.mode, table: _helm.tableOpen })); } catch { /* 保存できなくても続行 */ } }
 COGO_SLOT_LABELS.HT = ['図面の点', '図'];
-cogoRegisterPickOwner('helm', { slots: () => ['HT'], render: () => { _helmAfterPick(); _cogoRender(); }, update: () => _cogoUpdateResult() });
+cogoRegisterPickOwner('helm', { slots: () => ['HT'], render: () => { _helmAfterPick(); _helmRerender(); }, update: () => _cogoUpdateResult() });
+// パネルを描き直す（パネルと SIMA の点の表のスクロールの位置はそのまま）
+function _helmRerender() {
+    const c = document.getElementById('property-panel-content'), w = document.getElementById('helm-src-wrap');
+    const pos = _helm.scroll || [c ? c.scrollTop : 0, w ? w.scrollTop : 0];
+    _helm.scroll = null;
+    _cogoRender();
+    const c2 = document.getElementById('property-panel-content'), w2 = document.getElementById('helm-src-wrap');
+    if(c2) c2.scrollTop = pos[0];
+    if(w2) w2.scrollTop = pos[1];
+}
 
 let _helmViewInst = null;
 function _helmView() {
@@ -174,7 +193,7 @@ function _helmEndShape() {
     if(!_helm.shapeKind) return;
     _helm.shapeKind = '';
     if(_helmViewInst) { _helmViewInst.cancelShape(); _helmViewInst.setHint(HELM_HINT); }
-    if(_helmOverlayOn() && !cogoIsPicking()) _cogoRender();
+    if(_helmOverlayOn() && !cogoIsPicking()) _helmRerender();
 }
 // 別窓は、測量計算の「変換」タブを開いているあいだ（図面で点を指定しているあいだも）だけ出す。
 // パネルの表示・題名が変わるたびに確かめる（パネルを閉じた・別のタブや別のパネルにしたときは隠す）
@@ -199,18 +218,23 @@ function _helmSyncView() {
     if(t) mo.observe(t, { childList: true, characterData: true, subtree: true });
 })();
 
-// 範囲の中の点の番号（範囲が無ければ全部）
+// 取り込む点の番号（小さい順。選んでいなければ全部）
 function _helmRangeIndices() {
     const s = _helm.src;
     if(!s) return [];
     const c = _helm.rangeCache;
-    if(c && c.src === s && c.range === _helm.range) return c.idx;
-    const idx = [];
-    s.points.forEach((p, i) => { if(!_helm.range || _helmInPoly(p.X, p.Y, _helm.range.poly)) idx.push(i); });
-    _helm.rangeCache = { src: s, range: _helm.range, idx };
+    if(c && c.src === s && c.take === _helm.take) return c.idx;
+    const idx = _helm.take ? [..._helm.take].filter((i) => s.points[i]).sort((a, b) => a - b) : s.points.map((_, i) => i);
+    _helm.rangeCache = { src: s, take: _helm.take, idx };
     return idx;
 }
-// 範囲の中の区画（構成点がすべて範囲の中のもの）
+// 取り込む点を決める（全部選んだら null に戻す）。Set は作り直す（覚えておいた結果を使い回さないように）
+function _helmSetTake(set, range) {
+    const n = _helm.src ? _helm.src.points.length : 0;
+    _helm.take = set && set.size < n ? new Set(set) : null;
+    _helm.range = _helm.take ? range : null;
+}
+// 取り込む点の区画（構成点がすべて取り込む点のもの）
 function _helmRangeLots() {
     const s = _helm.src;
     if(!s || !s.lots.length) return [];
@@ -262,7 +286,7 @@ window.helmFromTs = function() {
 function helmSetSource(src) {
     if(cogoIsPicking()) { _cogo.pick = null; resetCommand(); }
     _helmEndShape();
-    Object.assign(_helm, { src, pairs: [], sel: -1, range: null, sol: null, applied: '', folded: false, viewClosed: false });
+    Object.assign(_helm, { src, pairs: [], sel: -1, take: null, range: null, sol: null, applied: '', folded: false, viewClosed: false, filter: '', focus: -1, scroll: null });
     const v = _helmView();
     v.setTitle(`📄 変換元: ${src.name}`);
     showCogoPanel('helm');
@@ -282,14 +306,19 @@ function _helmTapSource(sx, sy) {
     if(best < 0) { showToast('点の近くをタップしてください（拡大すると選びやすくなります）', 2500); return; }
     helmSelectSource(best);
 }
-// 変換元の点 i を選び、図面で相手の点を指定する（☑確定）
+// 変換元の点 i を選び（別窓のタップ・表の 📍）、図面で相手の点を指定する（☑確定）
 window.helmSelectSource = function(i) {
     if(!_helm.src || !_helm.src.points[i]) return false;
+    // スマホではパネルを隠すので、スクロールの位置を覚えておく（指定が終わってパネルを出し直すときに戻す）
+    const c = document.getElementById('property-panel-content'), w = document.getElementById('helm-src-wrap');
+    if(c && c.offsetParent !== null) _helm.scroll = [c.scrollTop, w ? w.scrollTop : 0];
     _helm.sel = i;
     _cogo.tab = 'helm';
+    _helm.viewClosed = false;
     const v = _helmView(), sp = _helm.src.points[i];
+    v.open();
     addCommandLog(`-> [変換] SIMA の点「${sp.name || sp.num}」を選びました。図面で同じ点をなぞって ☑確定`);
-    if(window.innerWidth < 700) { v.setCollapsed(true); _helm.folded = true; } // スマホでは図面が見えるように別窓をたたむ
+    if(window.innerWidth < 700 && !v.collapsed) { v.setCollapsed(true); _helm.folded = true; } // スマホでは図面が見えるように別窓をたたむ（自分でたたんでいたら、そのまま）
     v.redraw();
     cogoPick('HT', 'helm');
     return true;
@@ -315,7 +344,7 @@ function _helmAfterPick() {
     _helmSolveNow();
     if(_helmViewInst) _helmViewInst.redraw();
 }
-function _helmChanged() { _helmSolveNow(); _cogoRender(); renderOverlay(); if(_helmViewInst) _helmViewInst.redraw(); }
+function _helmChanged() { _helmSolveNow(); _helmRerender(); renderOverlay(); if(_helmViewInst) _helmViewInst.redraw(); }
 window.helmPairByName = function() {
     if(!_helm.src) return 0;
     const map = new Map();
@@ -341,14 +370,14 @@ window.helmUsePair = function(k, on) { const p = _helm.pairs[k]; if(!p) return; 
 window.helmDeletePair = function(k) { if(!_helm.pairs[k]) return; _helm.pairs.splice(k, 1); _helmChanged(); };
 window.helmSetMode = function(m) {
     _helm.mode = m === 'rigid' ? 'rigid' : 'sim';
-    try { localStorage.setItem(HELM_OPTS_KEY, JSON.stringify({ mode: _helm.mode })); } catch { /* 保存できなくても続行 */ }
+    _helmSaveOpts();
     _helmChanged();
 };
-// 取り込む範囲: 全部／四角で囲む／なぞって囲む（別窓で）
+// 取り込む範囲: 全部／四角で囲む／なぞって囲む（別窓で）。囲んだ中の点を「取り込む点」にする（表で1点ずつ直せる）
 window.helmSetRange = function(kind) {
     if(!_helm.src) return;
     const v = _helmView();
-    if(kind !== 'rect' && kind !== 'lasso') { _helmEndShape(); _helm.range = null; _helmChanged(); return; }
+    if(kind !== 'rect' && kind !== 'lasso') { _helmEndShape(); _helmSetTake(null); _helmChanged(); return; }
     _helm.viewClosed = false;
     v.open(); v.setCollapsed(false);
     _helm.shapeKind = kind;
@@ -356,11 +385,95 @@ window.helmSetRange = function(kind) {
     v.startShape(kind, (poly) => {
         _helm.shapeKind = '';
         v.setHint(HELM_HINT);
-        if(poly) { _helm.range = { kind, poly }; addCommandLog(`-> [変換] 取り込む範囲: ${_helmRangeIndices().length} / ${_helm.src.points.length}点`); }
+        if(poly) {
+            const inside = new Set();
+            _helm.src.points.forEach((p, i) => { if(_helmInPoly(p.X, p.Y, poly)) inside.add(i); });
+            _helmSetTake(inside, { kind, poly });
+            if(inside.size === _helm.src.points.length) _helm.range = { kind, poly }; // 全部が中でも、囲んだ形は見せる
+            addCommandLog(`-> [変換] 取り込む範囲: ${inside.size} / ${_helm.src.points.length}点`);
+        }
         _helmChanged();
     });
-    _cogoRender();
+    _helmRerender();
     showToast(kind === 'rect' ? '別窓で、取り込む範囲をドラッグして四角に囲みます' : '別窓で、取り込む範囲をなぞって囲みます', 3000);
+};
+
+// ===== SIMA の点の表（取り込む点を選ぶ・張り合わせ点にする・別窓で示す） =====
+window.helmTableToggle = function(open) { if(_helm.tableOpen !== !!open) { _helm.tableOpen = !!open; _helmSaveOpts(); } };
+// 表に出す点（絞り込みに当てはまる点の番号）
+function _helmFiltered() {
+    const s = _helm.src, f = String(_helm.filter || '').trim().toLowerCase();
+    if(!s) return [];
+    const out = [];
+    s.points.forEach((p, i) => { if(!f || String(p.name || '').toLowerCase().includes(f) || String(p.num || '').toLowerCase().includes(f)) out.push(i); });
+    return out;
+}
+function _helmSrcListHtml() {
+    const s = _helm.src, idx = _helmFiltered(), take = _helm.take;
+    if(!idx.length) return _cogoNote('当てはまる点がありません。');
+    const pairOf = new Map();
+    _helm.pairs.forEach((p, k) => pairOf.set(p.si, k));
+    const rows = idx.slice(0, HELM_TABLE_MAX).map((i) => {
+        const p = s.points[i], k = pairOf.has(i) ? pairOf.get(i) : -1, pr = k >= 0 ? _helm.pairs[k] : null;
+        const cls = [i === _helm.sel ? 'helm-sel' : '', i === _helm.focus ? 'helm-focus' : ''].filter(Boolean).join(' ');
+        const no = pr ? `<span class="helm-no${!pr.use ? ' off' : pr.res && pr.res.flag ? ' warn' : ''}" title="張り合わせ点 No.${k + 1}">${k + 1}</span>` : '';
+        const num = p.num !== undefined && p.num !== '' && String(p.num) !== String(p.name) ? `<span class="helm-num"> ${escapeHtml(p.num)}</span>` : '';
+        return `<tr data-i="${i}"${cls ? ` class="${cls}"` : ''} onclick="helmFocus(${i})">` +
+            `<td class="c"><input type="checkbox" ${!take || take.has(i) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="helmTake(${i}, this.checked)" title="取り込む"></td>` +
+            `<td>${escapeHtml(p.name || '')}${num}</td><td class="r">${cogoFix(p.X, 3)}</td><td class="r">${cogoFix(p.Y, 3)}</td>` +
+            `<td class="c helm-pair">${no}<button class="helm-pin" onclick="event.stopPropagation(); helmSelectSource(${i})" title="張り合わせ点にする（図面で同じ点をなぞって ☑確定）">📍</button></td></tr>`;
+    }).join('');
+    let h = `<div class="cogo-table-wrap" id="helm-src-wrap"><table class="cogo-table helm-src-table"><thead><tr><th>取込</th><th>点名</th><th>X</th><th>Y</th><th>組</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    if(idx.length > HELM_TABLE_MAX) h += _cogoNote(`ほか ${idx.length - HELM_TABLE_MAX}点（点名・点番号で絞り込んでください）`);
+    return h;
+}
+function _helmSrcSectionHtml() {
+    const s = _helm.src;
+    return `<details class="helm-src" ${_helm.tableOpen ? 'open' : ''} ontoggle="helmTableToggle(this.open)"><summary>📋 SIMA の点を表で選ぶ（${s.points.length}点）</summary><div class="helm-src-body">` +
+        `<div class="helm-src-tools"><input class="prop-val" type="text" autocomplete="off" placeholder="点名・点番号で絞り込む" value="${escapeHtml(_helm.filter)}" oninput="helmFilter(this.value)">` +
+        '<button class="prop-btn btn-sub" onclick="helmTakeShown(true)" title="表に出ている点を、すべて取り込む点にする">☑ 全部</button>' +
+        '<button class="prop-btn btn-sub" onclick="helmTakeShown(false)" title="表に出ている点を、すべて取り込む点から外す">☐ 外す</button></div>' +
+        `<div id="helm-src-list">${_helmSrcListHtml()}</div>` +
+        _cogoNote('☑ で取り込む点を選び、📍 で張り合わせ点にします（図面で同じ点をなぞって ☑確定）。行をタップすると、別窓でその点を示します。') + '</div></details>';
+}
+window.helmFilter = function(v) {
+    _helm.filter = String(v === undefined || v === null ? '' : v);
+    const box = document.getElementById('helm-src-list');
+    if(box) box.innerHTML = _helmSrcListHtml();
+};
+// 取り込む点を1点ずつ選ぶ・外す（表の ☑）
+window.helmTake = function(i, on) {
+    const s = _helm.src;
+    if(!s || !s.points[i]) return;
+    const t = new Set(_helm.take || s.points.map((_, k) => k));
+    if(on) t.add(i); else t.delete(i);
+    _helmSetTake(t, { kind: 'pick' });
+    _helmChanged();
+};
+// 表に出ている点（絞り込んだ点）をまとめて選ぶ・外す
+window.helmTakeShown = function(on) {
+    const s = _helm.src;
+    if(!s) return;
+    const t = new Set(_helm.take || s.points.map((_, k) => k));
+    _helmFiltered().forEach((i) => (on ? t.add(i) : t.delete(i)));
+    _helmSetTake(t, { kind: 'pick' });
+    _helmChanged();
+};
+// 表の行をタップ: 別窓でその点を真ん中に出して示す（近くの点と見分けられるまで拡大する。図面では、変換した位置を示す）
+window.helmFocus = function(i) {
+    const s = _helm.src;
+    if(!s || !s.points[i]) return;
+    _helm.focus = i;
+    _helm.viewClosed = false;
+    const v = _helmView(), p = s.points[i];
+    v.open(); v.setCollapsed(false);
+    let gap = Infinity;
+    s.points.forEach((q, k) => { const d = Math.hypot(q.X - p.X, q.Y - p.Y); if(k !== i && d > 1e-6 && d < gap) gap = d; });
+    v.centerOn(p.X, p.Y, isFinite(gap) ? 36 / gap : undefined); // いちばん近い点まで 36 画素以上
+    document.querySelectorAll('#helm-src-list tr.helm-focus').forEach((tr) => tr.classList.remove('helm-focus'));
+    const tr = document.querySelector(`#helm-src-list tr[data-i="${i}"]`);
+    if(tr) tr.classList.add('helm-focus');
+    renderOverlay();
 };
 // 組から計算し直す（組ごとの残差と、ほかの組と合わない組の印 flag も付ける）
 function _helmSolveNow() {
@@ -392,10 +505,11 @@ function helmTabHtml() {
     }
     h += _cogoKv([['変換元', `${escapeHtml(s.name)}（点 ${s.points.length}${s.lots.length ? '・区画 ' + s.lots.length : ''}）`]]);
     h += `<div class="prop-row cogo-row"><div class="prop-label cogo-label">縮尺</div>${_cogoSeg(_helm.mode, [['rigid', '1/1（そのまま）'], ['sim', '縮尺も求める']], 'helmSetMode')}</div>`;
-    const rk = _helm.shapeKind || (_helm.range ? _helm.range.kind : 'all');
+    const rk = _helm.shapeKind || (_helm.range ? _helm.range.kind : 'all'); // 表で選んだとき（'pick'）は、どれも押していない形
     h += `<div class="prop-row cogo-row"><div class="prop-label cogo-label">取り込む範囲</div>${_cogoSeg(rk, [['all', '全部'], ['rect', '▭ 四角'], ['lasso', '✎ なぞる']], 'helmSetRange')}</div>`;
     if(_helm.shapeKind) h += _cogoNote(_helm.shapeKind === 'rect' ? '別窓で、取り込む範囲をドラッグして四角に囲んでください。' : '別窓で、取り込む範囲を指でなぞって囲んでください。');
-    else if(_helm.range) h += _cogoNote(`範囲の中の点 ${_helmRangeIndices().length} / ${s.points.length}（別窓の水色の枠）。張り合わせ点は範囲の外でも使えます。`);
+    else if(_helm.range) h += _cogoNote(`取り込む点 ${_helmRangeIndices().length} / ${s.points.length}（${_helm.range.poly ? '別窓の水色の枠。下の表で1点ずつ直せます' : '表で選んだ点'}）。張り合わせ点は、取り込む点に入っていなくても使えます。`);
+    h += _helmSrcSectionHtml();
     const nUse = _helm.pairs.filter((p) => p.use).length;
     h += `<div class="ts-sec">張り合わせ点${_helm.pairs.length ? `（計算に使う ${nUse} / ${_helm.pairs.length}組）` : ''}</div>`;
     h += '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="helmPairByName()">🔗 点名が同じ点を組にする</button></div>';
@@ -534,7 +648,7 @@ function helmCsvText() {
             p.res && p.res.loo !== null && p.res.loo !== undefined ? mm(p.res.loo) : '', p.res && p.res.flag ? '○' : '');
     });
     L.push('');
-    row('変換した点' + (_helm.range ? '（範囲の中）' : ''));
+    row('変換した点' + (_helm.take ? '（取り込む点）' : ''));
     row('点番号', '点名', 'SIMA X', 'SIMA Y', '変換後 X', '変換後 Y', '標高', '精度の目安 1σ(mm)', '外挿');
     _helmRangeIndices().forEach((i) => {
         const sp = s.points[i], t = _helmOut(i), sg = helmPointSigma(sol, sp.X, sp.Y);
@@ -595,8 +709,8 @@ function _helmDrawView(g, api) {
             if(vs.length >= 3) { path(vs); g.stroke(); }
         });
     }
-    // 取り込む範囲（水色）と、張り合わせ点で囲んだ範囲（緑の点線）
-    if(_helm.range) {
+    // 取り込む範囲（囲んだ形・水色）と、張り合わせ点で囲んだ範囲（緑の点線）
+    if(_helm.range && _helm.range.poly) {
         g.save(); g.strokeStyle = '#00ffff'; g.fillStyle = 'rgba(0,255,255,0.08)'; g.lineWidth = 1.5; g.setLineDash([6, 4]);
         path(_helm.range.poly); g.fill(); g.stroke(); g.restore();
     }
@@ -604,8 +718,8 @@ function _helmDrawView(g, api) {
         g.save(); g.strokeStyle = 'rgba(0,255,136,0.5)'; g.lineWidth = 1; g.setLineDash([3, 3]);
         path(sol.hull.map((p) => ({ X: p.x + sol.X0, Y: p.y + sol.Y0 }))); g.stroke(); g.restore();
     }
-    // 点（範囲の外は薄く、張り合わせ点で囲んだ範囲の外は黄色）。画面に出ている点が少ないときは点名も
-    const inSet = _helm.range ? new Set(_helmRangeIndices()) : null;
+    // 点（取り込まない点は薄く、張り合わせ点で囲んだ範囲の外は黄色）。画面に出ている点が少ないときは点名も
+    const inSet = _helm.take;
     const vis = [];
     s.points.forEach((p, i) => { const q = api.toScreen(p.X, p.Y); if(q.x > -10 && q.y > -10 && q.x < W + 10 && q.y < H + 10) vis.push([i, q]); });
     g.lineWidth = 1; g.font = '11px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'bottom';
@@ -623,6 +737,11 @@ function _helmDrawView(g, api) {
         g.strokeStyle = c; g.lineWidth = 2; g.beginPath(); g.arc(q.x, q.y, 8, 0, Math.PI * 2); g.stroke();
         g.fillStyle = c; g.fillText(String(k + 1), q.x - 14, q.y - 11); // 番号は左上（点名は右に出る）
     });
+    // 表の行で示した点（水色の点線の丸）
+    if(_helm.focus >= 0 && s.points[_helm.focus] && _helm.focus !== _helm.sel) {
+        const q = api.toScreen(s.points[_helm.focus].X, s.points[_helm.focus].Y);
+        g.save(); g.strokeStyle = '#00ffff'; g.lineWidth = 2; g.setLineDash([4, 3]); g.beginPath(); g.arc(q.x, q.y, 13, 0, Math.PI * 2); g.stroke(); g.restore();
+    }
     // 選んだ点（図面の点を待っている）
     if(_helm.sel >= 0 && s.points[_helm.sel]) {
         const p = s.points[_helm.sel], q = api.toScreen(p.X, p.Y);
@@ -659,9 +778,11 @@ function drawHelmOverlay() {
         ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, Math.PI * 2); ctx.stroke();
         ctx.fillStyle = c; ctx.fillText(String(k + 1), q.x - 16, q.y - 12); // 番号は左上（点名は右に出る）
     });
-    if(sol && _helm.sel >= 0 && s.points[_helm.sel]) {
-        const p = s.points[_helm.sel], t = helmApply(sol, p.X, p.Y), w = surveyToWcs(t.X, t.Y), q = wcsToScreen(w.x, w.y);
+    // 選んだ点・表の行で示した点の、変換した位置（点線の丸）
+    [_helm.sel, _helm.focus].forEach((i, k) => {
+        if(!sol || i < 0 || !s.points[i] || (k === 1 && i === _helm.sel)) return;
+        const t = helmApply(sol, s.points[i].X, s.points[i].Y), w = surveyToWcs(t.X, t.Y), q = wcsToScreen(w.x, w.y);
         ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.arc(q.x, q.y, 14, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-    }
+    });
     ctx.restore();
 }
