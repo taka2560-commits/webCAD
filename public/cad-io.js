@@ -1043,7 +1043,10 @@ function convertDwgDatabaseToApp(db) {
                         const vy = v.y !== undefined ? v.y : (v.point ? v.point.y : 0);
                         return { x: vx, y: vy, bulge: v.bulge || 0 };
                     });
-                    const closed = !!ent.closed || !!(ent.flag & 1) || !!ent.isClosed;
+                    // 閉じているか: DWG（libredwg-web）の LWPOLYLINE は flag の 512 が「閉じている」（1 は法線あり・256 は線種の連続）。
+                    // 以前は 1 で判定していたため、閉じた四角形の閉じる辺（最後の点→最初の点。左上から描いた長方形では左の辺）が消え、
+                    // 逆に法線を持つ開いた線が閉じていた。POLYLINE2D の flag は DXF と同じく 1 が「閉じている」
+                    const closed = !!ent.closed || !!ent.isClosed || (ent.type === 'LWPOLYLINE' ? !!(ent.flag & 512) : !!(ent.flag & 1));
                     const pts = expandBulgeVertices(verts, closed).map(v => ({ x: tx(v.x, v.y), y: ty(v.x, v.y) }));
                     if (pts.length >= 2) push(Object.assign({ type: 'PLINE', points: pts, closed }, base), gid, blockName);
                     else noteSkip('POLYLINE');

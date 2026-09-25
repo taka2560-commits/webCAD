@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.14.1（2026年9月25日リリース）**
+**現在のバージョン: v5.14.2（2026年9月25日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -182,7 +182,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（478件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（482件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -239,6 +239,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-09-25: バージョン5.14.2（DWG を読み込むと四角形の左の辺が消える不具合の修正）** 🔧
+  * libredwg-web の LWPOLYLINE の flag は 512 が「閉じている」（1 は法線あり）。1 で判定していたため、閉じた四角形の閉じる辺（最後の点→最初の点）が消え、法線を持つ開いた線が閉じていた。LWPOLYLINE は 512、POLYLINE2D は 1 で判定するようにした。
+  * すでに読み込んで保存した図面は、DWG を読み込み直すと直る。
 
 * **2026-09-25: バージョン5.14.1（座標寸法を作図すると図面の線が点線になる不具合の修正）** 🔧
   * 座標寸法の文字を描くところで ctx.save() が2回・restore() が1回だったため、作図中のプレビューの点線が残り、図面の線がすべて点線で描かれていた。数を合わせて直した。

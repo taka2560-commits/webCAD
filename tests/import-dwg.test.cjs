@@ -36,7 +36,8 @@ const DB = {
         },
         { type: 'LINE', layer: '道路', startPoint: { x: 0, y: 0 }, endPoint: { x: 1, y: 1 } },
         { type: 'ARC', layer: '道路', center: { x: 0, y: 0 }, radius: 5, startAngle: 0, endAngle: Math.PI / 2 },
-        { type: 'LWPOLYLINE', layer: '非表示', vertices: [{ x: 0, y: 0 }, { x: 10, y: 0, bulge: 0 }, { x: 10, y: 10 }], flag: 1 },
+        // libredwg-web の LWPOLYLINE の flag: 512 が「閉じている」（1 は法線あり）
+        { type: 'LWPOLYLINE', layer: '非表示', vertices: [{ x: 0, y: 0 }, { x: 10, y: 0, bulge: 0 }, { x: 10, y: 10 }], flag: 512 },
         { type: 'TEXT', layer: '道路', text: '測点A', insertionPoint: { x: 5, y: 5 }, height: 3, rotation: Math.PI / 4 },
         { type: 'ATTRIB', layer: '0', text: '隠し', insertionPoint: { x: 0, y: 0 }, flags: 1 },
         { type: 'UNSUPPORTED_THING', layer: '0' },
@@ -107,6 +108,63 @@ describe('DWG取り込み: convertDwgDatabaseToApp', () => {
 
     it('未対応の図形は読み飛ばし、全体は失敗しない', () => {
         assert.equal(ents.length, 7);
+        assert.deepEqual(app.errors(), []);
+    });
+});
+
+// 閉じたポリラインの判定（libredwg-web の flag）。
+// 以前は LWPOLYLINE も flag の 1 で判定していたため、DWG の閉じた四角形の閉じる辺（左上から描いた長方形では左の辺）が消えていた
+describe('DWG取り込み: 閉じたポリライン（四角形の左の辺が消える不具合）', () => {
+    let app;
+    before(async () => { app = await loadApp(); });
+    after(() => app.close());
+
+    const RECT = [{ x: 0, y: 10 }, { x: 10, y: 10 }, { x: 10, y: 0 }, { x: 0, y: 0 }]; // 左上 → 右上 → 右下 → 左下
+    function convert(entities) {
+        app.window.__db2 = { tables: { LAYER: { entries: [{ name: '0', colorIndex: 7 }] } }, entities };
+        return app.val('convertDwgDatabaseToApp(window.__db2).entities');
+    }
+
+    it('LWPOLYLINE の flag 512 は閉じた形（4辺とも描く）。256（線種の連続）が付いていても同じ', () => {
+        const [a, b] = convert([
+            { type: 'LWPOLYLINE', layer: '0', vertices: RECT, flag: 512 },
+            { type: 'LWPOLYLINE', layer: '0', vertices: RECT, flag: 768 },
+        ]);
+        for(const pl of [a, b]) {
+            assert.equal(pl.type, 'PLINE');
+            assert.equal(pl.closed, true, '閉じる辺（左下→左上＝左の辺）を描く');
+            assert.equal(pl.points.length, 4);
+        }
+    });
+
+    it('LWPOLYLINE の flag 1（法線あり）や 0 は開いた線のまま（勝手に閉じない）', () => {
+        const [a, b] = convert([
+            { type: 'LWPOLYLINE', layer: '0', vertices: RECT.slice(0, 3), flag: 1 },
+            { type: 'LWPOLYLINE', layer: '0', vertices: RECT.slice(0, 3), flag: 0 },
+        ]);
+        assert.equal(a.closed, false);
+        assert.equal(b.closed, false);
+    });
+
+    it('POLYLINE2D の flag は DXF と同じく 1 が閉じた形', () => {
+        const [a, b] = convert([
+            { type: 'POLYLINE2D', layer: '0', vertices: RECT, flag: 1 },
+            { type: 'POLYLINE2D', layer: '0', vertices: RECT, flag: 0 },
+        ]);
+        assert.equal(a.closed, true);
+        assert.equal(b.closed, false);
+    });
+
+    it('閉じた四角形は、画面でも左の辺を描く（最後の点から最初の点へ閉じる）', () => {
+        app.eval(`entities.length = 0; view = { x: 100, y: 300, scale: 10, rotation: 0 };`);
+        app.window.__db3 = { tables: { LAYER: { entries: [{ name: '0', colorIndex: 7 }] } }, entities: [{ type: 'LWPOLYLINE', layer: '0', vertices: RECT, flag: 512 }] };
+        app.eval(`convertDwgDatabaseToApp(window.__db3).entities.forEach(e => entities.push(e)); _bumpGeomEpoch();`);
+        app.eval(`window.__cp = 0; ctx.closePath = () => window.__cp++;`);
+        try { app.eval('_drawFrame(false)'); } finally { app.eval('delete ctx.closePath'); }
+        assert.ok(app.eval('window.__cp') >= 1, '閉じた形として描く');
+        // 左の辺（x=0 の縦の線）の上をタップすると、その四角形を選べる
+        const hit = app.eval(`(() => { const s = wcsToScreen(0, 5); return hitTestEntity(s.x, s.y); })()`);
+        assert.equal(hit, 0);
         assert.deepEqual(app.errors(), []);
     });
 });
