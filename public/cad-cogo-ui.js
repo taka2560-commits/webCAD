@@ -1,6 +1,6 @@
 // ===== Web CAD 測量計算（COGO）: 画面 =====
-// cad-cogo-ui.js - 「🧮 測量計算」パネル（求積・逆計算・点の追加・交点）、図面での点の指定、重ね表示。
-//                  計算は cad-cogo.js。
+// cad-cogo-ui.js - 「🧮 測量計算」パネル（求積・逆計算・点の追加・交点・変換）、図面での点の指定、重ね表示。
+//                  計算は cad-cogo.js。「変換」タブ（ヘルマート変換）は cad-helmert.js。
 //
 // 点の欄は、点名・点番号・「X,Y」を入れるか、📍 で図面の点をなぞって ☑確定（寸法と同じ。PC はクリック）。
 // 続けて指定する欄が空いていれば、確定するたびに次の欄の指定へ進む。
@@ -8,7 +8,7 @@
 const COGO_TITLE = '🧮 測量計算';
 const COGO_PICK_MODE = 'WAITING_DIMCOGO_PT'; // 「WAITING_DIM」で始まる段階は、指を離しても決まらず ☑確定 で決まる
 const COGO_LOT_MODE = 'WAITING_COGO_LOT';    // 区画はタップで選ぶ
-const COGO_TABS = [['area', '求積'], ['inv', '逆計算'], ['pt', '点の追加'], ['int', '交点']];
+const COGO_TABS = [['area', '求積'], ['inv', '逆計算'], ['pt', '点の追加'], ['int', '交点'], ['helm', '変換']];
 // 点の欄: [説明, 図面の印]
 const COGO_SLOT_LABELS = {
     IA: ['始点', 'A'], IB: ['終点', 'B'],
@@ -46,6 +46,7 @@ function _cogoRender() {
     if(_cogo.tab === 'area') body += _cogoAreaHtml();
     else if(_cogo.tab === 'inv') body += _cogoSlotsHtml();
     else if(_cogo.tab === 'pt') body += _cogoPtHtml();
+    else if(_cogo.tab === 'helm') body += helmTabHtml();
     else body += _cogoIntHtml();
     body += '<div id="cogo-result" class="cogo-result"></div>';
     showPropertyPanel(COGO_TITLE, body);
@@ -402,6 +403,7 @@ function _cogoCompute() {
     const S = _cogoSlotSurvey;
     const tab = _cogo.tab;
     if(tab === 'area') return { html: _cogoAreaResultHtml() };
+    if(tab === 'helm') return { html: helmResultHtml() };
     if(tab === 'inv') {
         const a = S('IA'), b = S('IB');
         if(!a || !b) return { html: _cogoNote('始点と終点を指定すると、距離と方向角を計算します。📍 で始点から続けて指定できます。') };
@@ -506,7 +508,7 @@ function _cogoOverlayOn() {
 function _cogoScr(sp) { const w = surveyToWcs(sp.X, sp.Y); return wcsToScreen(w.x, w.y); }
 function drawCogoOverlay() {
     if(!_cogoOverlayOn()) return;
-    const c = _cogo.tab === 'area' ? {} : _cogoCompute(), cyan = '#00ffff', green = '#00ff88';
+    const c = _cogo.tab === 'area' || _cogo.tab === 'helm' ? {} : _cogoCompute(), cyan = '#00ffff', green = '#00ff88'; // 変換の重ね表示は drawHelmOverlay
     ctx.save();
     ctx.lineWidth = 1.5;
     // 求積の区画
@@ -574,5 +576,6 @@ function processCogoCommand(cmd) {
     if(cmd === 'INV' || cmd === 'INVERSE') { window.showCogoPanel('inv'); return true; }
     if(cmd === 'PTADD' || cmd === 'RADIATE') { window.showCogoPanel('pt'); return true; }
     if(cmd === 'INTERS' || cmd === 'KOUTEN') { window.showCogoPanel('int'); return true; }
+    if(cmd === 'HELMERT' || cmd === 'HENKAN') { window.showCogoPanel('helm'); return true; }
     return false;
 }

@@ -503,6 +503,22 @@
         .stake-rec { font-size:12px; line-height:1.6; color:var(--green); border:1px solid rgba(0,255,136,0.35); border-radius:var(--r-sub); padding:6px 8px; font-family:Consolas,monospace; }
         /* 作図・編集（鏡像・配列など）のパネル */
         .edit-chk { display:flex; align-items:center; gap:6px; font-size:12px; color:#ddd; cursor:pointer; }
+        /* 別窓（小さな図面の窓。ヘルマート変換の変換元の SIMA）: 見出しで動かす・右下で大きさ・▁ でたたむ */
+        .subview { position:fixed; z-index:100001; display:none; flex-direction:column; overflow:hidden; box-sizing:border-box; transition:none; }
+        .subview-head { flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:3px 4px 3px 12px; background:rgba(0,0,0,0.4); border-bottom:1px solid rgba(255,255,255,0.1); cursor:move; touch-action:none; user-select:none; -webkit-user-select:none; }
+        .subview-head::before { content:'⠿'; color:#777; font-size:13px; line-height:1; }
+        .subview-title { flex:1; min-width:0; font-size:12px; font-weight:bold; color:#00ff88; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .subview-btns { flex:0 0 auto; display:flex; gap:2px; }
+        .subview-btn { width:32px; height:28px; padding:0; border:none; border-radius:6px; background:transparent; color:#aaa; font-size:14px; cursor:pointer; }
+        .subview-btn:hover { background:rgba(255,255,255,0.08); color:#fff; }
+        .subview-body { position:relative; flex:1; min-height:0; }
+        .subview-canvas { position:absolute; left:0; top:0; width:100%; height:100%; display:block; cursor:crosshair; }
+        .subview-hint { position:absolute; left:8px; right:26px; bottom:4px; font-size:10px; color:var(--dim); pointer-events:none; text-shadow:0 1px 2px #000; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .subview-grip { position:absolute; right:0; bottom:0; width:24px; height:24px; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg, transparent 55%, rgba(255,255,255,0.35) 55%, rgba(255,255,255,0.35) 62%, transparent 62%, transparent 72%, rgba(255,255,255,0.35) 72%, rgba(255,255,255,0.35) 79%, transparent 79%); }
+        .subview.collapsed { height:auto !important; }
+        .subview.collapsed .subview-body { display:none; }
+        .cogo-table tr.helm-flag td { color:#ffcc00; }
+        .helm-x { background:none; border:none; color:#ff6b6b; cursor:pointer; font-size:12px; padding:0 4px; }
         /* 写真・メモ（📷）パネル */
         .ph-list { display:flex; flex-direction:column; gap:4px; max-height:46vh; overflow:auto; }
         .ph-row { display:flex; align-items:center; gap:8px; text-align:left; background:#2a2e35; color:#e0e0e0; border:1px solid var(--border-3); border-radius:var(--r-sub); padding:6px 8px; cursor:pointer; font:inherit; }
@@ -884,6 +900,8 @@
     <script src="cad-editgeom.js"></script>
     <script src="cad-edit.js"></script>
     <script src="cad-grip.js"></script>
+    <script src="cad-subview.js"></script>
+    <script src="cad-helmert.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-boot.js"></script>

@@ -138,7 +138,9 @@ function _tsUpdateResult() {
     if(r.points.length > 200) h += _cogoNote(`ほか ${r.points.length - 200}点`);
     if(r.checksum && !r.checksum.ok) h += '<div class="cogo-warn">⚠ チェックサムが合いません。受信の途中で文字が欠けた可能性があります（通信設定を確かめて、もう一度送ってください）</div>';
     r.warnings.forEach((w) => { h += `<div class="cogo-warn">⚠ ${escapeHtml(w)}</div>`; });
-    h += '<div class="cogo-btns">' + (r.points.length ? '<button class="prop-btn" onclick="tsImport()">✅ 図面に取り込む</button>' : '') + '<button class="prop-btn btn-sub" onclick="tsDiscard()">破棄</button></div>';
+    h += '<div class="cogo-btns">' + (r.points.length ? '<button class="prop-btn" onclick="tsImport()">✅ 図面に取り込む</button>' : '') +
+        (sima && r.points.length ? '<button class="prop-btn btn-sub" onclick="helmFromTs()" title="別の座標で測った点を、張り合わせ点で図面の座標に合わせて取り込む">🧮 変換して取り込む</button>' : '') +
+        '<button class="prop-btn btn-sub" onclick="tsDiscard()">破棄</button></div>';
     box.innerHTML = h;
 }
 // 受信中の画面の書き換えは間引く（1行ごとに描き直さない）
@@ -425,19 +427,24 @@ window.tsSendSima = async function() {
     const selected = r.pointCount > 0;
     if(!selected) r = buildSimaPointLines(_baseName());
     if(!r.pointCount) { showToast('送れる測点がありません（点・属性付きブロック）', 3000); return false; }
-    if(!confirm(`${selected ? '選んだ' : 'すべての'}測点 ${r.pointCount}点を SIMA（APA-SIMA の座標）で機械へ送ります。\n機械を「既知点 → 外部入力 → APA-SIMA（座標）」で待ち受けにしてから OK を押してください。`)) return false;
+    return tsSendSimaLines(r.lines, r.pointCount, selected ? '選んだ' : 'すべての');
+};
+// SIMA の行を機械へ送る（確かめてから）。what: 「選んだ」「変換後の」など。戻り値: 送れたら true
+async function tsSendSimaLines(lines, pointCount, what) {
+    if(!_ts.port || !_ts.port.writable || _ts.sending) return false;
+    if(!confirm(`${what || ''}測点 ${pointCount}点を SIMA（APA-SIMA の座標）で機械へ送ります。\n機械を「既知点 → 外部入力 → APA-SIMA（座標）」で待ち受けにしてから OK を押してください。`)) return false;
     _ts.sending = true;
     try {
-        await _tsSendLines(r.lines);
-        addCommandLog(`-> TS へ SIMA で測点 ${r.pointCount}点を送りました`);
-        showToast(`SIMA で測点 ${r.pointCount}点を送りました`, 3500);
+        await _tsSendLines(lines);
+        addCommandLog(`-> TS へ SIMA で${what || ''}測点 ${pointCount}点を送りました`);
+        showToast(`SIMA で${what || ''}測点 ${pointCount}点を送りました`, 3500);
         return true;
     } catch(e) {
         addCommandLog('-> TS への送信に失敗: ' + e.message);
         showToast('送れませんでした: ' + e.message, 6000);
         return false;
     } finally { _ts.sending = false; _ts.sendNote = ''; _tsScheduleUi(); }
-};
+}
 // 行を1行ずつ送る（Shift-JIS・CR LF）。ACK のやり取りをするときは、1行ごとに機械の ACK を待ち、NAK なら送り直す（3回まで）
 async function _tsSendLines(lines) {
     const waitAck = !!_tsOpts().ack;

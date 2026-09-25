@@ -81,21 +81,23 @@ function polygonArea(pts) {
  * 測点（と区画）を図面に追加する。
  * points: [{ num, name, X, Y, z }]（測量座標・m）
  * lots:   [{ num, name, refs: [{ num, name }] }]（区画を構成する点の参照）
+ * opt:    { layer, color }（任意）: 点・点名・区画・区画名を、この1つの画層にまとめて入れる（変換して取り込むときなど）
  * 戻り値: { pointCount, lotCount, skippedLots }
  */
-function addSurveyData(points, lots) {
+function addSurveyData(points, lots, opt) {
+    const one = opt && opt.layer ? _ensureSurveyLayer(opt.layer, opt.color || '#ffffff') : -1;
     const wpts = points.map(p => Object.assign({}, p, surveyToWcs(p.X, p.Y)));
     const h = _autoLabelHeight(wpts);
-    const lp = _ensureSurveyLayer(SURVEY_LAYER_POINT, '#ffff00');
-    const ll = _ensureSurveyLayer(SURVEY_LAYER_LABEL, '#ffffff');
+    const lp = one >= 0 ? one : _ensureSurveyLayer(SURVEY_LAYER_POINT, '#ffff00');
+    const ll = one >= 0 ? one : _ensureSurveyLayer(SURVEY_LAYER_LABEL, '#ffffff');
     wpts.forEach(p => makeSurveyPointEntities(p, h, lp, ll).forEach(e => entities.push(e)));
 
     let lotCount = 0, skippedLots = 0;
     if(lots && lots.length) {
         const byNum = new Map(), byName = new Map();
         wpts.forEach(p => { if(p.num !== '' && p.num !== undefined && !byNum.has(String(p.num))) byNum.set(String(p.num), p); if(p.name && !byName.has(p.name)) byName.set(p.name, p); });
-        const lotLayer = _ensureSurveyLayer(SURVEY_LAYER_LOT, '#00ff00');
-        const lotLbl = _ensureSurveyLayer(SURVEY_LAYER_LOT_LABEL, '#00ff00');
+        const lotLayer = one >= 0 ? one : _ensureSurveyLayer(SURVEY_LAYER_LOT, '#00ff00');
+        const lotLbl = one >= 0 ? one : _ensureSurveyLayer(SURVEY_LAYER_LOT_LABEL, '#00ff00');
         lots.forEach(lot => {
             const vs = [];
             lot.refs.forEach(r => {

@@ -605,8 +605,9 @@ function showPropertyPanel(title, htmlContent) {
 // ・置いた場所は次に開いたときも覚えている（端末に保存。保存できない環境でも動く）
 // ・画面の回転やサイズ変更のときは、はみ出した分だけ画面内に戻す
 const PANEL_POS_KEY = 'cad_panel_pos';
-function _panelSavedPos() {
-    try { const v = JSON.parse(localStorage.getItem(PANEL_POS_KEY) || 'null'); return (v && isFinite(v.left) && isFinite(v.top)) ? v : null; } catch { return null; }
+// 覚えている位置（パネルごとに別の名前で覚えられる: panel.dataset.posKey。無ければ設定などのパネルと共通）
+function _panelSavedPos(key) {
+    try { const v = JSON.parse(localStorage.getItem(key || PANEL_POS_KEY) || 'null'); return (v && isFinite(v.left) && isFinite(v.top)) ? v : null; } catch { return null; }
 }
 // 指定した位置をパネルが画面内に収まる範囲へ丸める
 function _panelClampPos(panel, left, top) {
@@ -627,7 +628,7 @@ function _panelApplyPos(panel, left, top) {
 // 動かしたパネルを、いまの画面サイズに合わせて置き直す（表示時・画面サイズ変更時）
 function applyPanelPosition(panel) {
     if(!panel) return;
-    const pos = (panel.dataset.moved === '1') ? { left: parseFloat(panel.style.left) || 0, top: parseFloat(panel.style.top) || 0 } : _panelSavedPos();
+    const pos = (panel.dataset.moved === '1') ? { left: parseFloat(panel.style.left) || 0, top: parseFloat(panel.style.top) || 0 } : _panelSavedPos(panel.dataset.posKey);
     if(!pos) return;
     _panelApplyPos(panel, pos.left, pos.top);
 }
@@ -636,12 +637,13 @@ function resetPanelPosition(panel) {
     if(!panel) return;
     panel.style.left = ''; panel.style.top = ''; panel.style.right = ''; panel.style.transform = ''; panel.style.animation = '';
     delete panel.dataset.moved;
-    try { localStorage.removeItem(PANEL_POS_KEY); } catch { /* 保存できなくても続行 */ }
+    try { localStorage.removeItem(panel.dataset.posKey || PANEL_POS_KEY); } catch { /* 保存できなくても続行 */ }
 }
-// handle をつまんで panel を動かせるようにする（マウス・指・ペン共通）
-function makePanelDraggable(panel, handle) {
+// handle をつまんで panel を動かせるようにする（マウス・指・ペン共通）。posKey を渡すと、そのパネルだけの位置として覚える
+function makePanelDraggable(panel, handle, posKey) {
     if(!panel || !handle || handle.dataset.dragReady === '1') return;
     handle.dataset.dragReady = '1';
+    if(posKey) panel.dataset.posKey = posKey;
     let drag = null;
     handle.addEventListener('pointerdown', (e) => {
         if(e.button !== undefined && e.button !== 0) return;
@@ -662,7 +664,7 @@ function makePanelDraggable(panel, handle) {
         if(!drag || e.pointerId !== drag.id) return;
         if(drag.moved) {
             const pos = _panelClampPos(panel, parseFloat(panel.style.left) || 0, parseFloat(panel.style.top) || 0);
-            try { localStorage.setItem(PANEL_POS_KEY, JSON.stringify(pos)); } catch { /* 保存できなくても続行 */ }
+            try { localStorage.setItem(panel.dataset.posKey || PANEL_POS_KEY, JSON.stringify(pos)); } catch { /* 保存できなくても続行 */ }
         }
         try { handle.releasePointerCapture(drag.id); } catch { /* 解放できなくても続行 */ }
         drag = null;
