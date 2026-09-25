@@ -454,7 +454,9 @@ window.hideLayerOfSelected = function() {
 // プロパティパネルの更新
 window.togglePropertiesPanel = function() {
     const p = document.getElementById('properties-panel');
-    if(p) p.classList.toggle('collapsed');
+    // 畳んだパネルは画面の外へずらすだけなので inert にする（Tab・フォーカスで中に入ると、
+    // ブラウザがそれを見せようと body を横にスクロールし、画面全体が左にずれる）
+    if(p) p.toggleAttribute('inert', p.classList.toggle('collapsed'));
 };
 
 // プロパティ欄の数（座標・長さ）。オプションで単位を選んでいればその単位（m は小数3桁、mm は小数1桁）、

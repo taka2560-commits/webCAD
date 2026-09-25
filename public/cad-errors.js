@@ -103,6 +103,7 @@
                 });
                 document.body.appendChild(b);
             }
+            b.removeAttribute('inert');
             b.querySelector('.msg').textContent = 'エラーが発生しました: ' + entry.message;
             b.classList.add('show');
             clearTimeout(b._timer);
@@ -112,9 +113,10 @@
         else document.addEventListener('DOMContentLoaded', show, { once: true });
     }
 
+    // 消したお知らせは透明にして残すだけなので inert にする（Tab で見えない「詳細」「✕」にフォーカスが移らないように）
     function hideBanner() {
         const b = document.getElementById('cad-err-banner');
-        if (b) b.classList.remove('show');
+        if (b) { b.classList.remove('show'); b.setAttribute('inert', ''); }
     }
 
     function envText() {

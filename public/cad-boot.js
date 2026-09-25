@@ -12,6 +12,16 @@ if (document.readyState === 'loading') {
 }
 window.addEventListener('load', () => { resizeCanvas(); });
 
+// 画面全体（body）はスクロールさせない。画面の外の部品にフォーカスが移ると、ブラウザがそれを見せようと body を横にずらし、
+// 画面全体が左にずれて右に黒い帯が残る。index.html の overflow:clip で起きないようにしているが、
+// clip に対応していない古いブラウザでは、ずれたらすぐ戻す
+function resetPageScroll() {
+    const b = document.body, r = document.documentElement;
+    if(b.scrollLeft || b.scrollTop) { b.scrollLeft = 0; b.scrollTop = 0; }
+    if(r.scrollLeft) r.scrollLeft = 0; // ページの縦は、疑似全画面のアドレスバー隠し（scrollTo(0, 1)）のために触らない
+}
+document.body.addEventListener('scroll', resetPageScroll);
+window.addEventListener('scroll', resetPageScroll);
 
 // F3, F8 キーバインド
 document.addEventListener('keydown', (e) => {
