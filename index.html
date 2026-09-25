@@ -253,12 +253,31 @@
         /* ヘルプ・操作ガイドのパネル */
         .gh-sec { font-size:11px; font-weight:700; color:#aaa; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1); }
         .gh-sec:first-child { margin-top:0; padding-top:0; border-top:none; }
-        .gh-topic { border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:6px 10px; background:rgba(0,0,0,0.15); }
-        .gh-topic summary { cursor:pointer; font-weight:600; color:#e0e0e0; min-height:24px; }
-        .gh-topic-text { font-size:12px; color:#cfcfcf; line-height:1.55; margin:6px 0 2px; }
+        .gh-topic { border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:6px 10px; background:rgba(0,0,0,0.15); transition:border-color .3s, box-shadow .3s; }
+        .gh-topic + .gh-topic { margin-top:6px; }
+        .gh-topic summary { cursor:pointer; font-weight:600; color:#e0e0e0; min-height:24px; line-height:1.5; }
+        .gh-topic.gh-hl { border-color:rgba(0,255,136,0.7); box-shadow:0 0 0 2px rgba(0,255,136,0.25); }
+        /* 説明: 何ができる・場所・手順（番号）・コツ（💡）・開く／やってみる */
+        .gh-body { font-size:12.5px; color:#d6d6d6; line-height:1.6; margin:6px 0 2px; display:flex; flex-direction:column; gap:6px; }
+        .gh-lead { color:#e8e8e8; }
+        .gh-where { font-size:11.5px; color:#aeb4bd; }
+        .gh-where span { display:inline-block; margin-right:6px; padding:0 6px; border-radius:6px; background:rgba(255,255,255,0.08); color:#cfd3d8; font-size:10.5px; font-weight:700; }
+        .gh-steps { margin:0; padding-left:22px; }
+        .gh-steps li + li { margin-top:3px; }
+        .gh-tips { margin:0; padding-left:0; list-style:none; color:#c9c29a; font-size:12px; }
+        .gh-tips li::before { content:'💡 '; }
+        .gh-tips li + li { margin-top:2px; }
+        .gh-acts { display:flex; flex-wrap:wrap; gap:6px; }
+        .gh-acts .prop-btn { flex:1 1 45%; margin-top:0; min-height:36px; font-size:12px; }
+        .gh-search { width:100%; box-sizing:border-box; font-size:14px; min-height:40px; }
+        .gh-found { font-size:11.5px; color:#00ff88; display:none; }
+        .gh-back { margin-top:0; position:sticky; top:-12px; z-index:3; box-shadow:0 4px 10px rgba(0,0,0,0.45); } /* 説明を読みながらでも、いつでも元のパネルに戻れる */
+        .gh-tour-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; }
+        .gh-tour-grid .prop-btn { margin-top:0; min-height:40px; font-size:12px; text-align:left; padding:6px 8px; }
         .gh-cmds { width:100%; border-collapse:collapse; font-size:11px; margin-top:6px; }
         .gh-cmds th, .gh-cmds td { text-align:left; padding:3px 4px; border-bottom:1px solid rgba(255,255,255,0.08); }
         .gh-cmds td:first-child { font-family:Consolas,monospace; color:#00ffff; }
+        .gh-cmds tr.gh-cmd-cat th { color:#aaa; padding-top:8px; }
 
         /* 寸法・測定のアクションバー（画面下の操作ボタン） */
         #fs-dim-actionbar { width:max-content; max-width:calc(100vw - 16px); flex-wrap:wrap; justify-content:center; }
@@ -399,11 +418,18 @@
         #property-panel-title {
             font-weight: bold;
             color: #00ff88;
+            flex: 1; min-width: 0; text-align: center;   /* 見出しの ？ が出ても、題は真ん中のまま */
         }
         #property-panel-close {
             background: none; border: none; color: #aaa; cursor: pointer; font-size: 14px;
         }
         #property-panel-close:hover { color: #fff; }
+        /* その画面の使い方（ヘルプの説明を開く） */
+        #property-panel-help {
+            flex: 0 0 auto; width: 26px; height: 26px; margin: 0 8px 0 6px; padding: 0; border-radius: 13px; cursor: pointer;
+            border: 1px solid rgba(0,255,136,0.45); background: rgba(0,255,136,0.10); color: #00ff88; font-size: 13px; font-weight: 700; line-height: 1;
+        }
+        #property-panel-help:hover { background: rgba(0,255,136,0.2); }
         #property-panel-content {
             overflow-y: auto;             /* 画面より長いときは中身をスクロール */
             min-height: 0;
@@ -735,6 +761,7 @@
     <div id="property-panel">
         <div id="property-panel-header">
             <span id="property-panel-title">プロパティ</span>
+            <button id="property-panel-help" onclick="guidePanelHelp()" title="この画面の使い方" style="display:none;">？</button>
             <button id="property-panel-close" onclick="hidePropertyPanel()">✕</button>
         </div>
         <div id="property-panel-content">
@@ -920,6 +947,8 @@
     <script src="cad-helmert.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-guide.js"></script>
+    <script src="cad-guide-tours.js"></script>
+    <script src="cad-guide-help.js"></script>
     <script src="cad-boot.js"></script>
 
     <!-- Service Worker Registration -->

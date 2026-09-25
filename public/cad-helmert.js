@@ -157,6 +157,7 @@ function _helmRerender() {
     const pos = _helm.scroll || [c ? c.scrollTop : 0, w ? w.scrollTop : 0];
     _helm.scroll = null;
     _cogoRender();
+    if(_helmViewInst && _helmViewInst.isOpen()) _helmViewInst.fitPanel(); // スマホ: パネルの高さを別窓の上までに（すぐ合わせる）
     const c2 = document.getElementById('property-panel-content'), w2 = document.getElementById('helm-src-wrap');
     if(c2) c2.scrollTop = pos[0];
     if(w2) w2.scrollTop = pos[1];
@@ -282,6 +283,20 @@ window.helmFromTs = function() {
     helmSetSource({ name: r.job || 'TS受信', title: r.job || '', points: r.simaPoints, lots: r.lots || [] });
     return true;
 };
+// 変換の状態を控える・戻す（練習ツアーの前後。戻す状態が無ければ空にする）
+function helmSaveState() {
+    return { src: _helm.src, pairs: _helm.pairs.map((p) => Object.assign({}, p, { dst: Object.assign({}, p.dst) })), take: _helm.take, range: _helm.range, applied: _helm.applied, filter: _helm.filter };
+}
+function helmRestoreState(k) {
+    if(cogoIsPicking() && _cogo.pick && _cogo.pick.owner === 'helm') { _cogo.pick = null; resetCommand(); }
+    _helmEndShape();
+    Object.assign(_helm, { src: null, pairs: [], sel: -1, take: null, range: null, sol: null, applied: '', filter: '', focus: -1, folded: false, scroll: null }, k || {});
+    _helm.rangeCache = null;
+    _helmSolveNow();
+    if(_helmViewInst) {
+        if(_helm.src) { _helmViewInst.setTitle(`📄 変換元: ${_helm.src.name}`); _helmFitView(); } else _helmViewInst.hide();
+    }
+}
 // 変換元を決める（組・範囲・結果はやり直し）
 function helmSetSource(src) {
     if(cogoIsPicking()) { _cogo.pick = null; resetCommand(); }

@@ -170,13 +170,113 @@ describe('操作ガイド: ツアー', () => {
             buildOsnapPanel(); showOptionsPanel();
             const out = [];
             Object.entries(GUIDE_TOURS).forEach(([id, t]) => t.steps.forEach(s => {
-                const tg = s.target; if (!tg || tg === 'canvas' || (typeof tg === 'object' && !Array.isArray(tg))) return;
+                // 初めから画面にある部品だけ（パネルの中の部品 { sel }・図面の点・関数で決まる所は、機能のツアーのテストで確かめる）
+                const tg = s.target; if (!tg || tg === 'canvas' || typeof tg === 'function' || (typeof tg === 'object' && !Array.isArray(tg))) return;
                 (Array.isArray(tg) ? tg : [tg]).forEach(sel => { if (!document.querySelector(sel)) out.push(id + ': ' + s.title + ' → ' + sel); });
             }));
             hidePropertyPanel();
             return out;
         })()`);
         assert.deepEqual(missing, []);
+    });
+
+    // ---- 機能の練習ツアー（cad-guide-tours.js）: 書いてあるとおりに操作すると最後まで進み、指す部品がそのとき画面にある ----
+    const targetOk = () => app.eval(`(() => { const s = _tour.def.steps[_tour.i], sel = _tourTargetSel(_tourTargetSpec(s)); return !sel || sel === 'canvas' || !!document.querySelector(sel); })()`);
+    const at = async (title) => { await tick(); assert.equal(step(), title); assert.equal(targetOk(), true, `「${title}」の指す部品が無い`); };
+    // 図面の測点 (X, Y) に吸い付けて指定する（点の指定・区画のタップ）
+    const pickAt = (X, Y) => app.eval(`(() => { const w = _gP(${X}, ${Y}), s = wcsToScreen(w.x, w.y); mouse.screenX = s.x; mouse.screenY = s.y; mouse.wcsX = w.x; mouse.wcsY = w.y;
+        snapResult = { wcsX: w.x, wcsY: w.y, type: '端点' }; handlePointInput({ x: w.x, y: w.y }, false); })()`);
+    const done = async () => { await tick(); assert.equal(step(), 'おわり'); app.eval('endGuideTour(true)'); assert.equal(app.eval('guideTourActive()'), false); };
+
+    it('測量計算のツアー: メニュー → 求積（区画をタップ）→ 逆計算（A→C）。終わると点の欄・求積の対象は元に戻る', async () => {
+        app.eval(`_cogo.slots = { IA: { x: 1, y: 2, name: '元の点' } }; _cogo.area = null; _cogo.tab = 'pt'; startGuideTour('cogo')`);
+        await at('メニューを開く');
+        assert.deepEqual(app.val('_cogo.slots'), {}, 'ツアーの間は点の欄を空に');
+        app.eval('toggleTopMenu()'); await at('🧮 測量計算');
+        app.eval('showCogoPanel(); toggleTopMenu();'); await at('区画を選ぶ'); // 「求積」タブはもう開いているので飛ばす
+        app.eval('cogoPickLot()'); await at('区画をタップ');
+        pickAt(10, 15); await at('求積表');
+        assert.match(app.eval(`document.getElementById('cogo-result').textContent`), /600\.00/);
+        app.eval('guideTourNext()'); await at('逆計算');
+        app.eval(`cogoSetTab('inv')`); await at('始点を指定');
+        app.eval(`cogoPick('IA')`); await tick();
+        assert.equal(app.val('_tourTargetSpec(_tour.def.steps[_tour.i]).r'), 34, '指定の途中は図面の点を指す');
+        pickAt(0, 0); await at('終点を指定');
+        pickAt(20, 30); await at('距離と方向角');
+        assert.match(app.eval(`document.getElementById('cogo-result').textContent`), /36\.056 m/);
+        app.eval('guideTourNext()'); await done();
+        assert.equal(app.val('_cogo.slots.IA.name'), '元の点');
+        assert.equal(app.eval('_cogo.tab'), 'pt');
+        assert.equal(app.eval(`document.getElementById('property-panel').style.display`), 'none');
+    });
+
+    it('SIMA の変換のツアー: 練習用の SIMA → 別窓の点 A → 図面の A → 点名で組 → 取り込み。終わると取り込んだ点も変換の状態も消える', async () => {
+        app.eval(`startGuideTour('helm')`);
+        await at('変換の画面');
+        assert.equal(app.eval('_cogo.tab'), 'helm');
+        app.eval('guideTourNext()'); await at('SIMA を読み込む');
+        app.eval('guideTourAct()'); await at('別窓の点をタップ');
+        assert.equal(app.eval('_helm.src.points.length'), 7);
+        app.eval(`helmSelectSource(_gtHelmIdx('A'))`); await at('図面で同じ点を指定');
+        pickAt(0, 0); await at('点名で組にする');
+        app.eval('helmPairByName()'); await at('精度を確かめる');
+        assert.equal(app.eval('_helm.pairs.length'), 4);
+        assert.ok(app.eval('_helm.sol.sigma0') < 0.002, '練習用の SIMA は mm まで合う');
+        assert.ok(Math.abs(app.eval('_helm.sol.rot') * 180 / Math.PI - 25) < 0.01, '右回り 25°');
+        app.eval('guideTourNext()'); await at('図面に取り込む');
+        app.eval('helmImport()'); await tick();
+        assert.ok(app.eval(`layers.some(l => l.name === '変換_練習用')`));
+        await done();
+        assert.equal(app.eval('_helm.src'), null);
+        assert.equal(app.eval(`layers.some(l => l.name === '変換_練習用')`), false, '練習の取り込みは消える');
+        assert.equal(app.eval(`document.getElementById('helm-view').style.display`), 'none');
+    });
+
+    it('杭打ちのツアー: 器械点から → 器械点 A・後視点 B → C へ → ✓済。終わると杭打ちの状態は元に戻る', async () => {
+        app.eval(`_stake.mode = 'gnss'; startGuideTour('stake')`);
+        await at('杭打ちの画面');
+        app.eval('guideTourNext()'); await at('器械点から');
+        app.eval(`stakeSetMode('ts')`); await at('器械点を指定');
+        app.eval(`cogoPick('KS', 'stake')`); pickAt(0, 0); await at('後視点を指定');
+        pickAt(0, 30); await at('次の杭へ');
+        app.eval('stakeStep(1); stakeStep(1);'); await at('夾角と距離');
+        assert.match(app.eval(`document.getElementById('stake-result').textContent`), /夾角/);
+        app.eval('guideTourNext()'); await at('✓ 済');
+        app.eval('stakeToggleDone()'); await done();
+        assert.equal(app.eval('_stake.mode'), 'gnss');
+        assert.equal(app.eval('_cogo.slots.KS'), undefined);
+    });
+
+    it('点を動かすツアー: 線を選ぶ → 端の点を動かす → 元に戻す → 選んだ図形のバー', async () => {
+        app.eval(`startGuideTour('grip')`);
+        await at('線を選ぶ');
+        app.eval('_gtSelectRoad()'); await at('端の点を動かす');
+        app.eval('saveUndo(); entities[_gtRoadIdx()].x2 += 5;'); await at('元に戻す');
+        app.eval('undo()'); await at('選んだ図形のバー');
+        assert.equal(app.eval(`document.getElementById('sel-actionbar').style.display`), 'flex');
+        app.eval('guideTourNext()'); await done();
+    });
+
+    it('写真・メモのツアー: ピンを立てる → 場所 → メモ → 一覧へ。終わると練習のピンは消える', async () => {
+        const pins = () => app.eval(`entities.filter(e => e && e.type === 'PIN').length`);
+        const before = pins();
+        app.eval(`startGuideTour('photo')`);
+        await at('ピンを立てる');
+        app.eval('photoStartAdd()'); await at('ピンの場所');
+        pickAt(20, 30); await at('メモと写真');
+        app.eval('guideTourNext()'); await at('一覧へ戻る');
+        app.eval('showPhotoPanel()'); await done();
+        assert.equal(pins(), before);
+    });
+
+    it('印刷のツアー: 縮尺を選ぶ → 枠の中に入れる → PDF。終わると印刷の設定は元に戻る', async () => {
+        app.eval(`localStorage.setItem(PRINT_OPTS_KEY, JSON.stringify({ paper: 'A4', scale: 1000 })); startGuideTour('print')`);
+        await at('印刷・PDF の画面');
+        app.eval('guideTourNext()'); await at('縮尺を選ぶ');
+        app.eval(`printSet('scale', 250)`); await at('枠の中に入れる');
+        app.eval('view.x += 150;'); await at('PDF にする');
+        app.eval('guideTourNext()'); await done();
+        assert.deepEqual(JSON.parse(app.eval(`localStorage.getItem(PRINT_OPTS_KEY)`)), { paper: 'A4', scale: 1000 });
     });
 
     it('すべてのツアーを始めて終えてもエラーにならない', () => {
@@ -269,6 +369,97 @@ describe('操作ガイド: 操作中のヒントと一言', () => {
         assert.ok(app.eval(`document.querySelectorAll('#property-panel-content .gh-topic button').length`) >= 5, '「やってみる」');
         assert.ok(app.eval(`!!document.getElementById('menu-guide-btn') && !!document.getElementById('fs-btn-help') && !!document.getElementById('guide-help-btn')`));
         app.eval('hidePropertyPanel()');
+    });
+
+    const box = `document.getElementById('property-panel-content')`;
+    const shown = () => app.val(`[...${box}.querySelectorAll('.gh-cat .gh-topic[data-id]')].filter(d => d.style.display !== 'none').map(d => d.dataset.id)`);
+    it('ヘルプ: 分類ごとに、手順（番号つき）とコツに分けた説明。すべての説明の分類・ツアー・開く が正しい', () => {
+        app.eval('showGuideHelp()');
+        const t = app.eval(`${box}.textContent`);
+        for (const c of ['はじめに', '描く・直す', '測る・寸法', '測量', '図面・ファイル・印刷', '表示・設定', '困ったとき']) assert.match(t, new RegExp(c));
+        assert.ok(app.eval(`${box}.querySelectorAll('.gh-topic[data-id] ol.gh-steps li').length`) >= 150, '手順');
+        assert.ok(app.eval(`${box}.querySelectorAll('.gh-topic[data-id] ul.gh-tips li').length`) >= 30, 'コツ');
+        const bad = app.val(`GUIDE_TOPICS.filter(t => !GUIDE_HELP_CATS.some(c => c[0] === t.cat) || (t.tour && !GUIDE_TOURS[t.tour]) || (t.open && typeof t.open.run !== 'function') || !(t.steps || t.lead)).map(t => t.id)`);
+        assert.deepEqual(bad, []);
+        assert.equal(new Set(app.val('GUIDE_TOPICS.map(t => t.id)')).size, app.val('GUIDE_TOPICS.length'), '説明の id は重ならない');
+        assert.equal(app.val('GUIDE_TOUR_MENU.filter(([id]) => !GUIDE_TOURS[id]).length'), 0, '練習ツアーの一覧はすべて実在する');
+        assert.equal(app.val(`Object.keys(GUIDE_TOURS).filter(id => id !== 'basic' && !GUIDE_TOUR_MENU.some(([m]) => m === id)).length`), 0, 'すべてのツアーを一覧に出す');
+        // スマホと PC で書き分けた説明は、今の端末の方
+        app.eval(`isMobile = () => false; showGuideHelp();`);
+        assert.match(app.eval(`${box}.querySelector('.gh-topic[data-id="view"]').textContent`), /ホイール/);
+        app.eval(`isMobile = () => true; showGuideHelp();`);
+        assert.match(app.eval(`${box}.querySelector('.gh-topic[data-id="view"]').textContent`), /2本指/);
+        app.eval('hidePropertyPanel()');
+    });
+
+    it('ヘルプ: 探す（ひらがなの読み・カタカナ・コマンド）。見つかった説明は開く', () => {
+        app.eval('showGuideHelp()');
+        app.eval(`guideHelpSearch('きゅうせき')`);
+        assert.ok(shown().includes('cogo-area'), JSON.stringify(shown()));
+        assert.equal(app.eval(`${box}.querySelector('.gh-topic[data-id="cogo-area"]').open`), true);
+        assert.match(app.eval(`document.getElementById('gh-found').textContent`), /見つかりました/);
+        assert.equal(app.eval(`${box}.querySelector('.gh-extra').style.display`), 'none', '探しているあいだはツアー・設定の欄を隠す');
+        app.eval(`guideHelpSearch('へんかん')`); assert.ok(shown().includes('helm'));
+        app.eval(`guideHelpSearch('ヘルマート')`); assert.ok(shown().includes('helm'));
+        app.eval(`guideHelpSearch('すなっぷ すいつかない')`); assert.deepEqual(shown(), ['faq-snap']); // 2語とも含む説明
+        app.eval(`guideHelpSearch('ＨＥＬＭＥＲＴ')`); // 全角でも
+        assert.ok(app.eval(`[...${box}.querySelectorAll('.gh-cmds tr[data-k]')].some(tr => tr.style.display !== 'none' && /HELMERT/.test(tr.textContent))`));
+        app.eval(`guideHelpSearch('ありえない言葉ざざ')`);
+        assert.deepEqual(shown(), []);
+        assert.match(app.eval(`document.getElementById('gh-found').textContent`), /見つかりませんでした/);
+        app.eval(`guideHelpSearch('')`);
+        assert.equal(shown().length, app.val('GUIDE_TOPICS.length'));
+        // ヒントの設定を変えても、探している言葉はそのまま
+        app.eval(`guideHelpSearch('くい'); setGuideHintsMode('always');`);
+        assert.equal(app.eval(`document.getElementById('gh-search').value`), 'くい');
+        assert.ok(shown().includes('stake'));
+        app.eval(`setGuideHintsMode('auto'); hidePropertyPanel();`);
+    });
+
+    it('ヘルプの「開く」でその機能のパネルを開く（エラーにならない）', () => {
+        const help = app.eval('GUIDE_HELP_TITLE');
+        for (const id of app.val(`GUIDE_TOPICS.filter(t => t.open && !['gnss', 'open', 'save'].includes(t.id)).map(t => t.id)`)) {
+            app.eval(`showGuideHelp(); guideHelpOpen('${id}')`);
+            assert.notEqual(app.eval(`document.getElementById('property-panel-title').textContent`), help, id);
+        }
+        app.eval('hidePropertyPanel()');
+        assert.deepEqual(app.errors(), []);
+    });
+
+    it('パネルの見出しの ？: その画面の説明を開き、◀ で元のパネルに戻る。説明の無いパネルには出さない', () => {
+        const q = () => app.eval(`document.getElementById('property-panel-help').style.display`);
+        const title = () => app.eval(`document.getElementById('property-panel-title').textContent`);
+        app.eval(`showCogoPanel('inv')`);
+        assert.equal(q(), '');
+        app.eval('guidePanelHelp()');
+        assert.equal(title(), '❓ ヘルプ・操作ガイド');
+        assert.equal(q(), 'none', 'ヘルプ自身には出さない');
+        assert.equal(app.eval(`${box}.querySelector('.gh-topic[data-id="cogo-calc"]').open`), true);
+        assert.match(app.eval(`document.querySelector('.gh-back').textContent`), /測量計算 に戻る/);
+        app.eval('guideHelpBack()');
+        assert.equal(title(), '🧮 測量計算'); assert.equal(app.eval('_cogo.tab'), 'inv');
+        app.eval(`cogoSetTab('helm'); guidePanelHelp()`);
+        assert.equal(app.eval(`${box}.querySelector('.gh-topic[data-id="helm"]').open`), true, '変換タブなら変換の説明');
+        for (const fn of ['showStakePanel()', 'showTsPanel()', 'showPrintPanel()', 'showUnderlayPanel()', 'showPhotoPanel()', 'showCoordListPanel()', 'showOptionsPanel()', 'showLayerManagerPanel()', 'showBlockManagerPanel()']) {
+            app.eval(fn); assert.equal(q(), '', fn);
+        }
+        app.eval(`showPropertyPanel('円 作図設定', '')`); assert.equal(q(), 'none');
+        app.eval(`cogoSetTab('area'); hidePropertyPanel()`);
+    });
+
+    it('点の指定の手順カードは、機能ごとの言葉（測量計算・杭打ち・写真のピン・下絵・変換）', async () => {
+        app.eval(`setGuideHintsMode('always')`);
+        app.eval(`showCogoPanel('inv'); cogoPick('IA')`); await wait(5);
+        assert.match(hint(), /点の指定.*始点/);
+        app.eval(`resetCommand(); _cogo.pick = null; cogoPick('KS', 'stake')`); await wait(5);
+        assert.match(hint(), /杭打ち.*器械点/);
+        app.eval(`resetCommand(); _cogo.pick = null; photoStartAdd()`); await wait(5);
+        assert.match(hint(), /ピンを立てる.*場所/);
+        app.eval(`resetCommand(); _cogo.pick = null; cogoPick('UA', 'underlay')`); await wait(5);
+        assert.match(hint(), /下絵.*1\/4.*画像の上/);
+        app.eval(`resetCommand(); _cogo.pick = null; cogoPick('HT', 'helm')`); await wait(5);
+        assert.match(hint(), /変換.*別窓で選んだ点/);
+        app.eval(`resetCommand(); _cogo.pick = null; setGuideHintsMode('auto'); hidePropertyPanel();`);
     });
 
     it('未捕捉エラーが起きない', () => {

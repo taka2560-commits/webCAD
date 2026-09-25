@@ -1,9 +1,10 @@
 // ===== Web CAD 操作ガイド =====
 // cad-guide.js - はじめて使う人向けの操作ガイド
-//   ① ツアー: 練習用の図面で、実際に操作すると次へ進む（はじめてツアー・座標読取モード・機能別のミニツアー）
+//   ① ツアー: 練習用の図面で、実際に操作すると次へ進む（はじめてツアー・座標読取モード・機能別のミニツアー）。
+//      測量計算・変換・杭打ちなど機能の練習ツアーは cad-guide-tours.js
 //   ② 操作中のヒント: コマンドを始めると手順カードを出し、操作が進むと次の手順に切り替える。
 //      つまずいていそうな操作（1本指で画面を動かそうとする等）には一言だけ助けを出す
-//   ③ ヘルプ（❓）: 機能ごとの説明と「やってみる」、コマンド一覧、ヒントの出し方の設定
+//   ③ ヘルプ（❓）: 中身と表示は cad-guide-help.js。ここにはヒントの出し方の設定だけ
 //
 // 他のファイルは guideNotify('出来事') でガイドに知らせるだけ（ガイドを使っていないときは何もしない）。
 
@@ -28,9 +29,12 @@ let _guide = _guideLoad(); // { welcome, laterCount, tours:{id:'done'}, hintsMod
 function _guideSave() { try { localStorage.setItem(GUIDE_KEY, JSON.stringify(_guide)); } catch { /* 保存できなくても今回は使える */ } }
 function guideHintsMode() { return ['auto', 'always', 'off'].includes(_guide.hintsMode) ? _guide.hintsMode : 'auto'; }
 
-// 説明文: スマホ（指）と PC（マウス）で書き分けたものは今の端末に合う方を使う
+// 説明文: スマホ（指）と PC（マウス）で書き分けたものは今の端末に合う方を使う。関数なら、そのときの内容を作る
 function _guideIsTouch() { return (typeof isMobile === 'function') ? isMobile() : false; }
-function _gt(t) { return (t && typeof t === 'object') ? (_guideIsTouch() ? t.touch : t.pc) : (t || ''); }
+function _gt(t) {
+    if(typeof t === 'function') { try { return _gt(t()); } catch { return ''; } }
+    return (t && typeof t === 'object') ? (_guideIsTouch() ? t.touch : t.pc) : (t || '');
+}
 function _guideIsFs() { return document.body.classList.contains('fullscreen-mode'); }
 
 // ===== 画面の部品（必要になったときに作る） =====
@@ -89,7 +93,7 @@ const GUIDE_TOURS = {
             GUIDE_STEP.measureStart, GUIDE_STEP.measureBase, GUIDE_STEP.measureRead,
             { title: '元に戻す', text: '↩ で1つ前の状態に戻ります（記入した寸法が消えます）。', target: '#btn-undo', on: 'undo' },
             { title: '保存', text: '💾保存 で、図面を端末に保存します（練習なので実際には保存しません）。\n作業中の図面は自動でも保存されています。', target: '#btn-save', on: 'saved' },
-            { title: 'おわり', text: '基本はここまでです。ほかにも 📍座標一覧、SIMA・座標CSV の読込、🛰現在地、🎯座標読取モード、スナップの設定（OSNAP の ▼）などがあります。\n右下や ⋯ メニューの ❓ から、いつでも見られます。', next: 'おわる',
+            { title: 'おわり', text: '基本はここまでです。ほかにも 📍座標一覧、SIMA・座標CSV の読込、🛰現在地、🎯座標読取モード、スナップの設定（OSNAP の ▼）などがあります。\n右下や ⋯ メニューの ❓ から、いつでも見られます。❓ の「機能の練習」では、測量計算・SIMA の変換・杭打ちなども練習できます。', next: 'おわる',
                 extra: [{ label: '🎯 座標読取モードも見る', action: () => startGuideTour('fullscreen') }] },
         ],
     },
@@ -217,9 +221,10 @@ window.startGuideTour = function(id) {
     const op = document.getElementById('osnap-panel'); if(op) op.style.display = 'none';
     if(typeof resetCommand === 'function') resetCommand();
     if(def.screen === 'normal' && _guideIsFs() && typeof window.toggleFullscreen === 'function') window.toggleFullscreen(); // index.html の関数
-    _tour = { id, def, i: -1, base: null, flags: {}, backup: null, completing: false };
+    _tour = { id, def, i: -1, base: null, flags: {}, backup: null, completing: false, keep: null };
     document.body.classList.add('guide-touring'); // 操作ボタン（☑確定など）は暗くしない
     if(def.sample) { _tour.backup = _guideBackup(); _guideLoadSample(); }
+    if(def.onStart) { try { _tour.keep = def.onStart(); } catch { /* 画面の部品が無いときは何もしない */ } } // 機能の状態を控える（onEnd に渡す）
     _guideHideHint();
     clearInterval(_tourTicker);
     _tourTicker = setInterval(_tourTick, GUIDE_TICK_MS);
@@ -235,7 +240,7 @@ window.endGuideTour = function(completed) {
     clearInterval(_tourTicker); _tourTicker = null;
     const step = t.def.steps[t.i];
     if(step && step.onExit) { try { step.onExit(); } catch { /* 画面の部品が無いときは何もしない */ } }
-    if(t.def.onEnd) { try { t.def.onEnd(); } catch { /* 同上 */ } }
+    if(t.def.onEnd) { try { t.def.onEnd(t.keep); } catch { /* 同上 */ } }
     if(typeof resetCommand === 'function') resetCommand();
     if(typeof touchState !== 'undefined') touchState.showLoupe = false;
     if(t.backup) _guideRestore(t.backup);
@@ -281,6 +286,21 @@ function _tourComplete() {
 }
 window.guideTourNext = function() { if(_tour) _tourGo(_tour.i + 1); };
 window.guideTourSkip = function() { if(_tour) _tourGo(_tour.i + 1); };
+// 手順のボタン（act: { label, run }）: 練習用のデータを読むなど、その手順の操作を代わりに行って次へ
+window.guideTourAct = function() {
+    const t = _tour; if(!t || t.completing) return;
+    const step = t.def.steps[t.i];
+    if(!step || !step.act) return;
+    try { step.act.run(); } catch { /* 画面の部品が無いときは何もしない */ }
+    if(_tour === t) _tourComplete();
+};
+// 指し示す場所の指定を解く: 関数ならそのときの指定、{ sel } はセレクタ
+function _tourTargetSpec(step) {
+    let tg = step.target;
+    if(typeof tg === 'function') { try { tg = tg(); } catch { tg = null; } }
+    return tg || null;
+}
+function _tourTargetSel(tg) { return typeof tg === 'string' ? tg : (tg && typeof tg === 'object' && typeof tg.sel === 'string' ? tg.sel : null); }
 
 function _tourOnEvent(type) {
     const t = _tour; if(!t || t.completing) return;
@@ -292,6 +312,11 @@ function _tourTick() {
     const t = _tour; if(!t) return;
     const step = t.def.steps[t.i]; if(!step) return;
     if(typeof touchState !== 'undefined' && touchState.showLoupe) t.flags.loupe = true;
+    // 指す部品がパネルの中でスクロールして見えないとき（パネルを描き直した直後など）は、見える所まで送る（手順ごとに3回まで）
+    if((t.flags.scrolls || 0) < 3 && _tourTargetSel(_tourTargetSpec(step)) && !_tourTargetRect(step)) {
+        t.flags.scrolls = (t.flags.scrolls || 0) + 1;
+        _tourScrollTargetIntoView(step);
+    }
     _tourPlace();
     if(!t.completing && step.done) {
         let ok;
@@ -301,33 +326,52 @@ function _tourTick() {
 }
 
 // 指し示す場所（画面座標の四角）。見えないときは null
+//   target: 'canvas'（図面全体）| セレクタ | [セレクタ…] | { sel }（パネルの中など、あとで出る部品）| { wcs, r }（図面の点）
+//           | { rect }（四角を返す関数。別窓の点など）| それらを返す関数（手順の途中で指す所が変わるとき）
 function _tourTargetRect(step) {
-    const tg = step.target;
+    const tg = _tourTargetSpec(step);
     if(!tg) return null;
     if(tg === 'canvas') return null; // 図面全体（囲まずに説明だけ出す）
     if(typeof tg === 'object' && !Array.isArray(tg) && tg.wcs) {
         const p = tg.wcs(), s = wcsToScreen(p.x, p.y), cr = canvas.getBoundingClientRect(), r = tg.r || 30;
         return { left: cr.left + s.x - r, top: cr.top + s.y - r, width: r * 2, height: r * 2, round: true };
     }
-    const sels = Array.isArray(tg) ? tg : [tg];
+    if(typeof tg === 'object' && !Array.isArray(tg) && typeof tg.rect === 'function') {
+        let r;
+        try { r = tg.rect(); } catch { r = null; }
+        return r && r.width > 0 && r.height > 0 ? r : null;
+    }
+    const sels = Array.isArray(tg) ? tg : [_tourTargetSel(tg)].filter(Boolean);
     let box = null;
     sels.forEach(sel => {
         const el = document.querySelector(sel);
         if(!el) return;
-        const r = el.getBoundingClientRect();
-        if(r.width <= 0 || r.height <= 0) return;
+        const r = _tourClipToScrollers(el, el.getBoundingClientRect());
+        if(r.right - r.left <= 0 || r.bottom - r.top <= 0) return;
         box = box ? { left: Math.min(box.left, r.left), top: Math.min(box.top, r.top), right: Math.max(box.right, r.right), bottom: Math.max(box.bottom, r.bottom) }
                   : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
     });
     if(!box) return null;
     return { left: box.left, top: box.top, width: box.right - box.left, height: box.bottom - box.top };
 }
+// パネル・表の中でスクロールして一部が隠れている部品は、見えている所だけを囲む（枠がパネルの外にはみ出さないように）
+function _tourClipToScrollers(el, r) {
+    let b = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    for(let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+        const cs = getComputedStyle(p);
+        if(!/(auto|scroll|hidden)/.test(cs.overflowY + ' ' + cs.overflowX)) continue;
+        const pr = p.getBoundingClientRect();
+        if(pr.width <= 0 || pr.height <= 0) continue;
+        b = { left: Math.max(b.left, pr.left), top: Math.max(b.top, pr.top), right: Math.min(b.right, pr.right), bottom: Math.min(b.bottom, pr.bottom) };
+    }
+    return b;
+}
 // 横にスクロールする上のバーや、縦にスクロールする左のツールバーの中なら、そのバーだけを動かして見せる。
 // （scrollIntoView はページ全体まで動かしてしまい、画面が横にずれることがあったため使わない）
 function _tourScrollTargetIntoView(step) {
-    const tg = step.target;
-    if(typeof tg !== 'string' || tg === 'canvas') return;
-    const el = document.querySelector(tg);
+    const sel = _tourTargetSel(_tourTargetSpec(step));
+    if(!sel || sel === 'canvas') return;
+    const el = document.querySelector(sel);
     if(!el) return;
     for(let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
         const cs = getComputedStyle(p);
@@ -351,7 +395,9 @@ function _tourPlace() {
     const t = _tour; if(!t) return;
     const step = t.def.steps[t.i]; if(!step) return;
     const spot = _guideEl('guide-spot'), dim = _guideEl('guide-dim'), card = _guideEl('guide-card');
-    const rect = _tourTargetRect(step);
+    const tg = _tourTargetSpec(step), rect = _tourTargetRect(step);
+    // 図面・別窓・パネルを操作する手順（指す所がある手順）では暗くしない。説明だけの手順は少し暗くする
+    const onDrawing = tg === 'canvas' || !!(tg && typeof tg === 'object' && !Array.isArray(tg) && (tg.wcs || tg.rect));
     if(rect) {
         const pad = rect.round ? 0 : 6;
         spot.style.display = 'block';
@@ -361,8 +407,7 @@ function _tourPlace() {
         dim.style.display = 'none';
     } else {
         spot.style.display = 'none';
-        // 図面を操作する手順では暗くしない（図面が見えないと操作できない）。説明だけの手順は少し暗くする
-        dim.style.display = (step.target === 'canvas') ? 'none' : 'block';
+        dim.style.display = onDrawing ? 'none' : 'block';
     }
     // カードは対象と重ならない側（画面の上か下）に置く
     const H = window.innerHeight, W = window.innerWidth;
@@ -372,8 +417,8 @@ function _tourPlace() {
     const topY = fs ? 56 : 68, bottomGap = abVisible ? (fs ? 96 : 124) : (fs ? 24 : 56);
     const cw = card.offsetWidth, ch = card.offsetHeight;
     let top;
-    const tc = rect ? rect.top + rect.height / 2 : (step.target === 'canvas' ? H / 2 : 0);
-    if(rect || step.target === 'canvas') top = (tc > H * 0.45) ? topY : Math.max(topY, H - bottomGap - ch);
+    const tc = rect ? rect.top + rect.height / 2 : (tg === 'canvas' ? H / 2 : 0);
+    if(rect || tg === 'canvas') top = (tc > H * 0.45) ? topY : Math.max(topY, H - bottomGap - ch);
     else top = Math.max(topY, (H - ch) / 2);
     // 全体表示モードでは右端のボタンの列を隠さないよう左に寄せる
     const left = fs ? 12 : Math.max(12, (W - cw) / 2);
@@ -389,12 +434,13 @@ function _tourRenderCard() {
     const isLast = t.i === n - 1;
     const nextLabel = (typeof step.next === 'string') ? step.next : (step.next ? '次へ' : null);
     const extra = (step.extra || []).map((x, k) => `<button class="gc-btn" data-extra="${k}">${escapeHtml(x.label)}</button>`).join('');
+    const act = step.act ? `<button class="gc-btn primary" onclick="guideTourAct()">${escapeHtml(step.act.label)}</button>` : '';
     card.innerHTML = `
         <div class="gc-top"><span class="gc-prog">${escapeHtml(t.def.title)}&nbsp;&nbsp;${t.i + 1} / ${n}</span><button class="gc-x" title="ツアーをやめる" onclick="endGuideTour(false)">✕</button></div>
         <div class="gc-title">${escapeHtml(step.title)}</div>
         <div class="gc-text">${escapeHtml(_gt(step.text))}</div>
         <div class="gc-ok" style="display:none;">✓ できました</div>
-        <div class="gc-btns">${extra}${nextLabel ? '' : '<button class="gc-btn" onclick="guideTourSkip()">スキップ</button>'}${nextLabel ? `<button class="gc-btn primary" onclick="${isLast ? 'endGuideTour(true)' : 'guideTourNext()'}">${escapeHtml(nextLabel)}</button>` : ''}</div>`;
+        <div class="gc-btns">${extra}${nextLabel ? '' : '<button class="gc-btn" onclick="guideTourSkip()">スキップ</button>'}${act}${nextLabel ? `<button class="gc-btn primary" onclick="${isLast ? 'endGuideTour(true)' : 'guideTourNext()'}">${escapeHtml(nextLabel)}</button>` : ''}</div>`;
     card.querySelectorAll('[data-extra]').forEach(b => b.addEventListener('click', () => {
         const x = (step.extra || [])[+b.dataset.extra];
         if(!x) return;
@@ -538,15 +584,34 @@ const GUIDE_HINTS = [
         { modes: ['ORIGIN'], text: '新しい原点をタップ' },
         { modes: ['2P_ORIGIN', '2P_ORIGIN_PREVIEW'], text: '原点にしたい点までなぞって ☑確定' },
         { modes: ['2P_XDIR', '2P_XDIR_PREVIEW'], text: '向きを決める2点目までなぞって ☑確定（原点→この点の向きが横軸になります）' }] },
+    // 図面で点を指定する（測量計算・変換・杭打ち・写真のピン・下絵）: 機能ごとに言葉を変える（match: どの機能の指定か）
+    { key: 'HELMPICK', title: '🧮 変換: 図面の点', prefix: 'WAITING_DIMCOGO_', match: () => _guidePickOwner() === 'helm', steps: [
+        { modes: ['PT'], text: { touch: '別窓で選んだ点と同じ点を、図面でなぞって（緑の記号＝スナップ）☑確定。やめるときは ❌終了', pc: '別窓で選んだ点と同じ点を、図面でクリック（測点に吸い付きます）。やめるときは Esc' } }] },
+    { key: 'ULPICK', title: '🗺 下絵を2点で合わせる', prefix: 'WAITING_DIMCOGO_', match: () => _guidePickOwner() === 'underlay', steps: [
+        { when: () => _guidePickKey() === 'UA', text: '下絵の画像の上で、点1にする所（区画の角など、図面にもある点）までなぞって ☑確定。画像の上は吸い付きません' },
+        { when: () => _guidePickKey() === 'UA2', text: '図面で、点1と同じ場所の点までなぞって ☑確定（測点に吸い付きます）' },
+        { when: () => _guidePickKey() === 'UB', text: '画像の上で、点2にする所（点1から離れた点ほど正確）までなぞって ☑確定' },
+        { when: () => _guidePickKey() === 'UB2', text: '図面で、点2と同じ場所の点までなぞって ☑確定。画像が図面に重なります' }] },
+    { key: 'PHOTOPICK', title: '📷 ピンを立てる', prefix: 'WAITING_DIMCOGO_', match: () => _guidePickOwner() === 'photo', steps: [
+        { modes: ['PT'], text: { touch: 'ピンを立てる場所までなぞって ☑確定（測点に吸い付きます）。このあとメモと写真を付けます', pc: 'ピンを立てる場所をクリック（測点に吸い付きます）。このあとメモと写真を付けます' } }] },
+    { key: 'STAKEPICK', title: '📍 杭打ち: 点の指定', prefix: 'WAITING_DIMCOGO_', match: () => _guidePickOwner() === 'stake', steps: [
+        { modes: ['PT'], text: () => ({ touch: `${_guidePickLabel()}までなぞって ☑確定（測点に吸い付きます）。欄に点名を入れても指定できます`, pc: `${_guidePickLabel()}をクリック（測点に吸い付きます）。欄に点名を入れても指定できます` }) }] },
     { key: 'COGO', title: '📍 点の指定', prefix: 'WAITING_DIMCOGO_', steps: [
-        { modes: ['PT'], text: { touch: '点までなぞって（緑の記号＝スナップ）☑確定。続けて次の欄の点を指定します', pc: '点をクリック（測点に吸い付きます）。続けて次の欄の点を指定します' } }] },
+        { modes: ['PT'], text: () => ({ touch: `${_guidePickLabel()}までなぞって（緑の記号＝スナップ）☑確定。空いている欄があれば、続けて次の欄の点を指定します`, pc: `${_guidePickLabel()}をクリック（測点に吸い付きます）。空いている欄があれば、続けて次の欄の点を指定します` }) }] },
     { key: 'COGOLOT', title: '🧮 求積', prefix: 'WAITING_COGO_LOT', steps: [{ modes: [''], text: '求積する区画（閉じたポリライン・長方形）の線か内側をタップ' }] },
     { key: 'LAYOFF', title: '🚫 タッチ非表示', prefix: 'WAITING_LAYOFF', steps: [{ modes: [''], text: '非表示にしたい画層の図形をタップ。終わるときは下の「非表示終了」' }] },
 ];
 
 let _hintSession = null; // { key, hidden }
 function _guideHintFor(mode) {
-    return GUIDE_HINTS.find(h => mode.startsWith(h.prefix));
+    return GUIDE_HINTS.find(h => mode.startsWith(h.prefix) && (!h.match || h.match()));
+}
+// 図面で点を指定しているとき: どの機能の指定か（'cogo'・'helm'・'stake'・'photo'・'underlay'）と、いまの欄
+function _guidePickOwner() { return (typeof _cogo !== 'undefined' && _cogo.pick) ? (_cogo.pick.owner || 'cogo') : ''; }
+function _guidePickKey() { const p = (typeof _cogo !== 'undefined') ? _cogo.pick : null; return p && p.keys ? p.keys[p.i] : ''; }
+function _guidePickLabel() {
+    const k = _guidePickKey();
+    return (typeof COGO_SLOT_LABELS !== 'undefined' && COGO_SLOT_LABELS[k]) ? COGO_SLOT_LABELS[k][0] : '点';
 }
 function _guideOnModeChange() {
     const mode = (cmdState && cmdState.mode) || 'IDLE';
@@ -639,67 +704,13 @@ function _guideTipsOnMode(mode) {
 // ===================================================================
 // ③ ヘルプ（❓）
 // ===================================================================
-const GUIDE_TOPICS = [
-    { title: '画面の動かし方', tour: 'view', text: { touch: '2本指で広げると拡大、つまむと縮小、2本指のままスライドで移動します。1本指でなぞると、ルーペと座標が出ます。🔍全体 で図面全体を表示します。', pc: 'ホイールで拡大・縮小、ホイール（中ボタン）を押したままドラッグで移動します。🔍全体 で図面全体を表示します。' } },
-    { title: '座標を読む（座標読取モード）', tour: 'fullscreen', text: '🎯座標読取 で、図面を広く見ながら座標を読むモードになります。なぞると上に X・Y が出て、指を離しても左上に残ります。X＝北・Y＝東です。' },
-    { title: '測る（基点測定・寸法）', tour: 'measure', text: '📐測定 で基点を決めると、そこからの X・Y・直線の距離を出したまま確かめられます。📐記入 で寸法として残せます。寸法は ↔平行・⤢整列・📏連続寸法 でも記入できます。' },
-    { title: 'スナップ（点に吸い付く）', tour: 'snap', text: '点の近くでは緑の記号が出て、その点に吸い付きます。OSNAP の ▼ で種類を選び、「次の1点だけ」で種類を絞れます。線の上で少し止めると、線を延ばした先にも吸い付きます。' },
-    { title: '図面を開く（DXF・DWG・SIMA・座標CSV）', text: '📁開く から DXF・DWG・SIMA（.sim）・座標CSV を開けます。文字コードは自動で判定します。図面があるときは「置き換える」か「追加する」かを選べます。' },
-    { title: '座標一覧・SIMA／CSV 出力', text: '⋯ メニューの 📍座標一覧 で測点を検索し、タップでその点へ移動できます。SIMA 出力・座標CSV 出力 で書き出せます（SIMA は Shift-JIS）。' },
-    { title: '測量計算（求積・逆計算・点の追加・交点）', text: '⋯ メニューの 🧮測量計算 で使います。点は 📍 で図面の点をなぞって ☑確定（測点に吸い付きます）、または点名・点番号・「X,Y」を入れます。\n・求積: 区画の線か内側をタップすると、座標法の求積表（倍面積・面積・地積）を出します。📋 求積表を図面に置く、📏 辺長を記入、㎡ 面積を記入、📄 CSV 出力。\n・逆計算: 2点の距離と方向角（度 分 秒）。\n・点の追加: 座標、方向角と距離、後視点と夾角（右回り）から測点を追加します。\n・交点: 2直線・方向角×2・距離×2 の交点を測点として追加します。' },
-    { title: 'SIMA の座標変換（ヘルマート変換）', text: '🧮測量計算 の「変換」タブで使います（コマンド HELMERT）。別の座標で測った SIMA を、図面の座標に合わせて取り込みます。\n・📁 SIMA を読み込む と、SIMA の点が別窓に出ます。別窓の点をタップ → 図面で同じ点をなぞって ☑確定 で、張り合わせ点を2組以上指定します（🔗 で点名が同じ点をまとめて組にもできます）。📡TS連携 で受信した SIMA は「🧮 変換して取り込む」で使えます。\n・縮尺: 「1/1」は回転と移動だけ、「縮尺も求める」はヘルマート変換です。3組以上で精度（標準偏差 σ₀、回転・縮尺・移動の標準偏差、組ごとの較差）を確かめられます。ほかの組と合わない組（点の取り違えの疑い）と、張り合わせ点で囲んだ範囲の外の点は黄色で知らせます。\n・取り込む範囲: ▭ 四角・✎ なぞる で、別窓で囲んだ点だけを取り込めます。\n・📋 SIMA の点を表で選ぶ: ☑ で取り込む点を1点ずつ選び（点名・点番号で絞り込めます）、📍 で張り合わせ点にします。行をタップすると、別窓でその点を示します。\n・✅ 図面に取り込む と、新しい画層「変換_（名前）」に入ります（元の点はそのまま）。変換後の SIMA・機械へ送る・結果の CSV・結果の表も作れます。' },
-    { title: '現場写真・メモ（ピン）', text: '⋯ メニューの 📷写真・メモ で使います。「📍 ピンを立てる」で図面の場所（測点に吸い付きます）にピンを立て、メモを書き、「📷 撮る」「🖼 選ぶ」で写真を付けます。図面のピンをタップしても開きます。ピンは図面と一緒に保存され、↩ で戻せます。「📄 写真台帳 PDF」で、写真・場所・座標・日時・メモを A4 に3件ずつまとめた PDF を作ります（印刷・PDF の図面にもピンの番号が入ります）。' },
-    { title: '背景地図・下絵', text: '⋯ メニューの 🗺地図・下絵 で使います。\n・地図: 国土地理院の地図（標準・淡色・写真）を図面の下に重ねます。図面の座標を平面直角座標として重ねるので、系番号を選んでおきます（🛰現在地と同じ設定）。インターネットが必要です。\n・下絵: 地積測量図のスキャン・写真などの画像を読み込み、「📍 2点で合わせる」で画像の上の2点を図面の同じ2点に重ねます。濃さを変えられ、消すまで端末に残ります。' },
-    { title: '印刷・PDF（縮尺どおり）', text: '⋯ メニューの 🖨印刷・PDF で使います。用紙（A4〜A1・横縦）・縮尺・色（白黒／カラー）を選ぶと、図面に用紙の枠が重なります。画面を動かす・拡大して、枠の中に印刷したい所を入れます（画面の中央が用紙の中央）。📄 PDF を保存 で、図枠・表題欄（図面名・縮尺・日付・作成者）・方位記号・縮尺バーつきの PDF ができます。印刷するときは「実際のサイズ（100%）」を選びます。' },
-    { title: '杭打ち（現在地・器械点から案内）', text: '⋯ メニューの 📍杭打ち で使います。範囲選択した測点（無ければすべて）を ◀ ▶ で順に選び、✓済 で次へ進みます。\n・現在地から: スマホの現在地（GNSS）から杭までの距離・向き・北へ／東へ を大きく表示します。🧭 で矢印をスマホの向きに合わせます。GNSS は数 m ずれるので、杭のおおよその場所を探すのに使います。\n・器械点から: 器械点と後視点を指定すると、杭の夾角（後視を 0° とした右回り）・水平距離・方向角を出します。杭打ち表を図面に置く・CSV 出力もできます。' },
-    { title: 'トータルステーション（ソキア）との受け渡し', text: '⋯ メニューの 📡TS連携 で使います。\n・ファイル: SIMA（.sim）は 📁開く・📄 SIMA で書き出す で、測点・区画をそのまま受け渡します。機械の現場データ（.sdr。SDR33・SDR2x）を開くと、器械点・後視・観測から座標を計算して測点にします。📄 SDR33 で書き出したファイルは、機械で既知点・杭打ち点として読み込めます。\n・通信: PC の Chrome・Edge、Android の Chrome では、USB ケーブル・Bluetooth で機械とつなげます。機械の「現場管理 → 現場データ送信」（T タイプは APA-SIMA（座標）、S タイプは SD）で送ると受信して図面に重ね、「図面に取り込む」で測点にします。「📤 SIMA で送る」「📤 SDR33 で送る」は、機械を「既知点 → 外部入力」（SIMA は T タイプの APA-SIMA（座標）、SDR33 は S タイプの SD）で待ち受けにしてから押します。\n・🔍 受信した生データ: 機械から届いたデータを、制御文字も含めてそのまま表示・コピーできます（測るたびの出力の形式を確かめる用）。\n・つなぎ方（iM-100）: 機械の通信モードを Bluetooth（通信タイプ S タイプ）にし、端末の設定で機械とペアリング → 機械の観測画面4ページ目の Bluetooth のキーで待ち受け → 「🔌 機械とつなぐ」。PC はケーブル DOC210（RS-232C）でもつなげます。詳しくはパネルの「📖 つなぎ方」。' },
-    { title: '現在地（GNSS）', text: '⋯ メニューの 🛰現在地 で、スマホの位置を図面の上に表示します。初回は図面の系番号（平面直角座標）を選びます。精度はスマホの GPS しだい（数m）です。' },
-    { title: '保存とオフライン', text: '作業中の図面は自動で保存され、次に開いたときに復元できます。💾保存 で名前を付けて保存し、⋯ の 📂保存一覧 から開けます。一度開けば、電波が無い所でも動きます。' },
-    { title: '作図・編集（鏡像・尺度・配列・分割・結合・角の処理）', text: '左のツールバー（編集の欄）か、図形を選んだときの下のバーから使います。\n・⇋鏡像: 2点の線を鏡にして映します（元を残すか選べます。文字は読める向きのまま）。\n・⤢尺度: 基点を中心に大きさを変えます（倍率、または今の長さ → 新しい長さ）。\n・▦配列: 縦横に（UCS の向き）、または中心の周りに並べます。\n・÷分割: 図形を1点で2つに分けるか、等分します（閉じた形は、その点で開きます）。\n・⋈結合: 線をタップすると、つながった線（分かれ道まで）をまとめて選び、☑確定 で1本のポリラインにします（一周すれば閉じた形になり、🧮求積に使えます）。\n・╭角の処理: 2本の線を丸める（半径 0 で角を出す）か、面取り（隅切り。角からの長さ・底辺の長さ）します。ポリラインの角も面取りできます。' },
-    { title: '点を動かす（グリップ）', text: { touch: '図形をタップして選ぶと、端点・頂点・中心などに青い四角（グリップ）が出ます。四角に指を置いたまま動かす先までなぞって離すと、その点が動きます（ルーペ・スナップが使えます）。四角をタップだけすると、つかんだ状態（緑）になり、次にタップした所へ動かします。ポリラインの辺の中の薄い四角は、点を足します。四角の上から始めなければ、なぞっても図形は動かないので、座標を読むときも安心です。', pc: '図形をクリックして選ぶと、端点・頂点・中心などに青い四角（グリップ）が出ます。四角を押したまま動かして離すか、四角をクリックしてから動かす先をクリックすると、その点が動きます（スナップが使えます）。ポリラインの辺の中の薄い四角は、点を足します。Esc でやめます。' } },
-    { title: '座標で点を入れる', text: 'コマンド欄に「X,Y」の順（X＝北・Y＝東。画面の座標表示と同じ）で入れます。例: 100,200 → X（北）100・Y（東）200。\n「@5,-3」のように @ を付けると、直前の点から北へ5・西へ3 の点になります。OSNAP の ▼ の「相対入力」では、距離と方向角でも入れられます。' },
-    { title: 'パネルの移動', tour: 'panel', text: 'パネルの見出し（⠿ の帯）をつまむと動かせます。ダブルタップで画面の中央に戻ります。' },
-    { title: '表示の設定', tour: 'prefs', text: 'オプションの「表示・操作」で、ルーペの大きさ・座標の文字の大きさと桁・寸法の文字・吸着の範囲を変えられます。' },
-    { title: '困ったとき', text: '間違えたら ↩（元に戻す）。文字・寸法を長押しすると消えます（通常画面で何もしていないときだけ）。コマンドをやめるときは ❌終了、同じボタンをもう一度、または Esc キー。図面が見えなくなったら 🔍全体。うまく動かないときは オプションの「エラーログ」を見てください。' },
-];
-const GUIDE_COMMANDS = [
-    ['LINE', 'L', '線分'], ['PLINE', 'PL', 'ポリライン'], ['RECTANG', 'REC', '長方形'], ['CIRCLE', 'C', '円'], ['ARC', 'A', '円弧'], ['TEXT', 'T', '文字'],
-    ['MOVE', 'M', '移動'], ['COPY', 'CO', '複写'], ['ROTATE', 'RO', '回転'], ['ERASE', 'E', '削除'], ['OFFSET', 'O', 'オフセット'], ['TRIM', 'TR', 'トリム'], ['EXTEND', 'EX', '延長'],
-    ['MIRROR', 'MI', '鏡像'], ['SCALE', 'SC', '尺度変更'], ['ARRAY', 'AR', '配列'], ['BREAK', 'BR', '分割（点で）'], ['DIVIDE', 'DIV', '等分'], ['JOIN', 'J', '結合'], ['FILLET', 'F', '角を丸める・角を出す'], ['CHAMFER', 'CHA', '面取り（隅切り）'],
-    ['DIMLINEAR', 'DLI', '平行寸法'], ['DIMALIGNED', 'DAL', '整列寸法'], ['DIMCONT', '-', '連続寸法'], ['DIMORDINATE', 'DOR', '座標寸法'], ['MEASURE', 'MEA', '基点測定'],
-    ['COORDS', 'ZAHYO', '座標一覧'], ['COGO', 'CALC', '測量計算'], ['AREA', 'AA', '求積'], ['INV', '-', '逆計算'], ['HELMERT', 'HENKAN', 'SIMA の変換'], ['TS', 'SOKKIA', 'TS連携'], ['SDROUT', '-', 'SDR33出力'], ['STAKE', 'KUI', '杭打ち'], ['PRINT', 'PDF', '印刷・PDF'], ['MAP', 'SHITAE', '地図・下絵'], ['PHOTO', 'MEMO', '写真・メモ'], ['SIMAOUT', '-', 'SIMA出力'], ['CSVOUT', '-', '座標CSV出力'], ['GNSS', 'GPS', '現在地'], ['UCS', '-', 'UCS（原点）'], ['UCS2P', '-', 'UCS（2点）'],
-    ['WCS', '-', 'UCSを戻す'], ['SAVE', '-', '保存'], ['ERRORS', 'ERRLOG', 'エラーログ'],
-];
-
-window.showGuideHelp = function() {
-    const hm = guideHintsMode();
-    const seg = (m, label) => `<button class="prop-btn opt-bg-btn ${hm === m ? 'active' : ''}" style="flex:1;margin-top:0;" onclick="setGuideHintsMode('${m}')">${label}</button>`;
-    const topics = GUIDE_TOPICS.map(t => `
-        <details class="gh-topic"><summary>${escapeHtml(t.title)}</summary>
-            <div class="gh-topic-text">${escapeHtml(_gt(t.text))}</div>
-            ${t.tour ? `<button class="prop-btn btn-sub" onclick="startGuideTour('${t.tour}')">▶ やってみる</button>` : ''}
-        </details>`).join('');
-    const cmds = GUIDE_COMMANDS.map(c => `<tr><td>${c[0]}</td><td>${c[1]}</td><td>${escapeHtml(c[2])}</td></tr>`).join('');
-    const doneBasic = _guide.tours && _guide.tours.basic === 'done';
-    const html = `
-        <div class="gh-sec">ツアー（練習用の図面で操作しながら覚える）</div>
-        <button class="prop-btn" onclick="startGuideTour('basic')">🚀 はじめてツアー（約3分）${doneBasic ? ' ✓' : ''}</button>
-        <button class="prop-btn btn-sub" onclick="startGuideTour('fullscreen')">🎯 座標読取モードのツアー</button>
-        <div class="gh-sec">機能ごとの説明</div>
-        ${topics}
-        <div class="gh-sec">コマンド一覧（コマンド欄に入力）</div>
-        <details class="gh-topic"><summary>一覧を開く</summary><table class="gh-cmds"><tr><th>コマンド</th><th>短縮</th><th>内容</th></tr>${cmds}</table></details>
-        <div class="gh-sec">操作中のヒント</div>
-        <div style="display:flex;gap:6px;">${seg('auto', '最初の3回')}${seg('always', '常に')}${seg('off', '出さない')}</div>
-        <button class="prop-btn btn-sub" onclick="resetGuideHints()">ヒントの回数を最初に戻す</button>`;
-    showPropertyPanel('❓ ヘルプ・操作ガイド', html);
-};
+// ヘルプの中身（機能ごとの説明・よくある質問・コマンド一覧）と表示は cad-guide-help.js
 window.setGuideHintsMode = function(m) {
     if(!['auto', 'always', 'off'].includes(m)) return;
     _guide.hintsMode = m; _guideSave();
     if(m === 'off') _guideHideHint();
     else if(m === 'always' && _hintSession) { _hintSession.hidden = false; _guideOnModeChange(); }
-    if(document.getElementById('property-panel-title') && document.getElementById('property-panel-title').textContent.includes('ヘルプ')) showGuideHelp();
+    if(typeof guideHelpRefresh === 'function') guideHelpRefresh(); // ヘルプを開いていれば描き直す（探している言葉・戻る先はそのまま）
 };
 window.resetGuideHints = function() {
     _guide.hintCounts = {}; _guide.tips = {}; _guideSave();

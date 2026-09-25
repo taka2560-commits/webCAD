@@ -595,6 +595,7 @@ function showPropertyPanel(title, htmlContent) {
     if(!p) return;
     document.getElementById('property-panel-title').textContent = title;
     document.getElementById('property-panel-content').innerHTML = htmlContent;
+    if(typeof guideUpdatePanelHelp === 'function') guideUpdatePanelHelp(title); // 見出しの「？」（その画面の使い方）
     p.style.display = 'flex';
     applyPanelPosition(p); // 前に動かした位置を覚えている場合はそこに出す
 }

@@ -374,7 +374,8 @@ describe('TS連携: ファイルと通信', () => {
         } finally { delete app.window.navigator.serial; app.eval('tsHowtoToggle(false)'); }
         app.eval('showTsPanel()');
         assert.match(app.eval(`document.getElementById('property-panel-content').textContent`), /Android の Chrome（137 以降）/);
-        assert.ok(app.eval(`GUIDE_TOPICS.some(t => /トータルステーション/.test(t.title) && /待ち受け/.test(t.text))`));
+        assert.ok(app.eval(`GUIDE_TOPICS.some(t => /トータルステーション/.test(t.title) && /待ち受け/.test(JSON.stringify(t.steps)))`));
+        assert.ok(app.eval(`GUIDE_TOPICS.some(t => /つながらない/.test(t.title) && /4ページ目/.test(JSON.stringify(t.steps)))`), '困ったとき');
     });
     it('コマンド（TS・SDROUT）とヘルプ', () => {
         app.eval(`processCommand('TS')`);

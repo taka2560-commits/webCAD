@@ -18,7 +18,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 // index.html と同じ読み込み順（cad-errors.js は head、残りは body 末尾）
 const APP_SCRIPTS = ['cad-errors.js', 'cad-text-parse.js', 'cad-dimension.js', 'cad-io.js', 'cad-core.js',
     'cad-prefs.js', 'cad-view.js', 'cad-geom.js', 'cad-snap.js', 'cad-render.js', 'cad-command.js', 'cad-input.js', 'cad-panels.js',
-    'cad-survey.js', 'cad-cogo.js', 'cad-cogo-ui.js', 'cad-sdr.js', 'cad-ts.js', 'cad-stake.js', 'cad-print.js', 'cad-underlay.js', 'cad-photo.js', 'cad-editgeom.js', 'cad-edit.js', 'cad-grip.js', 'cad-subview.js', 'cad-helmert.js', 'cad-storage.js', 'cad-guide.js', 'cad-boot.js'];
+    'cad-survey.js', 'cad-cogo.js', 'cad-cogo-ui.js', 'cad-sdr.js', 'cad-ts.js', 'cad-stake.js', 'cad-print.js', 'cad-underlay.js', 'cad-photo.js', 'cad-editgeom.js', 'cad-edit.js', 'cad-grip.js', 'cad-subview.js', 'cad-helmert.js', 'cad-storage.js', 'cad-guide.js', 'cad-guide-tours.js', 'cad-guide-help.js', 'cad-boot.js'];
 
 // Canvas 2D の代用品。描画命令は何もしないが、文字幅の計測（measureText）は概算値を返す。
 function fakeContext2d(canvas) {
