@@ -161,7 +161,7 @@ describe('表示・操作の設定', () => {
         assert.equal(app.eval(`displayPref('coordDecimals')`), null);
         assert.equal(app.eval(`localStorage.getItem('cad_display_prefs')`), '{}');
         const active = app.eval(`[...document.querySelectorAll('.opt-pref-btn.active')].map(b => b.dataset.pref + '=' + b.dataset.key).sort().join()`);
-        assert.equal(active, 'coordDecimals=std,coordFont=m,coordUnit=auto,dimDecimals=auto,dimText=m,lenUnit=auto,loupeSize=m,loupeZoom=3,snapRange=m');
+        assert.equal(active, 'angleFormat=deg,coordDecimals=std,coordFont=m,coordUnit=auto,dimDecimals=auto,dimText=m,lenUnit=auto,loupeSize=m,loupeZoom=3,snapRange=m');
     });
 
     it('未捕捉エラーが起きない', () => {

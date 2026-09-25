@@ -76,7 +76,15 @@ const FAV_CATALOG = [
     { id: 'WCS', label: 'WCS', icon: '↩', color: '#528bff', cat: 'view', run: () => issueCommand('WCS') },
     { id: 'OPTIONS', label: 'オプション', icon: '⚙', cat: 'view', panel: 'オプション', run: () => showOptionsPanel() },
     { id: 'HELP', label: 'ヘルプ', icon: '❓', cat: 'view', panel: '❓ ヘルプ・操作ガイド', run: () => showGuideHelp() },
+    // 単位の切り替え（押すたびに m ⇔ mm）。ボタンにはいまの単位を出す（iconFn）
+    { id: 'LENUNIT', label: '長さ単位', icon: 'mm', color: '#00ffff', cat: 'view', run: () => toggleDisplayUnit('len'), iconFn: () => displayUnit('len') },
+    { id: 'COORDUNIT', label: '座標単位', icon: 'm', color: '#528bff', cat: 'view', run: () => toggleDisplayUnit('coord'), iconFn: () => displayUnit('coord') },
 ];
+// ボタンに出す印（いまの状態で変わるものは iconFn）
+function favIcon(d) {
+    if(typeof d.iconFn === 'function') { try { return String(d.iconFn()); } catch { /* 出せなければ既定の印 */ } }
+    return d.icon;
+}
 
 // ===== 状態（端末に覚える） =====
 function _favLoad() {
@@ -152,7 +160,7 @@ function favRenderBar() {
     bar.querySelector('.fav-list').innerHTML = _fav.items.map((id) => {
         const d = favDef(id);
         return `<button type="button" class="fav-btn" data-id="${d.id}" title="${escapeHtml(d.label)}（${d.id}）">` +
-            `<span class="fav-icon"${d.color ? ` style="color:${d.color}"` : ''}>${escapeHtml(d.icon)}</span><span class="fav-lbl">${escapeHtml(d.label)}</span></button>`;
+            `<span class="fav-icon${d.iconFn ? ' fav-icon-txt' : ''}"${d.color ? ` style="color:${d.color}"` : ''}>${escapeHtml(favIcon(d))}</span><span class="fav-lbl">${escapeHtml(d.label)}</span></button>`;
     }).join('') + '<button type="button" class="fav-btn fav-add" title="お気に入りの登録・並べ替え"><span class="fav-icon">＋</span><span class="fav-lbl">登録</span></button>';
     const show = has && _fav.show;
     bar.style.display = show ? 'flex' : 'none';
@@ -213,7 +221,7 @@ window.showFavPanel = function() {
     else {
         h += '<div class="fav-rows">' + _fav.items.map((id, k) => {
             const d = favDef(id);
-            return `<div class="fav-row"><span class="fav-row-ic"${d.color ? ` style="color:${d.color}"` : ''}>${escapeHtml(d.icon)}</span><span class="fav-row-name">${escapeHtml(d.label)}</span>` +
+            return `<div class="fav-row"><span class="fav-row-ic"${d.color ? ` style="color:${d.color}"` : ''}>${escapeHtml(favIcon(d))}</span><span class="fav-row-name">${escapeHtml(d.label)}</span>` +
                 `<button onclick="favMove(${k}, -1)" ${k === 0 ? 'disabled' : ''} title="上へ">▲</button><button onclick="favMove(${k}, 1)" ${k === n - 1 ? 'disabled' : ''} title="下へ">▼</button>` +
                 `<button class="fav-row-x" onclick="favToggle('${id}')" title="外す">✕</button></div>`;
         }).join('') + '</div>';
@@ -223,7 +231,7 @@ window.showFavPanel = function() {
         h += `<div class="ts-sec">${escapeHtml(title)}</div><div class="fav-grid">` + FAV_CATALOG.filter((c) => c.cat === cat).map((c) => {
             const on = _fav.items.includes(c.id);
             return `<button class="fav-chip${on ? ' on' : ''}" onclick="favToggle('${c.id}')" title="${on ? '外す' : '登録する'}"><span class="fav-star">${on ? '★' : '☆'}</span>` +
-                `<span class="fav-chip-ic"${c.color ? ` style="color:${c.color}"` : ''}>${escapeHtml(c.icon)}</span><span class="fav-chip-name">${escapeHtml(c.label)}</span></button>`;
+                `<span class="fav-chip-ic"${c.color ? ` style="color:${c.color}"` : ''}>${escapeHtml(favIcon(c))}</span><span class="fav-chip-name">${escapeHtml(c.label)}</span></button>`;
         }).join('') + '</div>';
     });
     h += '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="favResetPos()">バーの位置を元に戻す</button></div>';
@@ -273,6 +281,9 @@ function _favSetupLongPress() {
 // ===== コマンド =====
 function processFavCommand(cmd) {
     if(cmd === 'FAV' || cmd === 'FAVORITE' || cmd === 'OKINI') { window.showFavPanel(); return true; }
+    // 単位の切り替え（お気に入りのボタンと同じ）: UNIT＝長さ、CUNIT＝座標
+    if(cmd === 'UNIT' || cmd === 'LENUNIT') { toggleDisplayUnit('len'); return true; }
+    if(cmd === 'CUNIT' || cmd === 'COORDUNIT') { toggleDisplayUnit('coord'); return true; }
     return false;
 }
 

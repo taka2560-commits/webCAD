@@ -290,8 +290,9 @@ function applyOffsetPreset(){
 }
 // 回転: 角度を確定し、対象選択→基点クリックで確定
 function applyRotatePreset(){
-    const el=document.getElementById('prop-rotate-a'); const v=el?parseFloat(el.value):NaN;
-    if(!isNaN(v)){ cmdState.presetAngleDeg=v; lastParams.angle=String(v); saveLastParams(); addCommandLog(`-> 角度 ${v}° を設定。対象を選択→基点で確定`); }
+    // 度の数、または度 分 秒（角度の表示が度分秒のとき）。空欄なら参照点方式
+    const el=document.getElementById('prop-rotate-a'); const v=(el && String(el.value).trim()!=='')?parseAngleInput(el.value):NaN;
+    if(!isNaN(v)){ cmdState.presetAngleDeg=v; lastParams.angle=String(v); saveLastParams(); addCommandLog(`-> 角度 ${angleText(v)} を設定。対象を選択→基点で確定`); }
     hidePropertyPanel();
 }
 const ucsStatusDisplay = document.getElementById('ucs-status-display'), ucsLabel = document.getElementById('ucs-label');

@@ -18,6 +18,7 @@ const DISPLAY_PREF_DEFS = {
     dimText:       { label: '寸法の文字',     def: 'm',   options: [['s', '小', 0.8], ['m', '中', 1], ['l', '大', 1.3], ['xl', '特大', 1.6]] },
     dimDecimals:   { label: '寸法の桁',       def: 'auto', options: [['auto', '自動', null], ['0', '1', 0], ['1', '0.1', 1], ['2', '0.01', 2], ['3', '0.001', 3]] },
     lenUnit:       { label: '長さの単位',     def: 'auto', options: DISPLAY_UNIT_OPTIONS },
+    angleFormat:   { label: '角度の表示',     def: 'deg', options: [['deg', '度', 'deg'], ['dms', '度分秒', 'dms']] },
     snapRange:     { label: '吸着の範囲',     def: 'm',   options: [['s', '狭い', 0.6], ['m', '標準', 1], ['l', '広い', 1.6], ['xl', '最大', 2.4]] },
 };
 
@@ -89,6 +90,45 @@ function formatDimNumber(x, unitChosen) {
 // 長さの文字（コマンドの記録・案内用）。単位を選んでいるときは単位も付ける
 function lengthText(v) { return formatDimNumber(toDisplayUnit(v, 'len'), displayUnitChosen('len')) + (displayUnitChosen('len') || ''); }
 
+// 単位を m ⇔ mm に切り替える（お気に入りのボタン・コマンド UNIT / CUNIT）。
+// 図面の1単位と同じ単位に戻すときは「図面どおり」にする（2回押すと元の設定に戻る）
+window.toggleDisplayUnit = function(kind) {
+    const k = (kind === 'coord') ? 'coord' : 'len';
+    const next = displayUnit(k) === 'mm' ? 'm' : 'mm';
+    setDisplayPref(_unitPrefName(k), next === drawingUnit() ? 'auto' : next);
+    const name = (k === 'coord') ? '座標' : '長さ';
+    if(typeof addCommandLog === 'function') addCommandLog(`-> ${name}の単位: ${next}`);
+    if(typeof showToast === 'function') showToast(`${name}の単位: ${next}`, 1800);
+    if(navigator.vibrate) navigator.vibrate(15);
+};
+
+// ===== 角度の表示（度 / 度分秒） =====
+// 角度寸法・回転などの記録・UCS の角度に使う。測量計算・杭打ちの方向角・夾角は、これまでどおり度分秒
+function angleIsDms() { return displayPrefKey('angleFormat') === 'dms'; }
+// 度 → 「45°30′15″」（秒は整数。マイナスは左回り）
+function formatDmsAngle(deg) {
+    if(typeof deg !== 'number' || !isFinite(deg)) return '';
+    let u = Math.round(Math.abs(deg) * 3600); // 秒の整数で数える（59.6″ → 1′00″ の繰り上がりを間違えない）
+    const sign = (deg < 0 && u > 0) ? '-' : '';
+    const D = Math.floor(u / 3600); u -= D * 3600;
+    const M = Math.floor(u / 60), S = u - M * 60;
+    return `${sign}${D}°${String(M).padStart(2, '0')}′${String(S).padStart(2, '0')}″`;
+}
+// 角度の文字（コマンドの記録など）。度は小数4桁まで（末尾の0は省く）
+function angleText(deg) {
+    if(typeof deg !== 'number' || !isFinite(deg)) return '';
+    return angleIsDms() ? formatDmsAngle(deg) : String(+deg.toFixed(4)) + '°';
+}
+// 角度の入力: 「45.5」（度）または「45 30 15」「45-30-15」「45°30′15″」（度 分 秒）。全角でもよい。先頭の - は左回り
+function parseAngleInput(text) {
+    let s = (typeof cogoHalfWidth === 'function') ? cogoHalfWidth(text) : String(text === undefined || text === null ? '' : text);
+    s = s.trim();
+    let sign = 1;
+    if(s.charAt(0) === '-') { sign = -1; s = s.slice(1).trim(); }
+    const v = (typeof parseAzimuth === 'function') ? parseAzimuth(s) : parseFloat(s);
+    return sign * v;
+}
+
 // ===== 座標の表示 =====
 // where: 'bar'（ステータスバー・全画面の座標） / 'loupe'（ルーペ・コマンドの記録）
 // 「標準」は以前と同じ桁数（ステータスバーなどは整数、ルーペは小数2桁。座標の単位に mm を選んだときはルーペも整数）
@@ -151,16 +191,18 @@ window.setDisplayPref = function(name, key) {
     applyDisplayPrefs();
     document.querySelectorAll(`.opt-pref-btn[data-pref="${name}"]`).forEach(b => b.classList.toggle('active', b.dataset.key === key));
     if(name === 'coordDecimals' || name === 'coordFont' || name === 'coordUnit') refreshCoordDisplay();
-    if(name === 'dimDecimals' || name === 'coordUnit' || name === 'lenUnit') _refreshShownValues(); // 寸法の文字・プロパティの数を描き直す
+    if(name === 'dimDecimals' || name === 'coordUnit' || name === 'lenUnit' || name === 'angleFormat') _refreshShownValues(); // 寸法の文字・プロパティの数を描き直す
     if(name === 'coordUnit' || name === 'lenUnit') _updateUnitNote();
     if(name === 'loupeSize' || name === 'loupeZoom') showPrefPreview('loupe');
     else if(name === 'snapRange') showPrefPreview('snap');
     if(typeof render === 'function') render();
 };
-// 単位・桁を変えたとき: 寸法の文字（図形の描画の控え）と、右のプロパティ欄の数を今の設定で出し直す
+// 単位・桁を変えたとき: 寸法の文字（図形の描画の控え）と、右のプロパティ欄の数、
+// お気に入りのバー（単位の切り替えボタンにいまの単位を出す）を今の設定で出し直す
 function _refreshShownValues() {
     if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
     if(typeof updatePropertiesPanel === 'function') updatePropertiesPanel();
+    if(typeof favRenderBar === 'function') favRenderBar();
 }
 
 window.resetDisplayPrefs = function() {
@@ -190,6 +232,7 @@ function displayPrefsSectionHtml() {
             ${rows}
             <div id="opt-unit-note" style="color:#888;font-size:10px;">${_unitNoteText()}</div>
             <div style="color:#888;font-size:10px;">座標の桁「標準」は、ステータスバーが整数・ルーペが小数2桁です。寸法の桁「自動」は小数3桁まで（末尾の0は省く。長さの単位に mm を選んだときは整数）です</div>
+            <div style="color:#888;font-size:10px;">角度の表示: 度は 45.5°、度分秒は 45°30′00″（角度寸法・回転・UCS。測量計算・杭打ちは、これまでどおり度分秒）</div>
             <button class="prop-btn btn-sub" onclick="resetDisplayPrefs()">表示・操作を初期値に戻す</button>
         </div>`;
 }

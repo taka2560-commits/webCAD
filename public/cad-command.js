@@ -256,7 +256,7 @@ function _handlePointInputCore(wcs, fromMouse) {
             const rt = _getRotateTargets();
             saveUndo();
             rt.forEach(i => { if(entities[i]) rotateEntity(entities[i], wcs.x, wcs.y, cmdState.presetAngleDeg * Math.PI/180); });
-            addCommandLog(`-> 回転完了 (角度: ${cmdState.presetAngleDeg}度${rt.length > 1 ? ', ' + rt.length + '個' : ''})`);
+            addCommandLog(`-> 回転完了 (角度: ${angleText(cmdState.presetAngleDeg)}${rt.length > 1 ? ', ' + rt.length + '個' : ''})`);
             cmdState.highlightIdx = -1; resetCommand(); return;
         }
         cmdState.rotateBase = {x:wcs.x, y:wcs.y};
@@ -283,7 +283,7 @@ function _handlePointInputCore(wcs, fromMouse) {
         const rt = _getRotateTargets();
         saveUndo();
         rt.forEach(i => { if(entities[i]) rotateEntity(entities[i], cmdState.rotateBase.x, cmdState.rotateBase.y, deltaAngle); });
-        addCommandLog(`-> 回転完了 (角度: ${(deltaAngle * 180 / Math.PI).toFixed(2)}度${rt.length > 1 ? ', ' + rt.length + '個' : ''})`);
+        addCommandLog(`-> 回転完了 (角度: ${angleText(deltaAngle * 180 / Math.PI)}${rt.length > 1 ? ', ' + rt.length + '個' : ''})`);
         cmdState.highlightIdx = -1;
         resetCommand();
         return;
@@ -803,8 +803,13 @@ function processCommand(cmdText) {
         `);
     }
     else if(cmd==='RO'||cmd==='ROTATE') {
+        // 角度の表示が度分秒なら、「45 30 15」のように度 分 秒でも入れられる欄にする（度の数もそのまま入る）
+        const angDms = angleIsDms(), angV = parseFloat(lastParams.angle);
+        const angField = angDms
+            ? `<input type="text" id="prop-rotate-a" autocomplete="off" value="${isFinite(angV) ? formatDmsAngle(angV) : ''}" placeholder="例 45 30 15（左回り＋）">`
+            : `<input type="number" id="prop-rotate-a" value="${lastParams.angle}">`;
         showPropertyPanel('回転 設定', `
-            <div class="prop-row"><label>角度(°):</label><input type="number" id="prop-rotate-a" value="${lastParams.angle}"></div>
+            <div class="prop-row"><label>角度${angDms ? '(度 分 秒)' : '(°)'}:</label>${angField}</div>
             <button class="prop-btn" onclick="applyRotatePreset()">この角度で回転</button>
             <div style="color:#888;font-size:10px;margin-top:4px;">確定後: 対象を選択→基点をクリックで回転。空欄なら参照点方式</div>
         `);

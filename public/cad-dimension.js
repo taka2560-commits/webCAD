@@ -21,7 +21,8 @@ function dimFormatCoord(val) {
     if(typeof val !== 'number' || !isFinite(val)) return '';
     return formatDimNumber(toDisplayUnit(val, 'coord'), displayUnitChosen('coord'));
 }
-function dimFormatAngle(deg) { return deg.toFixed(1) + '°'; }
+// 角度寸法の文字（オプション「角度の表示」: 度は小数1桁、度分秒は秒まで）
+function dimFormatAngle(deg) { return angleIsDms() ? formatDmsAngle(deg) : deg.toFixed(1) + '°'; }
 
 // 基点測定で記入した寸法（測定の表示と同じ桁: m は小数3桁、mm は整数）
 function _isMeasDim(e) { return !!e && (e.meas === true || e.blockName === '測定'); }
