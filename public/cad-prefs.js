@@ -20,6 +20,8 @@ const DISPLAY_PREF_DEFS = {
     lenUnit:       { label: '長さの単位',     def: 'auto', options: DISPLAY_UNIT_OPTIONS },
     angleFormat:   { label: '角度の表示',     def: 'deg', options: [['deg', '度', 'deg'], ['dms', '度分秒', 'dms']] },
     snapRange:     { label: '吸着の範囲',     def: 'm',   options: [['s', '狭い', 0.6], ['m', '標準', 1], ['l', '広い', 1.6], ['xl', '最大', 2.4]] },
+    btnSize:       { label: 'ボタンの大きさ', def: 'm',   options: [['s', '小', 0.85], ['m', '中', 1], ['l', '大', 1.25], ['xl', '特大', 1.5]] },
+    outdoor:       { label: '屋外モード',     def: 'off', options: [['off', '切', false], ['on', '入', true]] },
 };
 
 // 保存されている設定を読む（壊れた値・知らない値は無視して既定値を使う）
@@ -175,11 +177,68 @@ function snapRadiusPx() {
 // 図形を押して選べる範囲（画面上の半径px）。指はマウスより位置がずれるので広げる
 function hitRadiusPx() { return (typeof isMobile === 'function' && isMobile()) ? 12 : ERASE_R; }
 
+// ===== 屋外モード（日なたでも見やすく） =====
+// 図形・寸法の線を太く、文字を太字にして背景色で縁取り、背景に対して色の明るさの差を広げる。
+// 画面の部品（パネル・バー）は不透明にして文字を明るく・太くする（CSS の body.outdoor-mode）
+function isOutdoor() { return displayPref('outdoor') === true; }
+// 線の太さ（画面のpx）。屋外モードでは k 倍（図形・寸法は2倍、カーソル・スナップの印は1.5倍）
+function lineWidthPx(px, k) { return isOutdoor() ? px * (k || 2) : px; }
+// 屋外モードの文字の太さ（'bold ' か ''）
+function outdoorFontWeight() { return isOutdoor() ? 'bold ' : ''; }
+// 屋外モードのとき、文字を背景色で縁取る（線の上や地図の上でも読める）。fillText の前に呼ぶ
+function outdoorTextHalo(c, text, x, y, px) {
+    if(!isOutdoor()) return;
+    const lw = c.lineWidth, ss = c.strokeStyle, lj = c.lineJoin;
+    c.lineWidth = Math.max(2, Math.min(6, (px || 12) * 0.22));
+    c.strokeStyle = (typeof canvasBg !== 'undefined') ? canvasBg : '#000';
+    c.lineJoin = 'round';
+    c.strokeText(text, x, y);
+    c.lineWidth = lw; c.strokeStyle = ss; c.lineJoin = lj;
+}
+function _hexRgb(col) {
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(col || '').trim());
+    if(!m) return null;
+    let h = m[1];
+    if(h.length === 3) h = h.split('').map(x => x + x).join('');
+    return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)];
+}
+function _rgbHex(c) { return '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join(''); }
+function _rgbLum(c) { return (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255; }
+// 屋外モードの色: 背景（黒・グレー・白）との明るさの差が小さい色を、色味を残したまま明るく・暗くする
+// （黒の背景の青い線・白の背景の水色の線などが、日なたで見えなくなるのを防ぐ）。#rgb・#rrggbb 以外はそのまま
+function outdoorColor(col) {
+    if(!isOutdoor()) return col;
+    const c = _hexRgb(col);
+    if(!c) return col;
+    const L = _rgbLum(c), B = (typeof bgLuminance === 'function') ? bgLuminance() : 0;
+    let target = null;
+    if(B < 0.45) { const min = Math.max(B + 0.45, 0.55); if(L < min) target = min; }          // 暗い背景 → 明るく
+    else if(B > 0.6) { const max = Math.min(B - 0.45, 0.45); if(L > max) target = max; }      // 明るい背景 → 暗く
+    else if(Math.abs(L - B) < 0.3) target = (L >= B) ? Math.min(1, B + 0.3) : Math.max(0, B - 0.3); // グレー → 離す
+    if(target === null) return col;
+    if(target > L) { const t = (target - L) / (1 - L); return _rgbHex(c.map(v => v + (255 - v) * t)); } // 白に寄せる
+    const k = L > 0 ? target / L : 0;
+    return _rgbHex(c.map(v => v * k));                                                                  // 黒に寄せる
+}
+// 屋外モードを入・切（お気に入りのボタン・コマンド OUTDOOR）
+window.toggleOutdoorMode = function() {
+    const on = !isOutdoor();
+    setDisplayPref('outdoor', on ? 'on' : 'off');
+    if(typeof addCommandLog === 'function') addCommandLog(`-> 屋外モード: ${on ? '入' : '切'}`);
+    if(typeof showToast === 'function') showToast(`☀ 屋外モード: ${on ? '入（線を太く・文字を濃く）' : '切'}`, 2000);
+    if(navigator.vibrate) navigator.vibrate(15);
+};
+
 // ===== 反映 =====
-// 座標の文字の大きさは CSS 変数（--coord-scale）で、ステータスバー・全画面の座標表示に効かせる
+// 座標の文字の大きさは CSS 変数（--coord-scale）で、ステータスバー・全画面の座標表示に効かせる。
+// ボタンの大きさは CSS 変数（--btn-k）、屋外モードは body の outdoor-mode で画面の部品に効かせる
 function applyDisplayPrefs() {
     const root = document.documentElement;
-    if(root && root.style) root.style.setProperty('--coord-scale', String(displayPref('coordFont') || 1));
+    if(root && root.style) {
+        root.style.setProperty('--coord-scale', String(displayPref('coordFont') || 1));
+        root.style.setProperty('--btn-k', String(displayPref('btnSize') || 1));
+    }
+    if(document.body) document.body.classList.toggle('outdoor-mode', isOutdoor());
 }
 applyDisplayPrefs(); // 最初の表示から設定どおりの大きさにする
 
@@ -191,12 +250,17 @@ window.setDisplayPref = function(name, key) {
     applyDisplayPrefs();
     document.querySelectorAll(`.opt-pref-btn[data-pref="${name}"]`).forEach(b => b.classList.toggle('active', b.dataset.key === key));
     if(name === 'coordDecimals' || name === 'coordFont' || name === 'coordUnit') refreshCoordDisplay();
-    if(name === 'dimDecimals' || name === 'coordUnit' || name === 'lenUnit' || name === 'angleFormat') _refreshShownValues(); // 寸法の文字・プロパティの数を描き直す
+    if(name === 'dimDecimals' || name === 'coordUnit' || name === 'lenUnit' || name === 'angleFormat' || name === 'outdoor') _refreshShownValues(); // 寸法の文字・線・プロパティの数を描き直す
     if(name === 'coordUnit' || name === 'lenUnit') _updateUnitNote();
+    if(name === 'btnSize') _relayoutForButtons();
     if(name === 'loupeSize' || name === 'loupeZoom') showPrefPreview('loupe');
     else if(name === 'snapRange') showPrefPreview('snap');
     if(typeof render === 'function') render();
 };
+// ボタンの大きさを変えたとき: バーの大きさが変わるので、浮かぶパネル・お気に入りのバー・別窓の位置を画面に収め直す
+function _relayoutForButtons() {
+    try { window.dispatchEvent(new window.Event('resize')); } catch { /* 古いブラウザでは次の画面の変化で合う */ }
+}
 // 単位・桁を変えたとき: 寸法の文字（図形の描画の控え）と、右のプロパティ欄の数、
 // お気に入りのバー（単位の切り替えボタンにいまの単位を出す）を今の設定で出し直す
 function _refreshShownValues() {
@@ -213,6 +277,7 @@ window.resetDisplayPrefs = function() {
     refreshCoordDisplay();
     _refreshShownValues();
     _updateUnitNote();
+    _relayoutForButtons();
     if(typeof showToast === 'function') showToast('表示・操作の設定を初期値に戻しました');
     if(typeof render === 'function') render();
 };
@@ -233,6 +298,7 @@ function displayPrefsSectionHtml() {
             <div id="opt-unit-note" style="color:#888;font-size:10px;">${_unitNoteText()}</div>
             <div style="color:#888;font-size:10px;">座標の桁「標準」は、ステータスバーが整数・ルーペが小数2桁です。寸法の桁「自動」は小数3桁まで（末尾の0は省く。長さの単位に mm を選んだときは整数）です</div>
             <div style="color:#888;font-size:10px;">角度の表示: 度は 45.5°、度分秒は 45°30′00″（角度寸法・回転・UCS。測量計算・杭打ちは、これまでどおり度分秒）</div>
+            <div style="color:#888;font-size:10px;">ボタンの大きさ: 上・左・下のバー、選んだときのバー、☑確定のバー、お気に入り、右下の ？・コマンドのボタンを大きくします（手袋のままでも押しやすく）。屋外モード: 図形・寸法の線を太く、文字を太字にして縁取り、背景との明るさの差を広げ、パネルを不透明にします（日なたでは背景色を白にするのも効果があります）</div>
             <button class="prop-btn btn-sub" onclick="resetDisplayPrefs()">表示・操作を初期値に戻す</button>
         </div>`;
 }

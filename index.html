@@ -620,6 +620,62 @@
         .ph-th button { position:absolute; top:2px; right:2px; width:22px; height:22px; border-radius:11px; border:none; background:rgba(0,0,0,0.6); color:#fff; font-size:12px; cursor:pointer; padding:0; }
         .ph-miss { display:flex; align-items:center; justify-content:center; font-size:10px; color:#ffcc00; text-align:center; padding:4px; cursor:pointer; }
         .ph-big { width:100%; border-radius:var(--r-sub); cursor:zoom-out; display:block; }
+
+        /* ===== オプション「ボタンの大きさ」（cad-prefs.js が --btn-k を 小 0.85・中 1・大 1.25・特大 1.5 にする） =====
+           バーのボタンそのものを zoom で大きくし、ボタンを並べる帯の幅・高さと、帯に合わせて置いた部品の位置を calc で合わせる。
+           中（1）のときは以前と同じ大きさ・位置 */
+        .tool-btn, .top-btn, .status-btn, .sel-btn, #sel-label, .fav-btn, .fav-head, #layer-select, #current-layer-color, #btn-exit-fullscreen,
+        #fs-dim-actionbar > button, #fs-controls button, #fs-zoom-panel button { zoom: var(--btn-k, 1); }
+        #top-bar { min-height: calc(44px * var(--btn-k, 1)); }
+        #toolbar { top: calc(16px + 44px * var(--btn-k, 1)); bottom: calc(17px + 38px * var(--btn-k, 1)); width: calc(52px * var(--btn-k, 1)); }
+        .tool-sep { width: calc(32px * var(--btn-k, 1)); }
+        #properties-panel, #layer-panel { top: calc(16px + 44px * var(--btn-k, 1)); }
+        #status-bar { min-height: calc(38px * var(--btn-k, 1)); }
+        #command-line-area { bottom: calc(14px + 38px * var(--btn-k, 1)); }
+        #command-line-area.collapsed { width: calc(40px * var(--btn-k, 1)); height: calc(40px * var(--btn-k, 1)); border-radius: calc(20px * var(--btn-k, 1)); }
+        #command-line-area.collapsed #cmd-pill-hint { font-size: calc(14px * var(--btn-k, 1)); }
+        #command-line-area:not(.collapsed) { left: calc(16px + 52px * var(--btn-k, 1)); }
+        #guide-help-btn { bottom: calc(22px + 78px * var(--btn-k, 1)); width: calc(40px * var(--btn-k, 1)); height: calc(40px * var(--btn-k, 1)); border-radius: calc(20px * var(--btn-k, 1)); font-size: calc(18px * var(--btn-k, 1)); }
+        #sel-actionbar { bottom: calc(18px + 38px * var(--btn-k, 1)); right: calc(18px + 40px * var(--btn-k, 1)); }
+        body.fullscreen-mode #sel-actionbar { left: calc(28px + 44px * var(--btn-k, 1)); right: calc(26px + 46px * var(--btn-k, 1)); }
+        body:not(.fullscreen-mode) #fs-dim-actionbar { bottom: calc(18px + 38px * var(--btn-k, 1)) !important; }
+        #fav-bar.fav-v { max-height: calc(100vh - 152px - 118px * var(--btn-k, 1)); max-height: calc(100dvh - 152px - 118px * var(--btn-k, 1)); }
+        #fav-bar.fav-h { max-width: calc(100vw - 24px - 52px * var(--btn-k, 1)); }
+        #guide-hint { top: calc(24px + 44px * var(--btn-k, 1)); }
+        #guide-tip { bottom: calc(26px + 38px * var(--btn-k, 1)); }
+        body.guide-actionbar:not(.fullscreen-mode) #guide-tip { bottom: calc(86px + 38px * var(--btn-k, 1)); }
+        /* ⋯ メニュー・パネルの大きなボタンは、並びを崩さないように高さだけ伸ばす（中までは以前と同じ） */
+        .menu-item-btn { min-height: calc(36px * max(1, var(--btn-k, 1))); font-size: calc(12px * clamp(1, var(--btn-k, 1), 1.25)); }
+        .menu-btn-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } /* 文字が大きくても2列がメニューの幅からはみ出さない */
+        .prop-btn { min-height: clamp(0px, calc((var(--btn-k, 1) - 1) * 168px), 50px); }
+        @media screen and (max-width: 430px) {
+            #status-bar { min-height: calc(34px * var(--btn-k, 1)); }
+            #command-line-area:not(.collapsed) { left: calc(10px + 52px * var(--btn-k, 1)); }
+        }
+
+        /* ===== 屋外モード（オプション「屋外モード」: 日なたでも読めるように） =====
+           パネル・バーを不透明にして、文字を明るく・太く、枠を濃くする（図形・寸法の線と文字は cad-render.js・cad-dimension.js で太くする） */
+        body.outdoor-mode {
+            --panel-bg: rgba(10,12,16,0.97); --panel-2: rgba(20,23,28,0.97);
+            --border-color: rgba(255,255,255,0.45); --border-1: rgba(255,255,255,0.5); --border-2: rgba(255,255,255,0.4); --border-3: rgba(255,255,255,0.32);
+            --text-color: #ffffff; --dim: #e6e9ed; --mute: #c4cad1;
+        }
+        body.outdoor-mode .glass-panel, body.outdoor-mode #property-panel, body.outdoor-mode #osnap-panel { backdrop-filter: none; -webkit-backdrop-filter: none; }
+        body.outdoor-mode .tool-lbl, body.outdoor-mode .fav-lbl { font-weight: 800; color: #ffffff; }
+        body.outdoor-mode .top-btn, body.outdoor-mode .status-btn, body.outdoor-mode .sel-btn, body.outdoor-mode .menu-item-btn { font-weight: 800; }
+        /* 枠を濃くするのは色の役割がないボタンだけ（保存・選択中・削除などの色の枠はそのまま） */
+        body.outdoor-mode .top-btn:not(.primary), body.outdoor-mode .status-btn:not(.active), body.outdoor-mode .sel-btn:not(.warn):not(.green),
+        body.outdoor-mode .menu-item-btn:not(.danger) { border-color: rgba(255,255,255,0.35); }
+        body.outdoor-mode .prop-label, body.outdoor-mode .opt-pref-label, body.outdoor-mode .cogo-label { color: #ffffff; font-weight: 700; }
+        body.outdoor-mode .prop-val { background-color: #000000; border-color: rgba(255,255,255,0.55); }
+        body.outdoor-mode #coords-display, body.outdoor-mode #snap-indicator { font-weight: 800; }
+        body.outdoor-mode #command-log { color: #ffffff; background: rgba(0,0,0,0.65); }
+        body.outdoor-mode #property-panel { font-weight: 600; }
+        body.outdoor-mode .opt-bg-btn:not(.active) { color: #ffffff !important; border-color: rgba(255,255,255,0.4) !important; }
+        body.outdoor-mode .opt-bg-btn.active { background: rgba(0,255,136,0.28) !important; box-shadow: inset 0 0 0 1px var(--green); } /* 選んでいるボタンを日なたでも見分けやすく */
+        body.outdoor-mode .cogo-note, body.outdoor-mode .gh-body, body.outdoor-mode .gh-where { color: #f0f0f0; }
+        /* パネルの中の薄い灰色の説明（style で色を決めているもの）も明るくする */
+        body.outdoor-mode [style*="color:#888"], body.outdoor-mode [style*="color:#999"], body.outdoor-mode [style*="color:#aaa"], body.outdoor-mode [style*="color:#777"] { color: #e6e6e6 !important; }
     </style>
 </head>
 <body>

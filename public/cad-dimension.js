@@ -45,13 +45,15 @@ function drawArrowHead(cx, cy, angle, size) {
 
 // ===== 寸法テキスト描画 =====
 function drawDimText(text, x, y, angle, color) {
-    ctx.save(); ctx.fillStyle = color || ctx.strokeStyle || DIM_COLOR; ctx.font = dimSizePx(DIM_TEXT_SIZE)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    const px = dimSizePx(DIM_TEXT_SIZE);
+    ctx.save(); ctx.fillStyle = color || ctx.strokeStyle || DIM_COLOR; ctx.font = outdoorFontWeight() + px + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
     ctx.translate(x, y);
     let a = angle || 0;
     while(a > Math.PI) a -= Math.PI * 2;
     while(a <= -Math.PI) a += Math.PI * 2;
     if(a > Math.PI/2 - 1e-9 || a < -Math.PI/2 - 1e-9) a += Math.PI; // 逆さま・上から下へ読む向きにしない
     ctx.rotate(a);
+    outdoorTextHalo(ctx, text, 0, -3, px); // 屋外モードでは太字＋縁取り
     ctx.fillText(text, 0, -3);
     ctx.restore();
 }
@@ -107,8 +109,8 @@ function dimLinePrims(kind, p1, p2, offset, dimDir, rot, k) {
 }
 function _drawDimLineCore(kind, p1, p2, offset, dimDir, color, textOverride, e) {
     if(e) e._hits = [];
-    const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
-    ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
+    const resolvedColor = outdoorColor(color || getEntityColor(e) || DIM_COLOR); // 屋外モードでは背景との明るさの差を広げる
+    ctx.strokeStyle = resolvedColor; ctx.lineWidth = lineWidthPx(1);
     const P = dimLinePrims(kind, p1, p2, offset, dimDir, e && e.dimRot, 1 / (view.scale || 1));
     const rot = view.rotation || 0;
     P.lines.forEach(l => { const a = wcsToScreen(l.x1, l.y1), b = wcsToScreen(l.x2, l.y2); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); });
@@ -128,8 +130,8 @@ function _drawDimAlignedCore(p1, p2, offset, color, textOverride, e) { _drawDimL
 // ===== 共通：DIMRADIUS描画ロジック =====
 function _drawDimRadiusCore(center, radius, angle, color, textOverride, e) {
     if(e) e._hits = [];
-    const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
-    ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
+    const resolvedColor = outdoorColor(color || getEntityColor(e) || DIM_COLOR); // 屋外モードでは背景との明るさの差を広げる
+    ctx.strokeStyle = resolvedColor; ctx.lineWidth = lineWidthPx(1);
     const sc = wcsToScreen(center.x, center.y);
     const a = angle || 0;
     const ep = wcsToScreen(center.x + radius * Math.cos(a), center.y + radius * Math.sin(a));
@@ -145,8 +147,8 @@ function _drawDimRadiusCore(center, radius, angle, color, textOverride, e) {
 // ===== 共通：DIMDIAMETER描画ロジック =====
 function _drawDimDiameterCore(center, radius, angle, color, textOverride, e) {
     if(e) e._hits = [];
-    const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
-    ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
+    const resolvedColor = outdoorColor(color || getEntityColor(e) || DIM_COLOR); // 屋外モードでは背景との明るさの差を広げる
+    ctx.strokeStyle = resolvedColor; ctx.lineWidth = lineWidthPx(1);
     const sc = wcsToScreen(center.x, center.y);
     const a = angle || 0;
     const ep1 = wcsToScreen(center.x + radius * Math.cos(a), center.y + radius * Math.sin(a));
@@ -163,7 +165,7 @@ function _drawDimDiameterCore(center, radius, angle, color, textOverride, e) {
 // ===== 共通：DIMORDINATE描画ロジック（単一引出線タイプ） =====
 function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
     if(e) e._hits = [];
-    ctx.strokeStyle = color || getEntityColor(e) || DIM_COLOR; ctx.lineWidth = 1;
+    ctx.strokeStyle = outdoorColor(color || getEntityColor(e) || DIM_COLOR); ctx.lineWidth = lineWidthPx(1);
     
     // WCS -> Screen 変換 (ここではview.rotationの影響を含む)
     const sp = wcsToScreen(point.x, point.y);
@@ -196,11 +198,13 @@ function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
     // もし view.rotation がかかっていれば、文字自体は画面に対して水平になるよう逆回転させるか？
     // wcsToScreenで既に回転したスクリーン座標が出ているので、このままで文字は画面水平に描画される
     ctx.save();
-    ctx.font = dimSizePx(DIM_TEXT_SIZE) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    const tpx = dimSizePx(DIM_TEXT_SIZE);
+    ctx.font = outdoorFontWeight() + tpx + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
 
-    // 現場で読みやすいように色分け
-    ctx.fillStyle = '#00ff88'; ctx.fillText(txtX, 0, -Math.round(14 * dk)); // 上段 (X)
-    ctx.fillStyle = '#00ffff'; ctx.fillText(txtY, 0, 0);   // 下段 (Y)
+    // 現場で読みやすいように色分け（屋外モードでは太字＋縁取り、背景との明るさの差を広げる）
+    const yX = -Math.round(14 * dk);
+    outdoorTextHalo(ctx, txtX, 0, yX, tpx); ctx.fillStyle = outdoorColor('#00ff88'); ctx.fillText(txtX, 0, yX); // 上段 (X)
+    outdoorTextHalo(ctx, txtY, 0, 0, tpx); ctx.fillStyle = outdoorColor('#00ffff'); ctx.fillText(txtY, 0, 0);   // 下段 (Y)
     
     ctx.restore();
 
@@ -311,8 +315,8 @@ function drawDimDiameter(e, color) { _drawDimDiameterCore(e.center, e.radius, e.
 
 function drawDimAngular(e, color) {
     if(e) e._hits = [];
-    const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
-    ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
+    const resolvedColor = outdoorColor(color || getEntityColor(e) || DIM_COLOR); // 屋外モードでは背景との明るさの差を広げる
+    ctx.strokeStyle = resolvedColor; ctx.lineWidth = lineWidthPx(1);
     const sv = wcsToScreen(e.vertex.x, e.vertex.y);
     const sa1 = wcsToScreen(e.arm1.x, e.arm1.y), sa2 = wcsToScreen(e.arm2.x, e.arm2.y);
     ctx.beginPath(); ctx.moveTo(sv.x, sv.y); ctx.lineTo(sa1.x, sa1.y); ctx.stroke();
@@ -346,8 +350,8 @@ function drawDimOrdinate(e, color) {
     // 旧形式互換（leader + isX で保存されたデータ）
     if(e.leader) {
         if(e) e._hits = [];
-        const resolvedColor = color || getEntityColor(e) || DIM_COLOR;
-        ctx.strokeStyle = resolvedColor; ctx.lineWidth = 1;
+        const resolvedColor = outdoorColor(color || getEntityColor(e) || DIM_COLOR); // 屋外モードでは背景との明るさの差を広げる
+        ctx.strokeStyle = resolvedColor; ctx.lineWidth = lineWidthPx(1);
         const sp = wcsToScreen(e.point.x, e.point.y);
         const sl = wcsToScreen(e.leader.x, e.leader.y);
         const ucsC = wcsToUcs(e.point.x, e.point.y);
@@ -923,7 +927,7 @@ function drawMeasureOverlay() {
     _measDrawBaseMark(sb);
 
     // 折れ線（X方向・Y方向）は破線
-    ctx.strokeStyle = MEAS_COLOR; ctx.lineWidth = 1; ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = MEAS_COLOR; ctx.lineWidth = lineWidthPx(1, 1.5); ctx.setLineDash([6, 4]);
     ctx.beginPath(); ctx.moveTo(sb.x, sb.y); ctx.lineTo(sc.x, sc.y); ctx.lineTo(st.x, st.y); ctx.stroke();
     ctx.setLineDash([]);
 

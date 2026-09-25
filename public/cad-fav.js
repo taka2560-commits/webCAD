@@ -79,6 +79,8 @@ const FAV_CATALOG = [
     // 単位の切り替え（押すたびに m ⇔ mm）。ボタンにはいまの単位を出す（iconFn）
     { id: 'LENUNIT', label: '長さ単位', icon: 'mm', color: '#00ffff', cat: 'view', run: () => toggleDisplayUnit('len'), iconFn: () => displayUnit('len') },
     { id: 'COORDUNIT', label: '座標単位', icon: 'm', color: '#528bff', cat: 'view', run: () => toggleDisplayUnit('coord'), iconFn: () => displayUnit('coord') },
+    // 屋外モードの入・切（入のあいだはボタンを光らせる: activeFn）
+    { id: 'OUTDOOR', label: '屋外', icon: '☀', color: '#ffcc00', cat: 'view', run: () => toggleOutdoorMode(), activeFn: () => isOutdoor() },
 ];
 // ボタンに出す印（いまの状態で変わるものは iconFn）
 function favIcon(d) {
@@ -116,6 +118,7 @@ window.favRun = function(id) {
 };
 function _favIsActive(d) {
     if(!d) return false;
+    if(typeof d.activeFn === 'function') { try { return !!d.activeFn(); } catch { return false; } } // 入・切の設定（屋外モードなど）
     if(d.panel) return _favPanelOpen(d.panel) && (!d.tab || _cogo.tab === d.tab);
     if(d.run) return false;
     return cmdState.mode !== 'IDLE' && activeCommandName === d.id;
@@ -284,6 +287,7 @@ function processFavCommand(cmd) {
     // 単位の切り替え（お気に入りのボタンと同じ）: UNIT＝長さ、CUNIT＝座標
     if(cmd === 'UNIT' || cmd === 'LENUNIT') { toggleDisplayUnit('len'); return true; }
     if(cmd === 'CUNIT' || cmd === 'COORDUNIT') { toggleDisplayUnit('coord'); return true; }
+    if(cmd === 'OUTDOOR' || cmd === 'SUN') { toggleOutdoorMode(); return true; } // 屋外モードの入・切
     return false;
 }
 

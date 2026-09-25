@@ -292,7 +292,7 @@ function getEntityColor(e) {
 }
 
 function drawOneEntity(e, color) {
-    ctx.strokeStyle = adjustColorForBg(color || getEntityColor(e)); ctx.lineWidth = 1;
+    ctx.strokeStyle = outdoorColor(adjustColorForBg(color || getEntityColor(e))); ctx.lineWidth = lineWidthPx(1); // 屋外モードでは太く・明るさの差を広げる
     if(e.type==='LINE') { const a=wcsToScreen(e.x1,e.y1),b=wcsToScreen(e.x2,e.y2); ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke(); }
     else if(e.type==='CIRCLE') { const c=wcsToScreen(e.cx,e.cy); ctx.beginPath();ctx.arc(c.x,c.y,e.radius*view.scale,0,Math.PI*2);ctx.stroke(); }
     // 画面上の角度 = -(図面の角度 + 画面の回転)（以前は回転を逆向きに足していて、PLAN で円弧がずれていた）
@@ -312,7 +312,7 @@ function drawOneEntity(e, color) {
     else if(e.type==='TEXT') {
         const p=wcsToScreen(e.x,e.y);
         const px=(e.height||10)*view.scale;
-        ctx.font = `${px}px sans-serif`;
+        ctx.font = `${outdoorFontWeight()}${px}px sans-serif`;
         ctx.fillStyle = ctx.strokeStyle;
         ctx.save();
         ctx.translate(p.x, p.y);
@@ -322,7 +322,7 @@ function drawOneEntity(e, color) {
         ctx.textAlign = (e.halign === 'center' || e.halign === 'right') ? e.halign : 'left';
         ctx.textBaseline = (e.valign === 'top') ? 'top' : (e.valign === 'middle') ? 'middle' : 'alphabetic';
         // MTEXT由来の改行(\n)を複数行として描画
-        String(e.text).split('\n').forEach((line, i) => ctx.fillText(line, 0, i * px * 1.4));
+        String(e.text).split('\n').forEach((line, i) => { outdoorTextHalo(ctx, line, 0, i * px * 1.4, px); ctx.fillText(line, 0, i * px * 1.4); });
         ctx.restore();
     }
     else if(e.type==='HATCH') {
@@ -353,9 +353,10 @@ function drawOneEntity(e, color) {
 const _strokeColorCache = new Map();
 let _strokeColorCacheBg = null;
 function _strokeColorFor(col) {
-    if(_strokeColorCacheBg !== canvasBg) { _strokeColorCache.clear(); _strokeColorCacheBg = canvasBg; }
+    const key = canvasBg + (isOutdoor() ? '|outdoor' : ''); // 屋外モードでは背景との明るさの差を広げた色
+    if(_strokeColorCacheBg !== key) { _strokeColorCache.clear(); _strokeColorCacheBg = key; }
     let c = _strokeColorCache.get(col);
-    if(c === undefined) { c = adjustColorForBg(col); _strokeColorCache.set(col, c); }
+    if(c === undefined) { c = outdoorColor(adjustColorForBg(col)); _strokeColorCache.set(col, c); }
     return c;
 }
 const TEXT_DOT_PX = 1;    // これ未満の文字は点
@@ -367,7 +368,8 @@ function _approxTextWidth(text, px) {
 }
 function drawEntities() {
     ctx.save();
-    ctx.lineWidth = 1;
+    ctx.lineWidth = lineWidthPx(1); // 屋外モードでは2倍
+    const fontWeight = outdoorFontWeight(); // 屋外モードでは文字を太字にして縁取る
     const selSet = new Set(cmdState.selectedIndices || []);
     const hlIdx = cmdState.highlightIdx;
     const ghost = !!window.ghostLayerMode;
@@ -493,7 +495,7 @@ function drawEntities() {
             flush();
             ctx.globalAlpha = alpha;
             ctx.fillStyle = color;
-            const font = px + 'px sans-serif';
+            const font = fontWeight + px + 'px sans-serif';
             if(font !== lastFont) { ctx.font = font; lastFont = font; }
             // DXF/DWGインポート時の文字整列を反映（未指定なら従来通り左・ベースライン基準）
             const align = (e.halign === 'center' || e.halign === 'right') ? e.halign : 'left';
@@ -502,8 +504,8 @@ function drawEntities() {
             if(baseline !== lastBaseline) { ctx.textBaseline = baseline; lastBaseline = baseline; }
             ctx.translate(ax, ay);
             if(ang !== 0) ctx.rotate(ang);
-            if(text.indexOf('\n') < 0) ctx.fillText(text, 0, 0);
-            else text.split('\n').forEach((line, li) => ctx.fillText(line, 0, li * px * 1.4)); // MTEXT由来の改行
+            if(text.indexOf('\n') < 0) { outdoorTextHalo(ctx, text, 0, 0, px); ctx.fillText(text, 0, 0); }
+            else text.split('\n').forEach((line, li) => { outdoorTextHalo(ctx, line, 0, li * px * 1.4, px); ctx.fillText(line, 0, li * px * 1.4); }); // MTEXT由来の改行
             ctx.setTransform(baseTransform);
         } else {
             // 塗り（HATCH）など: 個別に描く
@@ -522,7 +524,7 @@ function drawEntities() {
 function drawDimensions() { if(typeof drawAllDimensions==='function') drawAllDimensions(); }
 
 function drawRubberBand() {
-    ctx.save(); ctx.strokeStyle=isLightCanvasBg()?'rgba(0,0,0,0.5)':'rgba(255,255,255,0.5)'; ctx.setLineDash([6,4]); ctx.lineWidth=1;
+    ctx.save(); ctx.strokeStyle=isLightCanvasBg()?'rgba(0,0,0,0.5)':'rgba(255,255,255,0.5)'; ctx.setLineDash([6,4]); ctx.lineWidth=lineWidthPx(1, 1.5);
     const m=cmdState.mode, sw=cmdState.startWcs, mp={x:mouse.wcsX,y:mouse.wcsY};
     if(m==='WAITING_LINE_P2'&&sw) { const a=wcsToScreen(sw.x,sw.y),b=wcsToScreen(mp.x,mp.y); ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke(); }
     else if(m==='WAITING_CIRCLE_RADIUS'&&sw) { 
@@ -636,13 +638,13 @@ function drawSnapMarker() {
     if(!snapActive()) { snapIndicator.textContent=''; return; }
     snapIndicator.textContent=snapResult.type;
     const s=wcsToScreen(snapResult.wcsX,snapResult.wcsY);
-    ctx.save(); ctx.strokeStyle='#00ff00'; ctx.lineWidth=2;
+    ctx.save(); ctx.strokeStyle='#00ff00'; ctx.lineWidth=lineWidthPx(2, 1.5); // 屋外モードでは1.5倍
     drawSnapShape(snapResult.type, s.x, s.y, 6);
     ctx.restore();
 }
 
 function drawCrosshair() {
-    ctx.save(); ctx.strokeStyle=isLightCanvasBg()?'#555':'#e2c288'; ctx.lineWidth=1;
+    ctx.save(); ctx.strokeStyle=isLightCanvasBg()?'#555':'#e2c288'; ctx.lineWidth=lineWidthPx(1, 1.5);
     const totalAngle = ucs.angle + view.rotation;
     const c = Math.cos(totalAngle), s = Math.sin(totalAngle);
     const mx = mouse.screenX, my = mouse.screenY;
