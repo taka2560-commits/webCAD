@@ -583,12 +583,14 @@ function updateCommandPill() {
     const active = (typeof activeCommandName !== 'undefined') && activeCommandName && activeCommandName.length;
     nameEl.textContent = active ? activeCommandName : 'READY';
     if (pEl) pEl.textContent = (promptText && promptText !== 'コマンド:') ? promptText : 'コマンド入力';
+    if (typeof favUpdateActive === 'function') favUpdateActive(); // お気に入りのバー: 使っているコマンドのボタンを光らせる
 }
 
 // ===== プロパティパネル制御 =====
 function hidePropertyPanel() {
     const p = document.getElementById('property-panel');
     if(p) p.style.display = 'none';
+    if(typeof favUpdateActive === 'function') favUpdateActive(); // お気に入りのバー: パネルのボタンの光り方
 }
 function showPropertyPanel(title, htmlContent) {
     const p = document.getElementById('property-panel');
@@ -598,6 +600,7 @@ function showPropertyPanel(title, htmlContent) {
     if(typeof guideUpdatePanelHelp === 'function') guideUpdatePanelHelp(title); // 見出しの「？」（その画面の使い方）
     p.style.display = 'flex';
     applyPanelPosition(p); // 前に動かした位置を覚えている場合はそこに出す
+    if(typeof favUpdateActive === 'function') favUpdateActive(); // お気に入りのバー: パネルのボタンの光り方
 }
 
 // ===== フローティングパネルの移動 =====

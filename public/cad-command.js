@@ -850,6 +850,7 @@ function processCommand(cmdText) {
     else if(typeof processPrintCommand === 'function' && processPrintCommand(cmd)) { /* 印刷・PDF（PRINT）処理済み */ }
     else if(typeof processUnderlayCommand === 'function' && processUnderlayCommand(cmd)) { /* 地図・下絵（MAP）処理済み */ }
     else if(typeof processPhotoCommand === 'function' && processPhotoCommand(cmd)) { /* 写真・メモ（PHOTO）処理済み */ }
+    else if(typeof processFavCommand === 'function' && processFavCommand(cmd)) { /* お気に入りの登録（FAV）処理済み */ }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
     else { addCommandLog(`不明なコマンドです "${cmdText}"`); resetCommand(); }
 }
