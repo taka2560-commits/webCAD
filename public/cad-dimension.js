@@ -191,13 +191,11 @@ function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
     const txtX = `X: ${dimFormatCoord(ucsCoord.y)}`; // 測量X座標 (数学Y)
     const txtY = `Y: ${dimFormatCoord(ucsCoord.x)}`; // 測量Y座標 (数学X)
 
+    // テキストは下線の中央、少し上に配置（wcsToScreen で画面の回転は済んでいるので、文字は画面に水平）。
+    // 以前は ctx.save() が2回で ctx.restore() が1回だったため、描画の状態が戻らなかった。
+    // 作図中のプレビューでは点線の設定が残り、そのあと図面の線がすべて点線で描かれていた
     ctx.save();
-    // テキストは下線の中央、少し上に配置
     ctx.translate(sl.x + textSide * 40 * dk, sl.y - 4);
-
-    // もし view.rotation がかかっていれば、文字自体は画面に対して水平になるよう逆回転させるか？
-    // wcsToScreenで既に回転したスクリーン座標が出ているので、このままで文字は画面水平に描画される
-    ctx.save();
     const tpx = dimSizePx(DIM_TEXT_SIZE);
     ctx.font = outdoorFontWeight() + tpx + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
 
@@ -205,7 +203,6 @@ function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
     const yX = -Math.round(14 * dk);
     outdoorTextHalo(ctx, txtX, 0, yX, tpx); ctx.fillStyle = outdoorColor('#00ff88'); ctx.fillText(txtX, 0, yX); // 上段 (X)
     outdoorTextHalo(ctx, txtY, 0, 0, tpx); ctx.fillStyle = outdoorColor('#00ffff'); ctx.fillText(txtY, 0, 0);   // 下段 (Y)
-    
     ctx.restore();
 
     _addHitText(e, {x: sl.x + textSide * 40 * dk, y: sl.y - 10});

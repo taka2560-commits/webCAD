@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.14（2026年9月25日リリース）**
+**現在のバージョン: v5.14.1（2026年9月25日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -182,7 +182,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（473件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（478件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -239,6 +239,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-09-25: バージョン5.14.1（座標寸法を作図すると図面の線が点線になる不具合の修正）** 🔧
+  * 座標寸法の文字を描くところで ctx.save() が2回・restore() が1回だったため、作図中のプレビューの点線が残り、図面の線がすべて点線で描かれていた。数を合わせて直した。
+  * 画面を1回描くたびに、点線・移動・透明度を初めに戻す（同じずれが起きても次の画面に残らない）。描画の状態が毎回元へ戻ることを確かめるテストを足した。
 
 * **2026-09-25: バージョン5.14（屋外モード・ボタンの大きさ）** ☀
   * オプションの「屋外モード」: 線を太く・文字を太字で縁取り・背景との明るさの差を広げる・パネルを不透明に。⭐ お気に入りの「屋外」ボタン、コマンド OUTDOOR。

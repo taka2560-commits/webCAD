@@ -82,6 +82,9 @@ function _saveFrameCache() {
 // 1フレーム分の描画（同期）。render() が requestAnimationFrame から呼ぶ。計測・テストからも直接呼べる
 // overlayOnly: 重ね表示だけが変わった描画要求（renderOverlay）。前回と同じ画面なら図形を描き直さない
 function _drawFrame(overlayOnly) {
+        // 描画の状態を毎回初期に戻す（どこかで ctx.save() と restore() の数がずれても、点線・移動・透明度が
+        // 次のコマの図形に残らないように。以前、座標寸法のプレビューの点線が残り、図面の線がすべて点線になった）
+        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.setLineDash([]); ctx.globalAlpha = 1;
         if(overlayOnly && _canReuseStaticFrame()) {
             // 図形・表示位置が前回と同じ: 保存した画面を貼るだけ（背景・軸・図形・寸法を含む）
             ctx.drawImage(_frameCache.canvas, 0, 0);
