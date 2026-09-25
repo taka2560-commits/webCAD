@@ -318,15 +318,29 @@ function collectSurveyLots() {
 const _SIMA_BAD = /[,\r\n]/g;
 function _simaField(s) { return String(s === undefined || s === null ? '' : s).replace(_SIMA_BAD, ' ').trim(); }
 
-// 出力用に点番号・点名を揃え、区画の頂点を点に対応付ける
-function _prepareExport() {
-    const src = collectSurveyPoints();
+// 出力用の測点（測量座標）。onlyIdx があれば、その図形の測点だけ。
+// 点番号が全点にあり重複もなければそのまま、そうでなければ 1 から振り直す。点名が無ければ「P番号」
+function _surveyExportPoints(onlyIdx) {
+    const src = collectSurveyPoints().filter(p => !onlyIdx || onlyIdx.has(p.idx));
     const pts = src.map(p => { const s = wcsToSurvey(p.x, p.y); return { num: String(p.num || '').trim(), name: p.name, X: s.X, Y: s.Y, z: p.z }; });
-    // 点番号が全点にあり重複もなければそのまま、そうでなければ 1 から振り直す
     const nums = pts.map(p => p.num);
     const valid = nums.every(n => /^\d+$/.test(n)) && new Set(nums).size === nums.length;
     if(!valid) pts.forEach((p, i) => { p.num = String(i + 1); });
     pts.forEach(p => { if(!p.name) p.name = 'P' + p.num; });
+    return pts;
+}
+function _simaA01(p) { return `A01,${_simaField(p.num)},${_simaField(p.name)},${formatSurveyNumber(p.X)},${formatSurveyNumber(p.Y)},${p.z === null || p.z === undefined ? '' : formatSurveyNumber(p.z)},`; }
+// 測点だけの SIMA（座標データ）の行（機械の既知点へ送るときなど）。onlyIdx があれば、その図形の測点だけ
+function buildSimaPointLines(title, onlyIdx) {
+    const pts = _surveyExportPoints(onlyIdx);
+    const L = [`G00,01,${_simaField(title || 'WebCAD')},`, 'Z00,座標ﾃﾞｰﾀ,,', 'A00,'];
+    pts.forEach(p => L.push(_simaA01(p)));
+    L.push('A99,');
+    return { lines: L, pointCount: pts.length };
+}
+// 出力用に点番号・点名を揃え、区画の頂点を点に対応付ける
+function _prepareExport() {
+    const pts = _surveyExportPoints();
     // 区画の頂点 → 点（同じ座標の点が無ければ追加する）
     const key = (X, Y) => Math.round(X * 1000) + ',' + Math.round(Y * 1000);
     const byKey = new Map();
@@ -352,7 +366,7 @@ function buildSimaText(title) {
     L.push(`G00,01,${_simaField(title || 'WebCAD')},`);
     L.push('Z00,座標ﾃﾞｰﾀ,,');
     L.push('A00,');
-    pts.forEach(p => L.push(`A01,${_simaField(p.num)},${_simaField(p.name)},${formatSurveyNumber(p.X)},${formatSurveyNumber(p.Y)},${p.z === null || p.z === undefined ? '' : formatSurveyNumber(p.z)},`));
+    pts.forEach(p => L.push(_simaA01(p)));
     L.push('A99,');
     if(lots.length) {
         L.push('Z00,区画ﾃﾞｰﾀ,');

@@ -245,7 +245,7 @@ describe('TS連携: ファイルと通信', () => {
         // パネル: 生データの欄（時刻つき）と、ファイルの SIMA のボタン
         app.eval('showTsPanel(); tsRawToggle(true); showTsPanel()');
         const panel = app.eval(`document.getElementById('property-panel-content').textContent`);
-        assert.match(panel, /受信した生データ/); assert.match(panel, /SIMA で書き出す/); assert.match(panel, /SIMA・SDR を開く/);
+        assert.match(panel, /受信した生データ/); assert.match(panel, /SIMA で書き出す/); assert.match(panel, /SIMA を開く/);
         assert.match(app.eval(`document.getElementById('ts-raw').textContent`), /\d\d:\d\d:\d\d\.\d{3} {2}08KIP1<CR><LF>/);
         assert.equal(app.eval(`document.querySelector('.ts-raw').open`), true, '開いた状態を覚える');
         // コピー
@@ -258,6 +258,110 @@ describe('TS連携: ファイルと通信', () => {
         assert.equal(app.eval('_ts.raw.length'), 0);
         assert.match(app.eval(`document.getElementById('ts-raw').textContent`), /まだ何も届いていません/);
     });
+    // 模擬のポート（受信はテストから流し込み、送信は書き込まれたバイトを集める。onWrite で機械の応答をまねる）
+    const mockPort = (onWrite) => {
+        const m = { sent: [], push: null };
+        m.port = {
+            readable: new ReadableStream({ start(c) { m.push = (arr) => c.enqueue(Uint8Array.from(arr)); } }),
+            writable: new WritableStream({ write(chunk) { m.sent.push(...chunk); if (onWrite) onWrite(chunk, m); } }),
+            open: async () => {}, close: async () => {}, addEventListener: () => {},
+        };
+        return m;
+    };
+    const connect = async (m) => {
+        Object.defineProperty(app.window.navigator, 'serial', { value: { requestPort: async () => m.port }, configurable: true });
+        await app.eval('tsConnect()');
+    };
+    const disconnect = async () => { await app.eval('tsDisconnect()'); delete app.window.navigator.serial; app.eval('tsSetAck(false); tsClearRaw(); tsDiscard();'); };
+    const sjis = (s) => app.val(`Array.from(encodeShiftJis(${JSON.stringify(s)}))`);
+    const SIMA_IN = 'G00,01,GENBA,\r\nZ00,座標ﾃﾞｰﾀ,,\r\nA00,\r\nA01,1,KP1,-100.123,200.456,12.300,\r\nA01,2,境界2,-101.000,201.000,,\r\nA01,3,3,-100.000,202.000,,\r\nA99,\r\n' +
+        'Z00,区画ﾃﾞｰﾀ,\r\nD00,1,1-1,1,\r\nB01,1,KP1,\r\nB01,2,境界2,\r\nB01,3,3,\r\nD99,\r\n';
+
+    it('SIMA を受信（T タイプの APA-SIMA）: Shift-JIS の点名・区画を読み、取り込む・元に戻す。SDR とは取り違えない', () => {
+        app.eval('tsClearRaw(); tsDiscard(); showTsPanel()');
+        app.window.__b = sjis(SIMA_IN);
+        app.eval('tsReceiveBytes(window.__b)');
+        assert.equal(app.eval('_ts.pending'), null, '届くのが止まるまでは待つ');
+        assert.equal(app.eval('_tsSimaFlush()'), true);
+        const p = app.val('_ts.pending');
+        assert.equal(p.format, 'SIMA'); assert.equal(p.job, 'GENBA');
+        assert.deepEqual(p.points.map((q) => q.id), ['KP1', '境界2', '3']);
+        assert.ok(near(p.points[0].X, -100.123) && near(p.points[0].Y, 200.456) && near(p.points[0].Z, 12.3));
+        assert.equal(p.lots.length, 1);
+        app.eval('_tsUpdateResult()');
+        const box = app.eval(`document.getElementById('ts-result').textContent`);
+        assert.match(box, /SIMA・GENBA/); assert.match(box, /区画1件/); assert.match(box, /境界2/);
+        assert.match(app.eval(`document.getElementById('cad-toast').textContent`), /SIMA を受信しました: 点 3点/);
+        app.eval('tsImport()');
+        assert.deepEqual(app.val(`entities.filter(e => e.type === 'POINT').map(e => e.name)`).sort(), ['3', 'KP1', '境界2']);
+        assert.equal(app.eval(`entities.filter(e => e.type === 'PLINE' && e.closed).length`), 1, '区画も入る');
+        assert.equal(app.eval('_ts.pending'), null); assert.equal(app.eval('_ts.sima'), '');
+        app.eval('undo()');
+        assert.equal(app.eval(`entities.filter(e => e.type === 'POINT').length`), 0);
+        // CR/LF ナシ（記録を ETX で区切る）・途中で間が空いて2回に分かれて届く
+        app.window.__b = sjis('\x02A00,\x03\x02A01,1,P1,1.000,2.000,,\x03\x02A01,2,P'); app.eval('tsReceiveBytes(window.__b); _tsSimaFlush()');
+        app.window.__b = sjis('2,3.000,4.000,,\x03\x02A99,\x03'); app.eval('tsReceiveBytes(window.__b); _tsSimaFlush()');
+        assert.deepEqual(app.val('_ts.pending.points.map(q => q.id)'), ['P1', 'P2']);
+        app.eval('tsDiscard()');
+        // 座標の無い SIMA（観測データ）は知らせる
+        app.window.__b = sjis('Z00,観測ﾃﾞｰﾀ,,\r\nC00,1,S1,,\r\n'); app.eval('tsReceiveBytes(window.__b); _tsSimaFlush(); _tsUpdateResult()');
+        assert.match(app.eval(`document.getElementById('ts-result').textContent`), /APA-SIMA（座標）/);
+        assert.equal(app.eval(`[...document.querySelectorAll('#ts-result button')].some(b => /取り込む/.test(b.textContent))`), false);
+        app.eval('tsDiscard()');
+        // SDR（S タイプ）の受信は SDR のまま
+        app.window.__b = bytes(frame(job())); app.eval('tsReceiveBytes(window.__b)');
+        assert.equal(app.eval('_tsSimaFlush()'), false);
+        assert.equal(app.eval('_ts.pending.format'), 33);
+        app.eval('tsDiscard()');
+    });
+
+    it('SIMA を送信: 座標の SIMA を1行ずつ（Shift-JIS・CR LF）。ACK のやり取りでは1行ごとに待ち、NAK は送り直し、来なければ知らせる', async () => {
+        let mode = 'none';
+        const m = mockPort((chunk, mm) => {
+            if (!chunk.includes(0x0a)) return;
+            if (mode === 'ack') mm.push([0x06]);
+            else if (mode === 'nakOnce') { mode = 'ack'; mm.push([0x15]); }
+        });
+        await connect(m);
+        app.eval(`TS_TIMING.lineGap = 0; addSurveyData([{ num: '1', name: 'KP1', X: 10.5, Y: -20.25, z: 3 }, { num: '2', name: '境界2', X: 11, Y: -21 }], [])`);
+        const text = () => new (require('node:util').TextDecoder)('shift_jis').decode(Uint8Array.from(m.sent));
+        assert.equal(await app.eval('tsSendSima()'), true);
+        const sent = text();
+        assert.match(sent, /^G00,01,[^\r\n]*,\r\nZ00,座標ﾃﾞｰﾀ,,\r\nA00,\r\n/);
+        assert.match(sent, /\r\nA01,1,KP1,10\.500,-20\.250,3\.000,\r\nA01,2,境界2,11\.000,-21\.000,,\r\nA99,\r\n$/);
+        assert.match(app.eval('tsRawText()'), /送信▶ A01,2,境界2/);
+        // ACK を待つ（1回目は NAK → 送り直す）
+        m.sent.length = 0; mode = 'nakOnce'; app.eval('tsSetAck(true)');
+        assert.equal(await app.eval('tsSendSima()'), true);
+        assert.equal((text().match(/^G00,/gm) || []).length, 2, 'NAK のあとに1行目を送り直す');
+        // ACK が来ない
+        m.sent.length = 0; mode = 'none'; app.eval('TS_TIMING.ackTimeout = 60');
+        assert.equal(await app.eval('tsSendSima()'), false);
+        assert.match(app.eval(`document.getElementById('cad-toast').textContent`), /ACK/);
+        app.eval('TS_TIMING.ackTimeout = 5000; TS_TIMING.lineGap = 30;');
+        await disconnect();
+    });
+
+    it('ACK のやり取り: 受け取った記録ごと（ETX、ETX が無ければ LF）に ACK を返す', async () => {
+        const m = mockPort();
+        await connect(m);
+        app.eval('tsSetAck(true)');
+        m.push(sjis('\x02A01,1,P1,1.000,2.000,,\x03\r\n\x02A01,2,P2,3.000,4.000,,\x03\r\n'));
+        await new Promise((r) => setTimeout(r, 50));
+        assert.equal(m.sent.filter((b) => b === 0x06).length, 2, 'ETX ごとに1回（後ろの CR LF では返さない）');
+        app.eval('_tsSimaFlush()');
+        m.sent.length = 0;
+        m.push(sjis('A01,3,P3,5.000,6.000,,\r\nA01,4,P4,7.000,8.000,,\r\n'));
+        await new Promise((r) => setTimeout(r, 50));
+        assert.equal(m.sent.filter((b) => b === 0x06).length, 2, 'ETX の無い送り方では LF ごと');
+        app.eval('_tsSimaFlush()');
+        m.sent.length = 0; app.eval('tsSetAck(false)');
+        m.push(sjis('A01,5,P5,1.000,1.000,,\r\n'));
+        await new Promise((r) => setTimeout(r, 50));
+        assert.equal(m.sent.length, 0, '外しているときは返さない');
+        await disconnect();
+    });
+
     it('つなぎ方（iM-100）: つなぐ前のパネルに手順を出し、開いた状態を覚える。ヘルプにも', () => {
         Object.defineProperty(app.window.navigator, 'serial', { value: { requestPort: async () => { throw new Error('x'); } }, configurable: true });
         try {
