@@ -19,6 +19,10 @@ function surveyUnitFactor() { return getSurveyUnit() === 'mm' ? 1000 : 1; }
 window.setSurveyUnit = function(u) {
     try { localStorage.setItem('cad_survey_unit', u === 'mm' ? 'mm' : 'm'); } catch { /* 保存できなくても続行 */ }
     addCommandLog(`-> 測量座標の単位: 図面の1単位 = 1${u === 'mm' ? 'mm' : 'm'}`);
+    // 表示の単位（オプションの座標・長さの単位）の換算が変わるので、座標・寸法・プロパティを出し直す
+    if(typeof _refreshShownValues === 'function') _refreshShownValues();
+    if(typeof refreshCoordDisplay === 'function') refreshCoordDisplay();
+    if(typeof render === 'function') render();
     if(typeof showOptionsPanel === 'function' && document.getElementById('opt-survey-unit')) showOptionsPanel();
 };
 

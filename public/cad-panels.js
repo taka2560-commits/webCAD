@@ -457,6 +457,17 @@ window.togglePropertiesPanel = function() {
     if(p) p.classList.toggle('collapsed');
 };
 
+// プロパティ欄の数（座標・長さ）。オプションで単位を選んでいればその単位（m は小数3桁、mm は小数1桁）、
+// 「図面どおり」なら以前と同じ桁（autoDigits が null ならそのままの値）
+function _propNum(v, kind, autoDigits) {
+    const u = displayUnitChosen(kind);
+    if(!u) return autoDigits === null ? String(v) : v.toFixed(autoDigits);
+    return toDisplayUnit(v, kind).toFixed(u === 'm' ? 3 : 1);
+}
+// プロパティ欄で座標・長さとして入れる項目（入れた数は表示の単位なので、図面の単位に直す）
+const PROP_COORD_KEYS = ['x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy'];
+const PROP_LENGTH_KEYS = ['radius', 'rx', 'ry', 'height'];
+
 function updatePropertiesPanel() {
     const p = document.getElementById('props-content');
     if(!p) return;
@@ -465,6 +476,10 @@ function updatePropertiesPanel() {
         const eid = _idOf(e); // 入力欄の onchange には配列番号ではなくIDを埋め込む（画面を開いたまま配列が変わっても別の図形を編集しない）
         const layerColor = layers[e.layer] ? layers[e.layer].color : '#ffffff';
         let html = `<div style="font-weight:bold;margin-bottom:10px;color:var(--highlight-color);">${e.type}</div>`;
+        // 単位を選んでいるときは、欄の数の単位を示す（オプションの表示・操作）
+        if(displayUnitChosen('coord') || displayUnitChosen('len')) {
+            html += `<div class="prop-unit-note" style="font-size:10px;color:#888;margin:-6px 0 8px;">単位: 座標 ${displayUnit('coord')}・長さ ${displayUnit('len')}</div>`;
+        }
         if(e.gid) {
             const gcount = getGroupMembers(e.gid).length;
             html += `<div class="prop-row"><div class="prop-label">ブロック</div><div style="flex:1;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
@@ -493,8 +508,8 @@ function updatePropertiesPanel() {
             const pu = wcsToUcs(e.x, e.y);
             html += `<div class="prop-row"><div class="prop-label">点名</div><input class="prop-val" type="text" value="${escapeHtml(e.name || '')}" onchange="changeEntityPropById(${eid}, 'name', this.value)"></div>`;
             html += `<div class="prop-row"><div class="prop-label">点番号</div><input class="prop-val" type="text" value="${escapeHtml(e.num || '')}" onchange="changeEntityPropById(${eid}, 'num', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">X</div><input class="prop-val" type="number" step="0.001" value="${pu.y.toFixed(3)}" onchange="changeEntityPropById(${eid}, 'y', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">Y</div><input class="prop-val" type="number" step="0.001" value="${pu.x.toFixed(3)}" onchange="changeEntityPropById(${eid}, 'x', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">X</div><input class="prop-val" type="number" step="0.001" value="${_propNum(pu.y, 'coord', 3)}" onchange="changeEntityPropById(${eid}, 'y', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">Y</div><input class="prop-val" type="number" step="0.001" value="${_propNum(pu.x, 'coord', 3)}" onchange="changeEntityPropById(${eid}, 'x', this.value)"></div>`;
             html += `<div class="prop-row"><div class="prop-label">標高</div><input class="prop-val" type="number" step="0.001" value="${typeof e.z === 'number' ? e.z : ''}" placeholder="なし" onchange="changeEntityPropById(${eid}, 'z', this.value)"></div>`;
         }
         if(e.type === 'PLINE' && e.closed && e.points && e.points.length >= 3 && typeof polygonArea === 'function') {
@@ -509,33 +524,33 @@ function updatePropertiesPanel() {
         
         if(e.type === 'LINE') {
             const p1 = wcsToUcs(e.x1, e.y1); const p2 = wcsToUcs(e.x2, e.y2);
-            html += `<div class="prop-row"><div class="prop-label">始点 X</div><input class="prop-val" type="number" step="1" value="${p1.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'y1', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">始点 Y</div><input class="prop-val" type="number" step="1" value="${p1.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'x1', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">終点 X</div><input class="prop-val" type="number" step="1" value="${p2.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'y2', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">終点 Y</div><input class="prop-val" type="number" step="1" value="${p2.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'x2', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">始点 X</div><input class="prop-val" type="number" step="1" value="${_propNum(p1.y, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'y1', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">始点 Y</div><input class="prop-val" type="number" step="1" value="${_propNum(p1.x, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'x1', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">終点 X</div><input class="prop-val" type="number" step="1" value="${_propNum(p2.y, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'y2', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">終点 Y</div><input class="prop-val" type="number" step="1" value="${_propNum(p2.x, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'x2', this.value)"></div>`;
         } else if(e.type === 'CIRCLE' || e.type === 'ARC') {
             const c = wcsToUcs(e.cx, e.cy);
-            html += `<div class="prop-row"><div class="prop-label">中心 X</div><input class="prop-val" type="number" step="1" value="${c.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'cy', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">中心 Y</div><input class="prop-val" type="number" step="1" value="${c.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'cx', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">半径</div><input class="prop-val" type="number" step="1" value="${e.radius.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'radius', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">中心 X</div><input class="prop-val" type="number" step="1" value="${_propNum(c.y, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'cy', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">中心 Y</div><input class="prop-val" type="number" step="1" value="${_propNum(c.x, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'cx', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">半径</div><input class="prop-val" type="number" step="1" value="${_propNum(e.radius, 'len', 1)}" onchange="changeEntityPropById(${eid}, 'radius', this.value)"></div>`;
         } else if(e.type === 'RECTANG') {
             const p1 = wcsToUcs(e.x1, e.y1); const p2 = wcsToUcs(e.x2, e.y2);
-            html += `<div class="prop-row"><div class="prop-label">角1 X</div><input class="prop-val" type="number" step="1" value="${p1.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'y1', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">角1 Y</div><input class="prop-val" type="number" step="1" value="${p1.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'x1', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">角2 X</div><input class="prop-val" type="number" step="1" value="${p2.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'y2', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">角2 Y</div><input class="prop-val" type="number" step="1" value="${p2.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'x2', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">角1 X</div><input class="prop-val" type="number" step="1" value="${_propNum(p1.y, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'y1', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">角1 Y</div><input class="prop-val" type="number" step="1" value="${_propNum(p1.x, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'x1', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">角2 X</div><input class="prop-val" type="number" step="1" value="${_propNum(p2.y, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'y2', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">角2 Y</div><input class="prop-val" type="number" step="1" value="${_propNum(p2.x, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'x2', this.value)"></div>`;
         } else if(e.type === 'ELLIPSE') {
             const c = wcsToUcs(e.cx, e.cy);
-            html += `<div class="prop-row"><div class="prop-label">中心 X</div><input class="prop-val" type="number" step="1" value="${c.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'cy', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">中心 Y</div><input class="prop-val" type="number" step="1" value="${c.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'cx', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">X半径</div><input class="prop-val" type="number" step="1" value="${e.rx.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'rx', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">Y半径</div><input class="prop-val" type="number" step="1" value="${e.ry.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'ry', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">中心 X</div><input class="prop-val" type="number" step="1" value="${_propNum(c.y, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'cy', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">中心 Y</div><input class="prop-val" type="number" step="1" value="${_propNum(c.x, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'cx', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">X半径</div><input class="prop-val" type="number" step="1" value="${_propNum(e.rx, 'len', 1)}" onchange="changeEntityPropById(${eid}, 'rx', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">Y半径</div><input class="prop-val" type="number" step="1" value="${_propNum(e.ry, 'len', 1)}" onchange="changeEntityPropById(${eid}, 'ry', this.value)"></div>`;
         } else if(e.type === 'TEXT') {
             const p = wcsToUcs(e.x, e.y);
-            html += `<div class="prop-row"><div class="prop-label">始点 X</div><input class="prop-val" type="number" step="1" value="${p.y.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'y', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">始点 Y</div><input class="prop-val" type="number" step="1" value="${p.x.toFixed(1)}" onchange="changeEntityPropById(${eid}, 'x', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">始点 X</div><input class="prop-val" type="number" step="1" value="${_propNum(p.y, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'y', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">始点 Y</div><input class="prop-val" type="number" step="1" value="${_propNum(p.x, 'coord', 1)}" onchange="changeEntityPropById(${eid}, 'x', this.value)"></div>`;
             html += `<div class="prop-row"><div class="prop-label">テキスト</div><input class="prop-val" type="text" value="${escapeHtml(e.text)}" onchange="changeEntityPropById(${eid}, 'text', this.value)"></div>`;
-            html += `<div class="prop-row"><div class="prop-label">高さ</div><input class="prop-val" type="number" step="1" value="${e.height}" onchange="changeEntityPropById(${eid}, 'height', this.value)"></div>`;
+            html += `<div class="prop-row"><div class="prop-label">高さ</div><input class="prop-val" type="number" step="1" value="${_propNum(e.height, 'len', null)}" onchange="changeEntityPropById(${eid}, 'height', this.value)"></div>`;
         } else if(e.type === 'HATCH') {
             html += `<div class="prop-row"><div class="prop-label">対象図形</div><input class="prop-val" type="text" value="${e.target.type}" readonly></div>`;
             html += `<div class="prop-row"><div class="prop-label">透過度</div><input class="prop-val" type="number" step="0.1" min="0" max="1" value="${e.alpha!==undefined?e.alpha:0.5}" onchange="changeEntityPropById(${eid}, 'alpha', this.value)"></div>`;
@@ -577,7 +592,10 @@ window.changeEntityProp = function(idx, prop, val) {
     else if(prop==='textOverride') entities[idx].textOverride = val===''?null:val;
     else if(prop==='hidden') entities[idx].hidden = (val === 'true' || val === true);
     else {
-        const num = parseFloat(val);
+        let num = parseFloat(val);
+        // 座標・長さの欄は表示の単位（オプションの座標・長さの単位）で入るので、図面の単位に直す
+        if(PROP_COORD_KEYS.includes(prop)) num = fromDisplayUnit(num, 'coord');
+        else if(PROP_LENGTH_KEYS.includes(prop)) num = fromDisplayUnit(num, 'len');
         // UCSで入力された座標をWCSに変換して格納する
         // 回転UCSでは1成分の変更が両WCS成分に影響するため、ペア座標と合わせて変換する
         const pairMap = { x:['x','y'], y:['x','y'], x1:['x1','y1'], y1:['x1','y1'], x2:['x2','y2'], y2:['x2','y2'], cx:['cx','cy'], cy:['cx','cy'] };

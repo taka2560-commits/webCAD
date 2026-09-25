@@ -52,7 +52,7 @@ function setUCS(wx, wy, angle) {
     if(ucsStatusDisplay) { ucsStatusDisplay.textContent = 'UCS'; ucsStatusDisplay.style.color = 'var(--ucs-color)'; }
     if(ucsLabel) { ucsLabel.textContent = 'UCS'; ucsLabel.style.color = 'var(--ucs-color)'; }
     const degStr = ucs.angle !== 0 ? ` ∠${(ucs.angle * 180 / Math.PI).toFixed(1)}°` : '';
-    addCommandLog(`-> 原点設定: WCS(${wx.toFixed(2)},${wy.toFixed(2)})${degStr}`);
+    addCommandLog(`-> 原点設定: WCS(${formatCoordValue(wx, 'loupe')},${formatCoordValue(wy, 'loupe')})${degStr}`);
     resetCommand();
     render();
 }

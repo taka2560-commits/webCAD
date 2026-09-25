@@ -11,14 +11,28 @@ const DIM_EXT_GAP = 3;      // 補助線の測定点からの隙間(px)
 // 以前は常に整数へ丸めていたため、1単位＝1m の図面では 12.345m が「12」になっていた。
 // 既定（自動）は小数3桁まで表示し、末尾の0は省く（mm の図面の 1500 は「1500」のまま）。
 // オプション「寸法の桁」で 1 / 0.1 / 0.01 / 0.001 に固定できる。
+// 値はオプション「長さの単位」（座標寸法は「座標の単位」）に換算して出す（cad-prefs.js）
 function dimFormat(val) {
     if(typeof val !== 'number' || !isFinite(val)) return '';
-    const d = (typeof displayPref === 'function') ? displayPref('dimDecimals') : null;
-    if(d !== null && d !== undefined) { const s = val.toFixed(d); return /^-0(\.0*)?$/.test(s) ? s.slice(1) : s; }
-    const r = Math.round(val * 1000) / 1000;
-    return String(Object.is(r, -0) ? 0 : r);
+    return formatDimNumber(toDisplayUnit(val, 'len'), displayUnitChosen('len'));
+}
+// 座標の値（座標寸法・原点などの記録）
+function dimFormatCoord(val) {
+    if(typeof val !== 'number' || !isFinite(val)) return '';
+    return formatDimNumber(toDisplayUnit(val, 'coord'), displayUnitChosen('coord'));
 }
 function dimFormatAngle(deg) { return deg.toFixed(1) + '°'; }
+
+// 基点測定で記入した寸法（測定の表示と同じ桁: m は小数3桁、mm は整数）
+function _isMeasDim(e) { return !!e && (e.meas === true || e.blockName === '測定'); }
+// 平行・整列寸法の文字。文字上書きがあればそれを使う。
+// 以前の版は、1単位＝1m の図面で記入した測定の寸法の文字を「12.345」と固定していた。
+// 値と同じ文字なら固定していないものとして扱い、単位・桁の設定に合わせる
+function dimLengthText(e, override, value) {
+    const meas = _isMeasDim(e);
+    if(override && !(meas && override === value.toFixed(3))) return override;
+    return meas ? measFormatLength(value) : dimFormat(value);
+}
 
 // ===== 矢印描画 =====
 function drawArrowHead(cx, cy, angle, size) {
@@ -102,7 +116,7 @@ function _drawDimLineCore(kind, p1, p2, offset, dimDir, color, textOverride, e) 
     _addHitSeg(e, d1, d2);
     P.arrows.forEach(ar => { const s = wcsToScreen(ar.x, ar.y); drawArrowHead(s.x, s.y, -(ar.a + rot), dimSizePx(DIM_ARROW_SIZE)); });
     const t = wcsToScreen(P.textAt.x, P.textAt.y);
-    drawDimText(textOverride || dimFormat(P.value), t.x, t.y, -(P.textAngle + rot), resolvedColor);
+    drawDimText(dimLengthText(e, textOverride, P.value), t.x, t.y, -(P.textAngle + rot), resolvedColor);
     _addHitText(e, t);
 }
 // ===== 共通：DIMLINEAR描画ロジック =====
@@ -171,8 +185,8 @@ function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
     _addHitSeg(e, sl, lineEnd);
 
     // テキスト内容
-    const txtX = `X: ${dimFormat(ucsCoord.y)}`; // 測量X座標 (数学Y)
-    const txtY = `Y: ${dimFormat(ucsCoord.x)}`; // 測量Y座標 (数学X)
+    const txtX = `X: ${dimFormatCoord(ucsCoord.y)}`; // 測量X座標 (数学Y)
+    const txtY = `Y: ${dimFormatCoord(ucsCoord.x)}`; // 測量Y座標 (数学X)
 
     ctx.save();
     // テキストは下線の中央、少し上に配置
@@ -226,7 +240,7 @@ function dimExportPrims(e, k) {
         const P = dimLinePrims(st, e.p1, e.p2, e.offset ?? 30, e.dimDir, e.dimRot, k);
         out.lines.push(...P.lines, P.dim);
         P.arrows.forEach(a => arrow(a.x, a.y, a.a));
-        textOn(e.textOverride || dimFormat(P.value), P.textAt.x, P.textAt.y, P.textAngle);
+        textOn(dimLengthText(e, e.textOverride, P.value), P.textAt.x, P.textAt.y, P.textAngle);
     } else if(st === 'RADIUS' || st === 'DIAMETER') {
         const c = e.center, r = e.radius, a0 = e.angle || 0, cs = Math.cos(a0), sn = Math.sin(a0);
         const ep = { x: c.x + r * cs, y: c.y + r * sn };
@@ -259,14 +273,14 @@ function dimExportPrims(e, k) {
             const cx = L.x + side * 40 * dk * k;
             if(e.textOverride) out.texts.push({ s: e.textOverride, x: cx, y: L.y + 4 * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
             else {
-                out.texts.push({ s: 'X: ' + dimFormat(u.y), x: cx, y: L.y + (4 + 14 * dk) * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
-                out.texts.push({ s: 'Y: ' + dimFormat(u.x), x: cx, y: L.y + 4 * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
+                out.texts.push({ s: 'X: ' + dimFormatCoord(u.y), x: cx, y: L.y + (4 + 14 * dk) * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
+                out.texts.push({ s: 'Y: ' + dimFormatCoord(u.x), x: cx, y: L.y + 4 * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
             }
         } else if(e.leader) {
             // 旧形式（X か Y の片方だけ）
             const mid = e.isX ? { x: p.x, y: e.leader.y } : { x: e.leader.x, y: p.y };
             out.lines.push({ x1: p.x, y1: p.y, x2: mid.x, y2: mid.y }, { x1: mid.x, y1: mid.y, x2: e.leader.x, y2: e.leader.y });
-            const s = e.textOverride || (e.isX ? 'Y=' + dimFormat(u.x) : 'X=' + dimFormat(u.y));
+            const s = e.textOverride || (e.isX ? 'Y=' + dimFormatCoord(u.x) : 'X=' + dimFormatCoord(u.y));
             out.texts.push({ s, x: e.leader.x, y: e.leader.y + 3 * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
         }
     }
@@ -339,12 +353,12 @@ function drawDimOrdinate(e, color) {
         if(e.isX) {
             const mid = {x: sp.x, y: sl.y};
             ctx.beginPath(); ctx.moveTo(sp.x, sp.y); ctx.lineTo(mid.x, mid.y); ctx.lineTo(sl.x, sl.y); ctx.stroke();
-            drawDimText('Y=' + dimFormat(ucsC.x), sl.x, sl.y, 0, resolvedColor);
+            drawDimText('Y=' + dimFormatCoord(ucsC.x), sl.x, sl.y, 0, resolvedColor);
             _addHitSeg(e, sp, mid); _addHitSeg(e, mid, sl); _addHitText(e, sl);
         } else {
             const mid = {x: sl.x, y: sp.y};
             ctx.beginPath(); ctx.moveTo(sp.x, sp.y); ctx.lineTo(mid.x, mid.y); ctx.lineTo(sl.x, sl.y); ctx.stroke();
-            drawDimText('X=' + dimFormat(ucsC.y), sl.x, sl.y, 0, resolvedColor);
+            drawDimText('X=' + dimFormatCoord(ucsC.y), sl.x, sl.y, 0, resolvedColor);
             _addHitSeg(e, sp, mid); _addHitSeg(e, mid, sl); _addHitText(e, sl);
         }
     }
@@ -557,8 +571,8 @@ function drawMovePreview(e, dx, dy) {
 function drawDimMovePreview(e, dx, dy) {
     if(e.subType === 'LINEAR' || e.subType === 'ALIGNED') {
         const p1m = {x:e.p1.x+dx, y:e.p1.y+dy}, p2m = {x:e.p2.x+dx, y:e.p2.y+dy};
-        // 回した寸法（dimRot）の向きだけ渡す。本体を渡すと当たり判定が移動先の位置に書き換わる
-        const shape = { dimRot: e.dimRot };
+        // 回した寸法（dimRot）の向きと、測定の寸法かどうか（文字の桁）だけ渡す。本体を渡すと当たり判定が移動先の位置に書き換わる
+        const shape = { dimRot: e.dimRot, meas: _isMeasDim(e) };
         if(e.subType === 'LINEAR') _drawDimLinearCore(p1m, p2m, e.offset ?? 30, e.dimDir, '#ffff00', e.textOverride, shape);
         else _drawDimAlignedCore(p1m, p2m, e.offset ?? 30, '#ffff00', e.textOverride, shape);
     }
@@ -573,7 +587,7 @@ function handleDimPointInput(mode, wcs) {
     if(mode === 'WAITING_DIMLIN_P1') {
         cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMLIN_P2'; setPrompt('2点目: (☑️確定)');
         const u = wcsToUcs(wcs.x,wcs.y);
-        addCommandLog(`-> 1点目: (${dimFormat(u.x)},${dimFormat(u.y)})`); if(typeof render==='function') render(); return;
+        addCommandLog(`-> 1点目: (${dimFormatCoord(u.x)},${dimFormatCoord(u.y)})`); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMLIN_P2') {
         cmdState.points.push({x:wcs.x, y:wcs.y}); cmdState.mode = 'WAITING_DIMLIN_POS'; setPrompt('寸法線位置 (☑️確定):');
@@ -653,7 +667,7 @@ function handleDimPointInput(mode, wcs) {
     if(mode === 'WAITING_DIMORD_P1') {
         cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMORD_LEADER'; setPrompt('引出先を指定 (クリックした位置に表示されます): (☑️確定)');
         const u = wcsToUcs(wcs.x, wcs.y);
-        addCommandLog(`-> 測定点: (${dimFormat(u.x)},${dimFormat(u.y)}) - 引出先を指定`); if(typeof render==='function') render(); return;
+        addCommandLog(`-> 測定点: (${dimFormatCoord(u.x)},${dimFormatCoord(u.y)}) - 引出先を指定`); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMORD_LEADER') {
         const p = cmdState.points[0];
@@ -746,7 +760,7 @@ function handleDimPointInput(mode, wcs) {
         if(targets.length > 0) {
             saveUndo();
             targets.forEach(i => { if(entities[i]) moveEntity(entities[i], dx, dy); });
-            addCommandLog(`-> ${targets.length}個を移動 (${dimFormat(dx)},${dimFormat(dy)})`);
+            addCommandLog(`-> ${targets.length}個を移動 (${lengthText(dx)},${lengthText(dy)})`);
         } else { addCommandLog('移動対象がありません'); }
         // 連続移動モード
         cmdState.selectedIndices = []; cmdState.moveTarget = undefined;
@@ -788,7 +802,7 @@ function handleDimPointInput(mode, wcs) {
                 copies.push(copy);
             });
             copies.forEach(c => entities.push(c));
-            addCommandLog(`-> ${copies.length}個をコピー (${dimFormat(dx)},${dimFormat(dy)})`);
+            addCommandLog(`-> ${copies.length}個をコピー (${lengthText(dx)},${lengthText(dy)})`);
         } else { addCommandLog('コピー対象がありません'); }
         cmdState.selectedIndices = []; cmdState.moveTarget = undefined;
         cmdState.mode = 'WAITING_COPY_SELECT'; cmdState.highlightIdx = -1; setPrompt('コピー対象 (右クリックで終了):');
@@ -853,10 +867,14 @@ function _measTargetPoint() {
     if(typeof getInputPoint === 'function') return getInputPoint();
     return { x: mouse.wcsX, y: mouse.wcsY };
 }
-// 長さの表示。図面の1単位＝1m の設定なら m で小数3桁、1mm なら従来どおり mm の整数
-function _measIsMeter() { return (typeof getSurveyUnit !== 'function') || getSurveyUnit() === 'm'; }
-function measFormatLength(v) { return _measIsMeter() ? v.toFixed(3) : Math.round(v).toString(); }
-function _measUnitLabel() { return _measIsMeter() ? 'm' : 'mm'; }
+// 長さの表示。オプション「長さの単位」（「図面どおり」なら図面の1単位）で、m は小数3桁、mm は整数。
+// オプション「寸法の桁」を選んでいれば、その桁にする（記入した寸法と同じ文字になる）
+function measFormatLength(v) {
+    const x = toDisplayUnit(v, 'len'), d = displayPref('dimDecimals');
+    if(d !== null && d !== undefined) return formatDimNumber(x, displayUnitChosen('len'));
+    return displayUnit('len') === 'mm' ? String(Math.round(x)) : x.toFixed(3);
+}
+function _measUnitLabel() { return displayUnit('len'); }
 
 // 読み取りやすいように、背景の帯つきで文字を描く
 function _measLabel(text, x, y, angle) {
@@ -962,19 +980,16 @@ window.measureWriteDims = function() {
     const sb = wcsToScreen(b.x, b.y), st = wcsToScreen(t.x, t.y);
     const px = 24 / (view.scale || 1);                  // 寸法線を図形から24px離す
     const gid = (typeof newGroupId === 'function') ? newGroupId('meas') : undefined;
-    const meter = _measIsMeter();
-    const mk = (props) => Object.assign({ type:'DIMENSION', layer:currentLayerIndex, color:null, gid:gid, blockName:'測定', p1:{x:b.x,y:b.y}, p2:{x:t.x,y:t.y} }, props);
+    // 文字は固定せず（meas: 測定の桁で描く）、長さの単位・寸法の桁を変えると記入済みの寸法も変わる
+    const mk = (props) => Object.assign({ type:'DIMENSION', layer:currentLayerIndex, color:null, gid:gid, blockName:'測定', meas:true, textOverride:null, p1:{x:b.x,y:b.y}, p2:{x:t.x,y:t.y} }, props);
 
     saveUndo();
     // Y距離（東西・図面の横方向）
-    entities.push(mk({ subType:'LINEAR', dimDir:'H', offset:(st.y > sb.y ? px : -px),
-        textOverride: meter ? measFormatLength(Math.abs(t.x - b.x)) : null }));
+    entities.push(mk({ subType:'LINEAR', dimDir:'H', offset:(st.y > sb.y ? px : -px) }));
     // X距離（南北・図面の縦方向）
-    entities.push(mk({ subType:'LINEAR', dimDir:'V', offset:(t.x - b.x) + (st.x > sb.x ? px : -px),
-        textOverride: meter ? measFormatLength(Math.abs(t.y - b.y)) : null }));
+    entities.push(mk({ subType:'LINEAR', dimDir:'V', offset:(t.x - b.x) + (st.x > sb.x ? px : -px) }));
     // 直線距離
-    entities.push(mk({ subType:'ALIGNED', offset:0,
-        textOverride: meter ? measFormatLength(dist(b.x, b.y, t.x, t.y)) : null }));
+    entities.push(mk({ subType:'ALIGNED', offset:0 }));
 
     const u = _measUnitLabel();
     addCommandLog(`-> 寸法を記入: X ${measFormatLength(Math.abs(t.y - b.y))}${u} / Y ${measFormatLength(Math.abs(t.x - b.x))}${u} / 直線 ${measFormatLength(dist(b.x,b.y,t.x,t.y))}${u}`);
@@ -1007,7 +1022,7 @@ function _measureStartFrom(pt) {
     cmdState.mode = 'WAITING_DIMMEAS_TO';
     const u = wcsToUcs(pt.x, pt.y);
     setPrompt('測る点をなぞる → 📐記入 / 📍基点で基点を移動');
-    addCommandLog(`-> 基点: X${dimFormat(u.y)} Y${dimFormat(u.x)} — 測る点をなぞってください`);
+    addCommandLog(`-> 基点: X${dimFormatCoord(u.y)} Y${dimFormatCoord(u.x)} — 測る点をなぞってください`);
     _showMeasureBar('TO');
     if(typeof render === 'function') render();
 }

@@ -40,6 +40,15 @@ function _editSeg(cur, list, fn) {
 function _editNum(id, key, v, attrs) {
     return `<input class="prop-val" type="number" id="${id}" value="${escapeHtml(String(v === undefined ? '' : v))}" ${attrs || ''} oninput="editSetParam('${key}', this.value)" style="flex:1;min-width:0;">`;
 }
+// 長さの入力欄（間隔・半径など）。オプションの長さの単位で出し、入れた数は図面の単位で覚える
+function _editLen(id, key, v, attrs) {
+    const n = parseFloat(v);
+    return `<input class="prop-val" type="number" id="${id}" value="${isFinite(n) ? displayUnitNum(n, 'len') : escapeHtml(String(v === undefined ? '' : v))}" ${attrs || ''} oninput="editSetLenParam('${key}', this.value)" style="flex:1;min-width:0;">`;
+}
+window.editSetLenParam = function(key, val) {
+    const n = parseFloat(val);
+    editSetParam(key, isFinite(n) ? String(fromDisplayUnit(n, 'len')) : val);
+};
 function _editNote(t) { return `<div class="cogo-note">${t}</div>`; }
 function _editToast(msg) { addCommandLog('-> ' + msg); if(typeof showToast === 'function') showToast(msg, 3500); }
 function _editVibrate() { if(navigator.vibrate) navigator.vibrate(20); }
@@ -215,9 +224,9 @@ function _editArrayPanel() {
     let h = _editSeg(o.kind, [['rect', '▦ 縦横に並べる'], ['polar', '◎ 円形に並べる']], 'editArrayKind');
     if(o.kind === 'rect') {
         h += _editRow('横（→）の数', _editNum('edit-ar-cols', 'arrCols', o.cols, 'min="1" step="1"')) +
-            _editRow('横の間隔', _editNum('edit-ar-dx', 'arrDX', lastParams.arrDX, 'step="any"')) +
+            _editRow('横の間隔' + displayUnitTag('len'), _editLen('edit-ar-dx', 'arrDX', lastParams.arrDX, 'step="any"')) +
             _editRow('縦（↑）の数', _editNum('edit-ar-rows', 'arrRows', o.rows, 'min="1" step="1"')) +
-            _editRow('縦の間隔', _editNum('edit-ar-dy', 'arrDY', lastParams.arrDY, 'step="any"')) +
+            _editRow('縦の間隔' + displayUnitTag('len'), _editLen('edit-ar-dy', 'arrDY', lastParams.arrDY, 'step="any"')) +
             _editNote('元の図形を左下の1つとして、右（→）・上（↑）へ並べます（UCS の向き）。間隔をマイナスにすると左・下へ並べます。');
     } else {
         h += _editRow('数（元を含む）', _editNum('edit-ar-n', 'arrN', o.n, 'min="2" step="1"')) +
@@ -365,10 +374,10 @@ function _editFilletPanel() {
     const o = _editFilletOpts();
     let h = _editSeg(o.mode, [['fillet', '⌒ 丸める'], ['chamfer', '◸ 面取り（隅切り）']], 'editFilletMode');
     if(o.mode === 'fillet') {
-        h += _editRow('半径', _editNum('edit-fl-r', 'filletR', lastParams.filletR || '0', 'min="0" step="any"')) +
+        h += _editRow('半径' + displayUnitTag('len'), _editLen('edit-fl-r', 'filletR', lastParams.filletR || '0', 'min="0" step="any"')) +
             _editNote('2本の線の、残す側をタップします。半径 0 は、線を延ばす・切って角を出します。');
     } else {
-        h += _editRow('長さ', _editNum('edit-fl-d', 'chamferD', lastParams.chamferD || '', 'min="0" step="any" placeholder="例: 2"')) +
+        h += _editRow('長さ' + displayUnitTag('len'), _editLen('edit-fl-d', 'chamferD', lastParams.chamferD || '', 'min="0" step="any" placeholder="例: 2"')) +
             _editRow('長さの測り方', _editSeg(o.by, [['leg', '角から両側'], ['base', '底辺（切る線）']], 'editChamferBy')) +
             _editNote('2本の線の残す側をタップするか、ポリライン・長方形の角をタップします。「角から両側」は角から両方の線に沿った長さ、「底辺」は切る線（二等辺三角形の底辺）の長さです。');
     }
@@ -401,7 +410,7 @@ function _editFilletFirst(wcs) {
         n.id = e.id; // 同じ図形のまま形だけ変える
         entities[idx] = n;
         _bumpGeomEpoch();
-        addCommandLog(`-> 面取り: 角から ${dimFormat(r.legs)} の所で切りました`);
+        addCommandLog(`-> 面取り: 角から ${lengthText(r.legs)} の所で切りました`);
         _editVibrate(); render();
         return;
     }
@@ -425,7 +434,7 @@ function editDoFillet(wcs) {
     if(r.arc) entities.push(Object.assign({ type: 'ARC' }, base, r.arc));
     if(r.seg) entities.push(Object.assign({ type: 'LINE' }, base, r.seg));
     _bumpGeomEpoch();
-    addCommandLog(r.arc ? `-> フィレット: 半径 ${dimFormat(r.arc.radius)} で丸めました` : r.seg ? `-> 面取り: 角から ${dimFormat(r.legs)} の所で切りました` : '-> 角を出しました');
+    addCommandLog(r.arc ? `-> フィレット: 半径 ${lengthText(r.arc.radius)} で丸めました` : r.seg ? `-> 面取り: 角から ${lengthText(r.legs)} の所で切りました` : '-> 角を出しました');
     _editVibrate();
     cmdState.filletFirst = undefined; cmdState.filletTap = null;
     cmdState.mode = 'WAITING_FILLET_SELECT'; setPrompt(EDIT_PROMPT.FILLET_SELECT);
@@ -482,8 +491,9 @@ function processEditCommand(cmd) {
         if(m.startsWith('WAITING_FILLET_')) {
             if(v < 0) { addCommandLog('0 以上の数を入れてください'); return true; }
             const key = _editFilletOpts().mode === 'chamfer' ? 'chamferD' : 'filletR';
-            lastParams[key] = String(v); saveLastParams(); _editFilletPanel();
-            addCommandLog(`-> ${key === 'chamferD' ? '面取りの長さ' : '半径'} ${v}`);
+            const len = fromDisplayUnit(v, 'len'); // 入れた数は表示の単位（オプションの長さの単位）
+            lastParams[key] = String(len); saveLastParams(); _editFilletPanel();
+            addCommandLog(`-> ${key === 'chamferD' ? '面取りの長さ' : '半径'} ${lengthText(len)}`);
             return true;
         }
         if(m.startsWith('WAITING_BREAK_') && lastParams.breakMode === 'divide') {

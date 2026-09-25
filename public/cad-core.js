@@ -197,8 +197,8 @@ window.toggleCircleMode = function() {
     if (isAuto) {
         cmdState.presetRadius = rVal;
         cmdState.startWcs = null;
-        setPrompt(`円 (自動・半径${rVal}): 中心をタップ → 「確定」`);
-        addCommandLog(`-> 円作図モード: 【固定半径 (自動)】 半径=${rVal}`);
+        setPrompt(`円 (自動・半径${lengthText(rVal)}): 中心をタップ → 「確定」`);
+        addCommandLog(`-> 円作図モード: 【固定半径 (自動)】 半径=${lengthText(rVal)}`);
     } else {
         cmdState.presetRadius = 0;
         cmdState.startWcs = null;
@@ -213,7 +213,7 @@ function updateCircleActionBar() {
     const modeBtn = document.getElementById('dim-mode-toggle');
     if(modeBtn && (cmdState.mode === 'WAITING_CIRCLE_CENTER' || cmdState.mode === 'WAITING_CIRCLE_RADIUS')) {
         modeBtn.style.display = '';
-        modeBtn.innerHTML = isAuto ? `🔄 自動 (半径:${lastParams.radius || 50})` : '🔄 手動 (2点)';
+        modeBtn.innerHTML = isAuto ? `🔄 自動 (半径:${lengthText(parseFloat(lastParams.radius) || 50)})` : '🔄 手動 (2点)';
         modeBtn.onclick = window.toggleCircleMode;
     }
 }
@@ -230,8 +230,8 @@ function showCirclePanel() {
             </label>
         </div>
         <div class="prop-row" id="circle-r-row" style="${isAuto ? '' : 'opacity:0.5;'}">
-            <label>半径:</label>
-            <input type="number" id="prop-circle-r" value="${lastParams.radius || 50}" min="0.1" step="any" placeholder="半径を入力">
+            <label>半径${displayUnitTag('len')}:</label>
+            <input type="number" id="prop-circle-r" value="${displayUnitNum(parseFloat(lastParams.radius) || 50, 'len')}" min="0" step="any" placeholder="半径を入力">
         </div>
         <button class="prop-btn" onclick="applyCirclePreset()">この設定で作図開始</button>
     `;
@@ -247,7 +247,7 @@ window.onCircleModeRadioChange = function(mode) {
 // 円: 半径を確定して作図開始
 function applyCirclePreset(){
     const el=document.getElementById('prop-circle-r'); const v=el?parseFloat(el.value):NaN;
-    if(v>0){ lastParams.radius=String(v); }
+    if(v>0){ lastParams.radius=String(fromDisplayUnit(v, 'len')); } // 入力は表示の単位（オプションの長さの単位）
     saveLastParams();
     hidePropertyPanel();
     
@@ -256,8 +256,8 @@ function applyCirclePreset(){
     if (isAuto) {
         cmdState.presetRadius = rVal;
         cmdState.mode = 'WAITING_CIRCLE_CENTER';
-        setPrompt(`円 (自動・半径${rVal}): 中心をタップ → 「確定」`);
-        addCommandLog(`-> 半径 ${rVal} の固定円モード。中心を指定して「確定」`);
+        setPrompt(`円 (自動・半径${lengthText(rVal)}): 中心をタップ → 「確定」`);
+        addCommandLog(`-> 半径 ${lengthText(rVal)} の固定円モード。中心を指定して「確定」`);
     } else {
         cmdState.presetRadius = 0;
         cmdState.mode = 'WAITING_CIRCLE_CENTER';
@@ -271,17 +271,22 @@ function applyCirclePreset(){
 // 長方形: 幅・高さを確定して1点クリックで作図
 function applyRectPreset(){
     const ew=document.getElementById('prop-rect-w'), eh=document.getElementById('prop-rect-h');
-    const w=ew?parseFloat(ew.value):NaN, h=eh?parseFloat(eh.value):NaN;
-    if(w>0&&h>0){ cmdState.presetW=w; cmdState.presetH=h; lastParams.rectW=String(w); lastParams.rectH=String(h); saveLastParams(); addCommandLog(`-> ${w}×${h} を設定。基準点をクリック`); }
+    const w0=ew?parseFloat(ew.value):NaN, h0=eh?parseFloat(eh.value):NaN;
+    if(w0>0&&h0>0){
+        const w=fromDisplayUnit(w0, 'len'), h=fromDisplayUnit(h0, 'len'); // 入力は表示の単位
+        cmdState.presetW=w; cmdState.presetH=h; lastParams.rectW=String(w); lastParams.rectH=String(h); saveLastParams();
+        addCommandLog(`-> ${lengthText(w)}×${lengthText(h)} を設定。基準点をクリック`);
+    }
     setPrompt('1点目:'); hidePropertyPanel();
 }
 // オフセット: 距離を確定して対象選択へ
 function applyOffsetPreset(){
-    const el=document.getElementById('prop-offset-d'); const v=el?parseFloat(el.value):NaN;
-    if(!(v>0)){ addCommandLog('-> 有効な距離を入力してください'); return; }
+    const el=document.getElementById('prop-offset-d'); const v0=el?parseFloat(el.value):NaN;
+    if(!(v0>0)){ addCommandLog('-> 有効な距離を入力してください'); return; }
+    const v=fromDisplayUnit(v0, 'len'); // 入力は表示の単位
     cmdState.offsetDist=Math.abs(v); lastParams.offset=String(v); saveLastParams();
     cmdState.mode='WAITING_OFFSET_SELECT'; setPrompt('オフセット対象:');
-    addCommandLog(`-> 距離 ${v} を設定。対象を選択`); hidePropertyPanel();
+    addCommandLog(`-> 距離 ${lengthText(v)} を設定。対象を選択`); hidePropertyPanel();
 }
 // 回転: 角度を確定し、対象選択→基点クリックで確定
 function applyRotatePreset(){
@@ -711,7 +716,8 @@ function startTextPlacement() {
     if(!txtInput.value) { alert("文字を入力してください"); return; }
     
     cmdState.textStr = txtInput.value;
-    cmdState.textHeight = parseFloat(hInput.value) || 20;
+    const hv = parseFloat(hInput.value);
+    cmdState.textHeight = (hv > 0) ? fromDisplayUnit(hv, 'len') : 20; // 入力は表示の単位
     cmdState.isContinuous = contInput ? contInput.checked : true;
     cmdState.previewWcs = { x: mouse.wcsX || 0, y: mouse.wcsY || 0 };
     

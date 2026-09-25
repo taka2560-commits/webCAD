@@ -684,7 +684,8 @@ function snapToolsReset() {
 // ===== 相対座標の入力 =====
 // 基準点から「北へ○・東へ○」または「距離と方向角」で点を入力する（測量の並び: X＝北、Y＝東）
 let _relInput = null; // { base: {x,y}, baseLabel, mode: 'dxy' | 'polar' }
-function _surveyUnitText() { return (typeof getSurveyUnit === 'function' && getSurveyUnit() === 'mm') ? 'mm' : 'm'; }
+// 入力の単位: オプションの長さの単位（「図面どおり」なら図面の1単位）
+function _surveyUnitText() { return displayUnit('len'); }
 function _fmtDms(deg) {
     let d = ((deg % 360) + 360) % 360;
     let D = Math.floor(d), M = Math.floor((d - D) * 60), S = (d - D - M / 60) * 3600;
@@ -742,10 +743,12 @@ window.applyRelativeInput = function() {
     const aEl = document.getElementById('rel-a'), bEl = document.getElementById('rel-b');
     const a = parseFloat(aEl && aEl.value), b = (r.mode === 'polar') ? parseAzimuth(bEl && bEl.value) : parseFloat(bEl && bEl.value);
     const aa = isFinite(a) ? a : 0, bb = isFinite(b) ? b : 0;
+    // 距離・北へ・東へ は表示の単位で入る（方向角はそのまま）
+    const la = fromDisplayUnit(aa, 'len'), lb = (r.mode === 'polar') ? bb : fromDisplayUnit(bb, 'len');
     if(r.mode === 'polar' && (!isFinite(a) || !isFinite(b))) { showToast('距離と方向角を入れてください'); return; }
     if(r.mode === 'dxy' && !isFinite(a) && !isFinite(b)) { showToast('北・東へ動かす量を入れてください'); return; }
-    const t = relativeTarget(r.base, r.mode, aa, bb);
-    addCommandLog(r.mode === 'polar' ? `-> 相対入力: 距離 ${aa} 方向角 ${_fmtDms(bb)}` : `-> 相対入力: 北へ ${aa} 東へ ${bb}`);
+    const t = relativeTarget(r.base, r.mode, la, lb);
+    addCommandLog(r.mode === 'polar' ? `-> 相対入力: 距離 ${lengthText(la)} 方向角 ${_fmtDms(bb)}` : `-> 相対入力: 北へ ${lengthText(la)} 東へ ${lengthText(lb)}`);
     if(cmdState.mode === 'IDLE') { showToast('コマンドが終わっています'); return; }
     handlePointInput(t, true);
     r.base = { x: t.x, y: t.y }; r.baseLabel = '直前に入力した点';

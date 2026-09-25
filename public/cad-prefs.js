@@ -1,19 +1,23 @@
 // ===== Web CAD 表示・操作の設定 =====
-// cad-prefs.js - ルーペの大きさ・倍率、座標の文字の大きさ・桁数、寸法の文字の大きさ、
-//                スナップの吸着範囲など、見やすさ・操作しやすさの設定（端末ごとに保存）
+// cad-prefs.js - ルーペの大きさ・倍率、座標の文字の大きさ・桁数・単位、寸法の文字の大きさ・桁数、
+//                長さの単位（m / mm）、スナップの吸着範囲など、見やすさ・操作しやすさの設定（端末ごとに保存）
 //
 // ・既定値は以前と同じ見た目・動作（変えなければ何も変わらない）
 // ・オプション画面の「表示・操作」で切り替える。変えた瞬間に画面へ反映し、ルーペと吸着範囲は見本を出す
 
 const DISPLAY_PREFS_KEY = 'cad_display_prefs';
+// 単位の選択肢（「図面どおり」は図面の1単位のまま）
+const DISPLAY_UNIT_OPTIONS = [['auto', '図面どおり', null], ['m', 'm', 'm'], ['mm', 'mm', 'mm']];
 // 設定の一覧。options は [保存する値, ボタンの文字, 実際に使う値]
 const DISPLAY_PREF_DEFS = {
     loupeSize:     { label: 'ルーペの大きさ', def: 'm',   options: [['s', '小', 55], ['m', '中', 70], ['l', '大', 90], ['xl', '特大', 115]] },
     loupeZoom:     { label: 'ルーペの倍率',   def: '3',   options: [['2', '2倍', 2], ['3', '3倍', 3], ['4', '4倍', 4], ['6', '6倍', 6]] },
     coordFont:     { label: '座標の文字',     def: 'm',   options: [['s', '小', 0.85], ['m', '中', 1], ['l', '大', 1.3], ['xl', '特大', 1.6]] },
     coordDecimals: { label: '座標の桁',       def: 'std', options: [['std', '標準', null], ['0', '1', 0], ['1', '0.1', 1], ['2', '0.01', 2], ['3', '0.001', 3]] },
+    coordUnit:     { label: '座標の単位',     def: 'auto', options: DISPLAY_UNIT_OPTIONS },
     dimText:       { label: '寸法の文字',     def: 'm',   options: [['s', '小', 0.8], ['m', '中', 1], ['l', '大', 1.3], ['xl', '特大', 1.6]] },
     dimDecimals:   { label: '寸法の桁',       def: 'auto', options: [['auto', '自動', null], ['0', '1', 0], ['1', '0.1', 1], ['2', '0.01', 2], ['3', '0.001', 3]] },
+    lenUnit:       { label: '長さの単位',     def: 'auto', options: DISPLAY_UNIT_OPTIONS },
     snapRange:     { label: '吸着の範囲',     def: 'm',   options: [['s', '狭い', 0.6], ['m', '標準', 1], ['l', '広い', 1.6], ['xl', '最大', 2.4]] },
 };
 
@@ -46,13 +50,58 @@ function displayPref(name) {
     return o ? o[2] : undefined;
 }
 
+// ===== 表示の単位（m / mm） =====
+// 図面の値は図面の1単位（オプションの測量の欄: 1m か 1mm）で持っている。
+// 座標・長さの単位を選ぶと、表示するときに換算し、入力された数は図面の単位へ戻す。
+// kind: 'coord'（座標）/ 'len'（長さ: 寸法・測定・半径・距離・間隔など）。「図面どおり」なら換算しない
+function drawingUnit() { return (typeof getSurveyUnit === 'function' && getSurveyUnit() === 'mm') ? 'mm' : 'm'; }
+function _unitPrefName(kind) { return kind === 'coord' ? 'coordUnit' : 'lenUnit'; }
+// 選んだ単位（「図面どおり」なら null）
+function displayUnitChosen(kind) { const u = displayPref(_unitPrefName(kind)); return (u === 'm' || u === 'mm') ? u : null; }
+// 表示する単位（'m' / 'mm'）
+function displayUnit(kind) { return displayUnitChosen(kind) || drawingUnit(); }
+// 図面の値 × この倍率 ＝ 表示の値
+function displayUnitScale(kind) {
+    const d = drawingUnit(), u = displayUnit(kind);
+    return d === u ? 1 : (d === 'm' ? 1000 : 0.001);
+}
+function toDisplayUnit(v, kind) { return v * displayUnitScale(kind); }
+// 入力された数（表示の単位）→ 図面の値。0.3 m → 300 mm のような換算の端数（300.00000000000006）は消す
+function fromDisplayUnit(v, kind) { const s = displayUnitScale(kind); return s === 1 ? v : +(v / s).toPrecision(12); }
+// 入力欄に入れる数の文字（図面の値を表示の単位で）
+function displayUnitNum(v, kind) {
+    if(typeof v !== 'number' || !isFinite(v)) return '';
+    const s = displayUnitScale(kind);
+    return String(s === 1 ? v : +(v * s).toPrecision(12));
+}
+// 入力欄の見出しに付ける単位（「図面どおり」なら何も付けない＝以前と同じ）
+function displayUnitTag(kind) { const u = displayUnitChosen(kind); return u ? `(${u})` : ''; }
+
+// 寸法・長さの数の文字（x は表示の単位の値）。桁はオプション「寸法の桁」。
+// 「自動」は小数3桁まで（末尾の0は省く）。単位に mm を選んだときは整数（m の小数3桁と同じ細かさ）
+function formatDimNumber(x, unitChosen) {
+    if(typeof x !== 'number' || !isFinite(x)) return '';
+    const d = displayPref('dimDecimals');
+    if(d !== null && d !== undefined) { const s = x.toFixed(d); return /^-0(\.0*)?$/.test(s) ? s.slice(1) : s; }
+    const r = (unitChosen === 'mm') ? Math.round(x) : Math.round(x * 1000) / 1000;
+    return String(Object.is(r, -0) ? 0 : r);
+}
+// 長さの文字（コマンドの記録・案内用）。単位を選んでいるときは単位も付ける
+function lengthText(v) { return formatDimNumber(toDisplayUnit(v, 'len'), displayUnitChosen('len')) + (displayUnitChosen('len') || ''); }
+
 // ===== 座標の表示 =====
-// where: 'bar'（ステータスバー・全画面の座標） / 'loupe'（ルーペ）
-// 「標準」は以前と同じ桁数（ステータスバーなどは整数、ルーペは小数2桁）
+// where: 'bar'（ステータスバー・全画面の座標） / 'loupe'（ルーペ・コマンドの記録）
+// 「標準」は以前と同じ桁数（ステータスバーなどは整数、ルーペは小数2桁。座標の単位に mm を選んだときはルーペも整数）
 function formatCoordValue(v, where) {
+    if(typeof v !== 'number' || !isFinite(v)) return '';
     let d = displayPref('coordDecimals');
-    if(d === null || d === undefined) d = (where === 'loupe') ? 2 : 0;
-    return (typeof v === 'number' && isFinite(v)) ? v.toFixed(d) : '';
+    if(d === null || d === undefined) d = (where === 'loupe' && displayUnitChosen('coord') !== 'mm') ? 2 : 0;
+    return toDisplayUnit(v, 'coord').toFixed(d);
+}
+// 図面の点を、コマンドの記録の「東,北」（UCS の x,y。以前の記録と同じ並び）の文字にする
+function coordLogText(wcs) {
+    const u = wcsToUcs(wcs.x, wcs.y);
+    return formatCoordValue(u.x, 'loupe') + ',' + formatCoordValue(u.y, 'loupe');
 }
 // ステータスバーに座標を出す（測量の並び: X＝北＝UCSのy、Y＝東＝UCSのx）。
 // X と Y を別の枠に入れ、幅が足りないときは CSS で2段（X が上）に折り返す
@@ -101,12 +150,18 @@ window.setDisplayPref = function(name, key) {
     _saveDisplayPrefs();
     applyDisplayPrefs();
     document.querySelectorAll(`.opt-pref-btn[data-pref="${name}"]`).forEach(b => b.classList.toggle('active', b.dataset.key === key));
-    if(name === 'coordDecimals' || name === 'coordFont') refreshCoordDisplay();
-    if(name === 'dimDecimals' && typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch(); // 寸法の文字を描き直す
+    if(name === 'coordDecimals' || name === 'coordFont' || name === 'coordUnit') refreshCoordDisplay();
+    if(name === 'dimDecimals' || name === 'coordUnit' || name === 'lenUnit') _refreshShownValues(); // 寸法の文字・プロパティの数を描き直す
+    if(name === 'coordUnit' || name === 'lenUnit') _updateUnitNote();
     if(name === 'loupeSize' || name === 'loupeZoom') showPrefPreview('loupe');
     else if(name === 'snapRange') showPrefPreview('snap');
     if(typeof render === 'function') render();
 };
+// 単位・桁を変えたとき: 寸法の文字（図形の描画の控え）と、右のプロパティ欄の数を今の設定で出し直す
+function _refreshShownValues() {
+    if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
+    if(typeof updatePropertiesPanel === 'function') updatePropertiesPanel();
+}
 
 window.resetDisplayPrefs = function() {
     _displayPrefs = {};
@@ -114,6 +169,8 @@ window.resetDisplayPrefs = function() {
     applyDisplayPrefs();
     document.querySelectorAll('.opt-pref-btn').forEach(b => b.classList.toggle('active', b.dataset.key === DISPLAY_PREF_DEFS[b.dataset.pref].def));
     refreshCoordDisplay();
+    _refreshShownValues();
+    _updateUnitNote();
     if(typeof showToast === 'function') showToast('表示・操作の設定を初期値に戻しました');
     if(typeof render === 'function') render();
 };
@@ -131,9 +188,20 @@ function displayPrefsSectionHtml() {
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
             <div style="font-size:11px;color:#aaa;font-weight:700;">表示・操作（この端末に保存）</div>
             ${rows}
-            <div style="color:#888;font-size:10px;">座標の桁「標準」は、ステータスバーが整数・ルーペが小数2桁です。寸法の桁「自動」は小数3桁まで（末尾の0は省く）です</div>
+            <div id="opt-unit-note" style="color:#888;font-size:10px;">${_unitNoteText()}</div>
+            <div style="color:#888;font-size:10px;">座標の桁「標準」は、ステータスバーが整数・ルーペが小数2桁です。寸法の桁「自動」は小数3桁まで（末尾の0は省く。長さの単位に mm を選んだときは整数）です</div>
             <button class="prop-btn btn-sub" onclick="resetDisplayPrefs()">表示・操作を初期値に戻す</button>
         </div>`;
+}
+// 単位の説明（いまの図面の単位と、選んだ単位で何が変わるか）
+function _unitNoteText() {
+    const now = (displayUnitChosen('coord') || displayUnitChosen('len')) ? `（いまは 座標 ${displayUnit('coord')}・長さ ${displayUnit('len')}）` : '';
+    return `単位「図面どおり」は、図面の1単位（下の測量の欄。いまは 1${drawingUnit()}）のままです。` +
+        `m・mm を選ぶと、座標・寸法・測定・半径・距離などの表示と入力をその単位にします${now}。測量計算・杭打ち・SIMA は m のままです`;
+}
+function _updateUnitNote() {
+    const el = document.getElementById('opt-unit-note');
+    if(el) el.textContent = _unitNoteText();
 }
 
 // ===== 見本の表示（ルーペ・吸着範囲） =====

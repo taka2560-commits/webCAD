@@ -28,6 +28,13 @@ describe('基点測定', () => {
         `);
     });
 
+    // 図形を描いたときの文字（寸法の文字）を集める
+    function drawnTexts() {
+        app.eval(`resetCommand(); window.__t = []; ctx.fillText = (t) => window.__t.push(String(t));`);
+        try { app.eval('_drawFrame(false)'); } finally { app.eval('delete ctx.fillText'); }
+        return app.val('window.__t');
+    }
+
     // 基点を置いてから、測る先の点をカーソル位置として指定する
     function measureFrom(base, to) {
         app.eval(`processCommand('MEASURE'); handlePointInput({x:${base[0]}, y:${base[1]}}, true);`);
@@ -66,8 +73,12 @@ describe('基点測定', () => {
         const es = app.val('entities');
         assert.deepEqual(es.map(e => e.subType), ['LINEAR', 'LINEAR', 'ALIGNED']);
         assert.deepEqual(es.map(e => e.dimDir), ['H', 'V', undefined]);
-        // 表示される値: Y（東西）=3, X（南北）=4, 直線=5
-        assert.deepEqual(es.map(e => e.textOverride), ['3.000', '4.000', '5.000']);
+        // 文字は固定しない（長さの単位・寸法の桁を変えると記入済みの寸法も変わる）。測定の桁で描く印を付ける
+        assert.deepEqual(es.map(e => e.textOverride), [null, null, null]);
+        assert.deepEqual(es.map(e => e.meas), [true, true, true]);
+        // 表示される値: Y（東西）=3, X（南北）=4, 直線=5（1単位＝1m の図面は小数3桁。測定の表示と同じ）
+        const t = drawnTexts();
+        for(const s of ['3.000', '4.000', '5.000']) assert.ok(t.includes(s), t.join(','));
         // 3つで1つのまとまり（タップするとまとめて選べる）
         assert.equal(new Set(es.map(e => e.gid)).size, 1);
         assert.ok(es[0].gid);
