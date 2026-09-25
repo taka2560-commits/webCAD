@@ -462,7 +462,8 @@ window.togglePropertiesPanel = function() {
 // プロパティ欄の数（座標・長さ）。オプションで単位を選んでいればその単位（m は小数3桁、mm は小数1桁）、
 // 「図面どおり」なら以前と同じ桁（autoDigits が null ならそのままの値）
 function _propNum(v, kind, autoDigits) {
-    const u = displayUnitChosen(kind);
+    // 「図面どおり」でも図面の1単位が mm なら mm の小数1桁（以前は測点の X・Y が 0.001mm まで出ていた）
+    const u = displayUnitChosen(kind) || (drawingUnit() === 'mm' ? 'mm' : null);
     if(!u) return autoDigits === null ? String(v) : v.toFixed(autoDigits);
     return toDisplayUnit(v, kind).toFixed(u === 'm' ? 3 : 1);
 }

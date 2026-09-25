@@ -14,12 +14,12 @@ const DIM_EXT_GAP = 3;      // 補助線の測定点からの隙間(px)
 // 値はオプション「長さの単位」（座標寸法は「座標の単位」）に換算して出す（cad-prefs.js）
 function dimFormat(val) {
     if(typeof val !== 'number' || !isFinite(val)) return '';
-    return formatDimNumber(toDisplayUnit(val, 'len'), displayUnitChosen('len'));
+    return formatDimNumber(toDisplayUnit(val, 'len'), displayUnit('len'));
 }
-// 座標の値（座標寸法・原点などの記録）
+// 座標の値（座標寸法・原点などの記録）。mm の図面では整数の mm（「自動」のとき）
 function dimFormatCoord(val) {
     if(typeof val !== 'number' || !isFinite(val)) return '';
-    return formatDimNumber(toDisplayUnit(val, 'coord'), displayUnitChosen('coord'));
+    return formatDimNumber(toDisplayUnit(val, 'coord'), displayUnit('coord'));
 }
 // 角度寸法の文字（オプション「角度の表示」: 度は小数1桁、度分秒は秒まで）
 function dimFormatAngle(deg) { return angleIsDms() ? formatDmsAngle(deg) : deg.toFixed(1) + '°'; }
@@ -873,7 +873,7 @@ function _measTargetPoint() {
 // オプション「寸法の桁」を選んでいれば、その桁にする（記入した寸法と同じ文字になる）
 function measFormatLength(v) {
     const x = toDisplayUnit(v, 'len'), d = displayPref('dimDecimals');
-    if(d !== null && d !== undefined) return formatDimNumber(x, displayUnitChosen('len'));
+    if(d !== null && d !== undefined) return formatDimNumber(x, displayUnit('len'));
     return displayUnit('len') === 'mm' ? String(Math.round(x)) : x.toFixed(3);
 }
 function _measUnitLabel() { return displayUnit('len'); }

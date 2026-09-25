@@ -132,6 +132,23 @@ describe('自動保存・プロジェクト保存', () => {
         }
     });
 
+    it('図面の1単位（m / mm）を図面と一緒に保存し、開いたときに戻す（以前の保存データは今の設定のまま）', () => {
+        app.eval(`localStorage.setItem('cad_survey_unit', 'mm'); entities.push({ type: 'LINE', layer: 0, x1: 0, y1: 0, x2: 1000, y2: 0 });`);
+        const data = app.val(`_buildSaveData('mm の図面')`);
+        assert.equal(data.surveyUnit, 'mm');
+        // 別の図面（m）に切り替えたあと、mm の図面を開くと 1mm に戻る
+        app.eval(`localStorage.setItem('cad_survey_unit', 'm')`);
+        app.window.__saved = data;
+        app.eval(`applyProjectData(window.__saved)`);
+        assert.equal(app.eval('getSurveyUnit()'), 'mm');
+        // 単位の無い以前の保存データでは変えない
+        const old = Object.assign({}, data); delete old.surveyUnit;
+        app.window.__old = old;
+        app.eval(`localStorage.setItem('cad_survey_unit', 'm'); applyProjectData(window.__old)`);
+        assert.equal(app.eval('getSurveyUnit()'), 'm');
+        app.eval(`localStorage.removeItem('cad_survey_unit')`);
+    });
+
     it('未捕捉エラーが起きない', () => {
         assert.deepEqual(app.errors(), []);
     });

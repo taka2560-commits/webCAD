@@ -111,19 +111,43 @@ function registerExtraDxfHandlers(parser) {
 
 // ===== 取り込み先の準備（置き換え / 追加） =====
 // 図面が空でなければ確認し、置き換えの場合は図形・画層を初期化する。Undoは1回分にまとめる
+// 決めた取り込み先（'fresh' 空の図面 / 'replace' 置き換え / 'append' 今の図面に追加）は、ファイルの単位を合わせるときに使う
+let _importMode = 'fresh';
 function _prepareImportTarget() {
     if(typeof guideBeforeFileOpen === 'function') guideBeforeFileOpen();
     saveUndo();
-    if(entities.length === 0) return 'fresh';
+    if(entities.length === 0) return (_importMode = 'fresh');
     const replace = confirm('現在の図面を置き換えて開きますか？\n\n[OK] 置き換える\n[キャンセル] 現在の図面に追加する');
-    if(!replace) return 'append';
+    if(!replace) return (_importMode = 'append');
     entities.length = 0;
     layers.splice(0, layers.length, { name: '0', color: '#00ffff', visible: true });
     currentLayerIndex = 0;
     cmdState.highlightIdx = -1; cmdState.selectedIndices = [];
     if(typeof window.setCurrentProjectName === 'function') window.setCurrentProjectName(null);
     initLayers();
-    return 'replace';
+    return (_importMode = 'replace');
+}
+
+// ===== ファイルの単位（$INSUNITS: 4＝mm、6＝m）に「図面の1単位」を合わせる =====
+function fileUnitFromInsunits(code) { const n = Number(code); return n === 4 ? 'mm' : n === 6 ? 'm' : null; }
+// 新しく開いた・置き換えたときは自動で合わせる（座標・寸法の値の桁、測定、SIMA の位置が合う）。
+// 今の図面に追加したときは変えずに知らせる。単位が書かれていなければ、いまの単位のまま記録に残す。
+// 戻り値: 画面に知らせる文（同じ・単位なしなら ''）。what は 'DXF' / 'DWG'
+function applyFileUnit(code, what) {
+    const mode = _importMode;
+    _importMode = 'fresh'; // 次に開くときは、また取り込み先を決め直す
+    if(typeof getSurveyUnit !== 'function') return '';
+    const fileUnit = fileUnitFromInsunits(code), cur = getSurveyUnit();
+    if(!fileUnit) {
+        addCommandLog(`-> この${what}には単位が書かれていません（図面の1単位は 1${cur} のまま）。違うときはオプションの測量の欄で変えてください`);
+        return '';
+    }
+    if(fileUnit === cur) return '';
+    if(mode !== 'append' && typeof window.setSurveyUnit === 'function') {
+        window.setSurveyUnit(fileUnit);
+        return `この${what}の単位は ${fileUnit} なので、オプションの「図面の1単位」を 1${fileUnit} にしました`;
+    }
+    return `この${what}の単位は ${fileUnit} です（オプションの「図面の1単位」は 1${cur}）。今の図面に追加したので変えていません。測定・SIMA の値を合わせるには、オプションで 1${fileUnit} にしてください`;
 }
 
 // ===== 画層・色ヘルパー =====
@@ -153,13 +177,6 @@ function dxfLayerIndex(name) {
     return idx;
 }
 
-// DXF の単位（$INSUNITS）とオプションの「図面の1単位」が違うときの案内（同じ・不明なら空文字）
-function _dxfUnitNote(dxf) {
-    const u = dxf && dxf.header && dxf.header.$INSUNITS;
-    const fileUnit = u === 4 ? 'mm' : u === 6 ? 'm' : null;
-    if(!fileUnit || typeof getSurveyUnit !== 'function' || getSurveyUnit() === fileUnit) return '';
-    return `このDXFの単位は ${fileUnit} です（オプションの「図面の1単位」は 1${getSurveyUnit()}）。測定・SIMA の値を合わせるには、オプションで 1${fileUnit} にしてください`;
-}
 function importDxfData(dxf, opts) {
     opts = opts || {};
     if(!opts.skipUndo) saveUndo();
@@ -261,14 +278,16 @@ function importDxfData(dxf, opts) {
     if(typeof ensureEntityIds === 'function') ensureEntityIds();
     if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
     if(typeof updateLayerPanel === 'function') updateLayerPanel();
+    // DXF の単位（$INSUNITS）に「図面の1単位」を合わせる（新しく開いたとき。追加のときは知らせるだけ）
+    const unitNote = applyFileUnit(dxf && dxf.header && dxf.header.$INSUNITS, 'DXF');
+    if(unitNote) addCommandLog('-> ' + unitNote);
     zoomExtents();
     render();
     if(typeof showToast === 'function') {
         let msg = `読み込み完了: ${importCount}個の図形`;
         if(skipTotal > 0) msg += `（未対応 ${skipTotal}個）`;
         if(autoHidden.length > 0) msg += `\n重い画層を自動非表示: ${autoHidden.length}件`;
-        const unitNote = _dxfUnitNote(dxf);
-        if(unitNote) { msg += '\n' + unitNote; addCommandLog('-> ' + unitNote); }
+        if(unitNote) msg += '\n' + unitNote;
         showToast(msg, unitNote ? 7000 : 4000);
     }
     return { importCount, skipStats };
@@ -869,8 +888,12 @@ async function loadDwgFile(file) {
             importResult.warnings.forEach(w => addCommandLog(`  注意: ${w}`));
         }
         if(typeof updateLayerPanel === 'function') updateLayerPanel();
+        // DWG の単位（INSUNITS）に「図面の1単位」を合わせる（新しく開いたとき。追加のときは知らせるだけ）。
+        // 以前は DWG の単位を見ておらず、mm の図面でも 1m のまま座標寸法などを小数3桁（0.001mm）で出していた
+        const unitNote = applyFileUnit(db.header && db.header.INSUNITS, 'DWG');
+        if(unitNote) addCommandLog('-> ' + unitNote);
         zoomExtents(); render();
-        if(typeof showToast === 'function') showToast(`読み込み完了: ${importResult.entities.length}個の図形`, 4000);
+        if(typeof showToast === 'function') showToast(`読み込み完了: ${importResult.entities.length}個の図形` + (unitNote ? '\n' + unitNote : ''), unitNote ? 7000 : 4000);
         if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 
     } catch(err) {

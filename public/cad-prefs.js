@@ -80,17 +80,18 @@ function displayUnitNum(v, kind) {
 // 入力欄の見出しに付ける単位（「図面どおり」なら何も付けない＝以前と同じ）
 function displayUnitTag(kind) { const u = displayUnitChosen(kind); return u ? `(${u})` : ''; }
 
-// 寸法・長さの数の文字（x は表示の単位の値）。桁はオプション「寸法の桁」。
-// 「自動」は小数3桁まで（末尾の0は省く）。単位に mm を選んだときは整数（m の小数3桁と同じ細かさ）
-function formatDimNumber(x, unitChosen) {
+// 寸法・長さの数の文字（x は表示の単位の値、unit はその単位 'm' / 'mm'）。桁はオプション「寸法の桁」。
+// 「自動」は m なら小数3桁まで（末尾の0は省く）、mm なら整数。どちらも 1mm の細かさ
+// （以前は mm の図面でも小数3桁まで出し、座標寸法が「29510.405」のように 0.001mm まで出ていた）
+function formatDimNumber(x, unit) {
     if(typeof x !== 'number' || !isFinite(x)) return '';
     const d = displayPref('dimDecimals');
     if(d !== null && d !== undefined) { const s = x.toFixed(d); return /^-0(\.0*)?$/.test(s) ? s.slice(1) : s; }
-    const r = (unitChosen === 'mm') ? Math.round(x) : Math.round(x * 1000) / 1000;
+    const r = (unit === 'mm') ? Math.round(x) : Math.round(x * 1000) / 1000;
     return String(Object.is(r, -0) ? 0 : r);
 }
 // 長さの文字（コマンドの記録・案内用）。単位を選んでいるときは単位も付ける
-function lengthText(v) { return formatDimNumber(toDisplayUnit(v, 'len'), displayUnitChosen('len')) + (displayUnitChosen('len') || ''); }
+function lengthText(v) { return formatDimNumber(toDisplayUnit(v, 'len'), displayUnit('len')) + (displayUnitChosen('len') || ''); }
 
 // 単位を m ⇔ mm に切り替える（お気に入りのボタン・コマンド UNIT / CUNIT）。
 // 図面の1単位と同じ単位に戻すときは「図面どおり」にする（2回押すと元の設定に戻る）
@@ -133,11 +134,11 @@ function parseAngleInput(text) {
 
 // ===== 座標の表示 =====
 // where: 'bar'（ステータスバー・全画面の座標） / 'loupe'（ルーペ・コマンドの記録）
-// 「標準」は以前と同じ桁数（ステータスバーなどは整数、ルーペは小数2桁。座標の単位に mm を選んだときはルーペも整数）
+// 「標準」はステータスバーなどは整数、ルーペは m なら小数2桁、mm なら整数（mm の図面で 0.01mm まで出さない）
 function formatCoordValue(v, where) {
     if(typeof v !== 'number' || !isFinite(v)) return '';
     let d = displayPref('coordDecimals');
-    if(d === null || d === undefined) d = (where === 'loupe' && displayUnitChosen('coord') !== 'mm') ? 2 : 0;
+    if(d === null || d === undefined) d = (where === 'loupe' && displayUnit('coord') !== 'mm') ? 2 : 0;
     return toDisplayUnit(v, 'coord').toFixed(d);
 }
 // 図面の点を、コマンドの記録の「東,北」（UCS の x,y。以前の記録と同じ並び）の文字にする
@@ -296,7 +297,7 @@ function displayPrefsSectionHtml() {
             <div style="font-size:11px;color:#aaa;font-weight:700;">表示・操作（この端末に保存）</div>
             ${rows}
             <div id="opt-unit-note" style="color:#888;font-size:10px;">${_unitNoteText()}</div>
-            <div style="color:#888;font-size:10px;">座標の桁「標準」は、ステータスバーが整数・ルーペが小数2桁です。寸法の桁「自動」は小数3桁まで（末尾の0は省く。長さの単位に mm を選んだときは整数）です</div>
+            <div style="color:#888;font-size:10px;">座標の桁「標準」は、ステータスバーが整数、ルーペが小数2桁（mm のときは整数）です。寸法の桁「自動」は、m なら小数3桁まで（末尾の0は省く）、mm なら整数です（どちらも 1mm まで）</div>
             <div style="color:#888;font-size:10px;">角度の表示: 度は 45.5°、度分秒は 45°30′00″（角度寸法・回転・UCS。測量計算・杭打ちは、これまでどおり度分秒）</div>
             <div style="color:#888;font-size:10px;">ボタンの大きさ: 上・左・下のバー、選んだときのバー、☑確定のバー、お気に入り、右下の ？・コマンドのボタンを大きくします（手袋のままでも押しやすく）。屋外モード: 図形・寸法の線を太く、文字を太字にして縁取り、背景との明るさの差を広げ、パネルを不透明にします（日なたでは背景色を白にするのも効果があります）</div>
             <button class="prop-btn btn-sub" onclick="resetDisplayPrefs()">表示・操作を初期値に戻す</button>

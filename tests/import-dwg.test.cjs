@@ -168,3 +168,77 @@ describe('DWG取り込み: 閉じたポリライン（四角形の左の辺が�
         assert.deepEqual(app.errors(), []);
     });
 });
+
+// 図面の単位: 開いた DWG・DXF の単位（INSUNITS: 4＝mm、6＝m）に「図面の1単位」を合わせる。
+// 以前は DWG の単位を見ておらず、mm の図面でも 1m のまま座標寸法を「29510.405」（0.001mm まで）と出していた
+describe('DWG・DXF を開いたとき、図面の単位に合わせる', () => {
+    let app;
+    before(async () => { app = await loadApp(); });
+    after(() => app.close());
+
+    const toast = () => app.eval(`document.getElementById('cad-toast').textContent`);
+    const log = () => app.eval(`document.getElementById('command-log').textContent`);
+    // DWG 読込エンジンの代わり（libredwg-web の convert() と同じ形を返す）
+    function mockEngine(insunits) {
+        app.window.__dwgDb = {
+            header: insunits === undefined ? {} : { INSUNITS: insunits },
+            tables: { LAYER: { entries: [{ name: '0', colorIndex: 7 }] } },
+            entities: [{ type: 'LINE', layer: '0', startPoint: { x: 0, y: 0 }, endPoint: { x: 29510.405, y: 2.258 } }],
+        };
+        app.eval(`window.loadLibreDwg = async () => ({ LibreDwg: { create: async () => ({
+            dwg_read_data: () => ({}), convert: () => window.__dwgDb, dwg_free: () => {} }) } });`);
+    }
+    const dwgFile = `({ name: '図面.dwg', arrayBuffer: async () => new TextEncoder().encode('AC1032xxxx').buffer })`;
+    const openDwg = async () => {
+        app.eval(`entities.length = 0; _prepareImportTarget();`);
+        await app.eval(`loadDwgFile(${dwgFile})`);
+    };
+
+    it('mm の DWG を開くと「図面の1単位」を 1mm にし、座標寸法は整数の mm で出る', async () => {
+        app.eval(`localStorage.removeItem('cad_survey_unit')`);
+        mockEngine(4);
+        await openDwg();
+        assert.equal(app.eval('getSurveyUnit()'), 'mm');
+        assert.match(toast(), /DWGの単位は mm なので、オプションの「図面の1単位」を 1mm にしました/);
+        assert.equal(app.eval('dimFormatCoord(29510.405)'), '29510');
+        assert.equal(app.eval('dimFormatCoord(2.258)'), '2');
+    });
+
+    it('m の DWG を開くと 1m に戻す。単位が書かれていなければ変えずに記録に残す', async () => {
+        app.eval(`localStorage.setItem('cad_survey_unit', 'mm')`);
+        mockEngine(6);
+        await openDwg();
+        assert.equal(app.eval('getSurveyUnit()'), 'm');
+        mockEngine(undefined);
+        await openDwg();
+        assert.equal(app.eval('getSurveyUnit()'), 'm');
+        assert.match(log(), /単位が書かれていません（図面の1単位は 1m のまま）/);
+    });
+
+    it('今の図面に追加したときは、単位を変えずに知らせる', async () => {
+        app.eval(`localStorage.removeItem('cad_survey_unit'); entities.length = 0; entities.push({ type:'LINE', layer:0, color:null, x1:0, y1:0, x2:1, y2:1 });`);
+        app.window.confirm = () => false; // [キャンセル] 現在の図面に追加する
+        mockEngine(4);
+        app.eval(`_prepareImportTarget();`);
+        await app.eval(`loadDwgFile(${dwgFile})`);
+        assert.equal(app.eval('getSurveyUnit()'), 'm');
+        assert.match(toast(), /今の図面に追加したので変えていません/);
+        // 次に新しく開くときは、また合わせる
+        app.eval(`entities.length = 0;`);
+        await openDwg();
+        assert.equal(app.eval('getSurveyUnit()'), 'mm');
+    });
+
+    it('DXF も同じ（$INSUNITS）', () => {
+        app.eval(`localStorage.removeItem('cad_survey_unit'); entities.length = 0; _importMode = 'fresh';`);
+        app.window.__dxf = { header: { $INSUNITS: 4 }, entities: [{ type: 'LINE', layer: '0', vertices: [{ x: 0, y: 0 }, { x: 10, y: 0 }] }] };
+        app.eval(`importDxfData(window.__dxf, { skipUndo: true })`);
+        assert.equal(app.eval('getSurveyUnit()'), 'mm');
+        assert.match(toast(), /DXFの単位は mm なので/);
+        app.eval(`localStorage.removeItem('cad_survey_unit')`);
+    });
+
+    it('未捕捉エラーが起きない', () => {
+        assert.deepEqual(app.errors(), []);
+    });
+});

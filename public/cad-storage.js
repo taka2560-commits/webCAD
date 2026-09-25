@@ -101,6 +101,8 @@ function _buildSaveData(name) {
         view: { x: view.x, y: view.y, scale: view.scale, rotation: view.rotation },
         ucs: { originX: ucs.originX, originY: ucs.originY, angle: ucs.angle },
         savedUCSList: JSON.parse(JSON.stringify(savedUCSList)),
+        // 図面の1単位（m / mm）。DWG・DXF を開くとファイルの単位に合わせるので、図面ごとに覚えて開いたときに戻す
+        surveyUnit: (typeof getSurveyUnit === 'function') ? getSurveyUnit() : undefined,
         entityCount: entities.length,
         savedAt: new Date().toISOString()
     };
@@ -132,6 +134,9 @@ function applyProjectData(data) {
     // 保存済みUCSリスト
     if (data.savedUCSList) savedUCSList = data.savedUCSList;
     else savedUCSList = [];
+    // 図面の1単位（保存したときの単位に戻す。以前の保存データには無いので、そのときは今の設定のまま）
+    if ((data.surveyUnit === 'm' || data.surveyUnit === 'mm') && typeof getSurveyUnit === 'function' &&
+        getSurveyUnit() !== data.surveyUnit && typeof window.setSurveyUnit === 'function') window.setSurveyUnit(data.surveyUnit);
 
     // 固有IDを確認（古い保存データにはIDが無いので付ける。以後の選択はIDで保持される）
     if (typeof ensureEntityIds === 'function') ensureEntityIds();

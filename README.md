@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.14.3（2026年9月25日リリース）**
+**現在のバージョン: v5.14.4（2026年9月25日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -182,7 +182,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（488件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（495件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -239,6 +239,11 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-09-25: バージョン5.14.4（mm の図面の座標値が 0.001mm まで出る不具合の修正）** 🔧
+  * 図面の1単位が mm のとき、座標寸法・寸法・記録の「自動」は整数（1mm まで）、ルーペは整数、プロパティ欄は小数1桁に（m の図面は小数3桁までのまま）。
+  * DWG・DXF を新しく開いたとき、ファイルの単位（INSUNITS 4＝mm・6＝m）に「図面の1単位」を自動で合わせる（追加のときは知らせるだけ）。以前は DWG の単位を見ていなかった。
+  * 図面の1単位を図面と一緒に保存し、開いたときに戻す。
 
 * **2026-09-25: バージョン5.14.3（Tab を押すと画面全体が左にずれる不具合の修正）** 🔧
   * 畳んだパネル（プロパティ・画層）は画面の外へずらしているだけだったため、Tab で中の ✖ に移ると、ブラウザが body を横にスクロールして画面全体がずれたままになっていた。畳んだパネルに inert を付け、Tab で入れないようにした。

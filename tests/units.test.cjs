@@ -249,6 +249,33 @@ describe('表示の単位（m / mm）', () => {
         assert.doesNotMatch(note(), /座標 m・長さ/);
     });
 
+    it('1単位＝1mm の図面は「図面どおり」でも 1mm まで（座標寸法・寸法・ルーペ・プロパティ）。0.001mm まで出さない', () => {
+        app.eval(`localStorage.setItem('cad_survey_unit', 'mm')`);
+        assert.equal(app.eval(`dimFormatCoord(29510.405)`), '29510');
+        assert.equal(app.eval(`dimFormatCoord(2.258)`), '2');
+        assert.equal(app.eval(`dimFormat(1234.56)`), '1235');
+        assert.equal(app.eval(`formatCoordValue(29510.405, 'loupe')`), '29510');
+        assert.equal(app.eval(`formatCoordValue(29510.405, 'bar')`), '29510');
+        app.eval(`entities.push({ type:'DIMENSION', subType:'ORDINATE', layer:0, color:null, point:{x:29510.405,y:2.258}, leaderCoord:{x:29600,y:80} });`);
+        const t = drawnTexts();
+        assert.ok(t.includes('X: 2') && t.includes('Y: 29510'), t.join(','));
+        // プロパティ欄: 測点の X・Y は mm の小数1桁
+        app.eval(`entities.push({ type:'POINT', layer:0, color:null, x:29510.405, y:2.258, name:'A2-8' }); cmdState.highlightIdx = 1; updatePropertiesPanel();`);
+        const vals = app.val(`[...document.querySelectorAll('#props-content input.prop-val[type=number]')].map(i => i.value)`);
+        assert.ok(vals.includes('2.3') && vals.includes('29510.4'), vals.join(','));
+        app.eval('cmdState.highlightIdx = -1;');
+        // 座標を m で見たいときは「座標の単位」を m に（29510.405mm → 29.51m）
+        app.eval(`setDisplayPref('coordUnit', 'm')`);
+        assert.equal(app.eval(`dimFormatCoord(29510.405)`), '29.51');
+        // 寸法の桁を選べば、その桁
+        app.eval(`setDisplayPref('coordUnit', 'auto'); setDisplayPref('dimDecimals', '1')`);
+        assert.equal(app.eval(`dimFormatCoord(29510.405)`), '29510.4');
+        // 1単位＝1m の図面は今までどおり（小数3桁まで）
+        app.eval(`setDisplayPref('dimDecimals', 'auto'); localStorage.removeItem('cad_survey_unit')`);
+        assert.equal(app.eval(`dimFormatCoord(29510.405)`), '29510.405');
+        assert.equal(app.eval(`formatCoordValue(12.3456, 'loupe')`), '12.35');
+    });
+
     it('未捕捉エラーが起きない', () => {
         assert.deepEqual(app.errors(), []);
     });
