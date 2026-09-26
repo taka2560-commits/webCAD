@@ -147,8 +147,8 @@ function _cogoShowBar(withConfirm) {
     ['dim-mode-toggle', 'dim-dir-toggle', 'pline-close-btn'].forEach((id) => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
     if(typeof _hideMeasureButtons === 'function') _hideMeasureButtons();
 }
-// スマホでは図面が見えるようにパネルを隠す（指定が終わるとまた開く）
-function _cogoPanelDuringPick() { if(window.innerWidth >= 700) _cogoOwner(_cogo.pick && _cogo.pick.owner).render(); else hidePropertyPanel(); }
+// スマホ・画面いっぱいのパネルでは、図面が見えるようにパネルを隠す（指定が終わるとまた開く）
+function _cogoPanelDuringPick() { if(!panelCoversDrawing()) _cogoOwner(_cogo.pick && _cogo.pick.owner).render(); else hidePropertyPanel(); }
 function _cogoStartPick() {
     const p = _cogo.pick, key = p.keys[p.i], label = COGO_SLOT_LABELS[key][0];
     resetCommand();
@@ -351,7 +351,7 @@ window.cogoPlaceAreaTable = function() {
     _cogoZoomTo(b.minX, Math.min(b.minY, b.maxY - r.height), b.maxX + h * 3 + r.width, b.maxY);
     addCommandLog(`-> 求積表を置きました${_cogoAreaTitle() ? '（' + _cogoAreaTitle() + '）' : ''} 地積 ${cogoLandArea(d.t.area, _cogo.landMode)}㎡`);
     showToast('求積表を区画の右に置きました（移動で動かせます）', 3500);
-    if(window.innerWidth < 700) hidePropertyPanel(); // スマホでは置いた表を見せる
+    if(panelCoversDrawing()) hidePropertyPanel(); // スマホ・画面いっぱいのパネルでは置いた表を見せる
 };
 window.cogoWriteSides = function() {
     if(!_cogoAreaData()) return;

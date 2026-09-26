@@ -406,7 +406,8 @@
         @keyframes popIn { from { opacity:0; transform:translate(-50%, -10px); } to { opacity:1; transform:translate(-50%, 0); } }
         #property-panel-header {
             background: rgba(0, 0, 0, 0.4);
-            padding: 10px 16px;
+            padding: 6px 8px 6px 16px;    /* 右は見出しのボタン（▁・□・✕）の余白で足りる */
+            gap: 2px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -424,10 +425,7 @@
             color: #00ff88;
             flex: 1; min-width: 0; text-align: center;   /* 見出しの ？ が出ても、題は真ん中のまま */
         }
-        #property-panel-close {
-            background: none; border: none; color: #aaa; cursor: pointer; font-size: 14px;
-        }
-        #property-panel-close:hover { color: #fff; }
+        /* 見出しのボタン ▁ たたむ・□ 画面いっぱい・✕ 閉じる は .win-btn（別窓の見出しのボタンと同じ形） */
         /* その画面の使い方（ヘルプの説明を開く） */
         #property-panel-help {
             flex: 0 0 auto; width: 26px; height: 26px; margin: 0 8px 0 6px; padding: 0; border-radius: 13px; cursor: pointer;
@@ -533,20 +531,42 @@
         .stake-rec { font-size:12px; line-height:1.6; color:var(--green); border:1px solid rgba(0,255,136,0.35); border-radius:var(--r-sub); padding:6px 8px; font-family:Consolas,monospace; }
         /* 作図・編集（鏡像・配列など）のパネル */
         .edit-chk { display:flex; align-items:center; gap:6px; font-size:12px; color:#ddd; cursor:pointer; }
-        /* 別窓（小さな図面の窓。ヘルマート変換の変換元の SIMA）: 見出しで動かす・右下で大きさ・▁ でたたむ */
+        /* 別窓（小さな図面の窓。ヘルマート変換の変換元の SIMA）: 見出しで動かす・右下で大きさ・▁ でたたむ・□ で画面いっぱい */
         .subview { position:fixed; z-index:100001; display:none; flex-direction:column; overflow:hidden; box-sizing:border-box; transition:none; }
         .subview-head { flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:3px 4px 3px 12px; background:rgba(0,0,0,0.4); border-bottom:1px solid rgba(255,255,255,0.1); cursor:move; touch-action:none; user-select:none; -webkit-user-select:none; }
         .subview-head::before { content:'⠿'; color:#777; font-size:13px; line-height:1; }
         .subview-title { flex:1; min-width:0; font-size:12px; font-weight:bold; color:#00ff88; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .subview-btns { flex:0 0 auto; display:flex; gap:2px; }
-        .subview-btn { width:32px; height:28px; padding:0; border:none; border-radius:6px; background:transparent; color:#aaa; font-size:14px; cursor:pointer; }
-        .subview-btn:hover { background:rgba(255,255,255,0.08); color:#fff; }
+        /* 見出しのボタン（別窓の .subview-btn・パネルの .win-btn）: ▁ たたむ・□ 画面いっぱい・✕ 閉じる など */
+        .subview-btn, .win-btn { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; width:32px; height:28px; padding:0; border:none; border-radius:6px; background:transparent; color:#aaa; font-size:14px; line-height:1; cursor:pointer; }
+        .subview-btn:hover, .win-btn:hover { background:rgba(255,255,255,0.08); color:#fff; }
+        .subview-btn-txt { width:auto; padding:0 7px; font-size:12px; font-weight:600; } /* 文字のボタン（全体） */
         .subview-body { position:relative; flex:1; min-height:0; }
         .subview-canvas { position:absolute; left:0; top:0; width:100%; height:100%; display:block; cursor:crosshair; }
         .subview-hint { position:absolute; left:8px; right:26px; bottom:4px; font-size:10px; color:var(--dim); pointer-events:none; text-shadow:0 1px 2px #000; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .subview-grip { position:absolute; right:0; bottom:0; width:24px; height:24px; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg, transparent 55%, rgba(255,255,255,0.35) 55%, rgba(255,255,255,0.35) 62%, transparent 62%, transparent 72%, rgba(255,255,255,0.35) 72%, rgba(255,255,255,0.35) 79%, transparent 79%); }
         .subview.collapsed { height:auto !important; }
         .subview.collapsed .subview-body { display:none; }
+        /* □ 画面いっぱい（パネル・別窓）: 上のバーと下のステータスバーのあいだに広げる（座標読取モードでは画面の端まで）。
+           元の位置・大きさ（インラインの指定）はそのまま残して ❐ で戻す。たたんでいるあいだ（▁）は、元の位置・大きさの見出しだけ */
+        #property-panel.win-max:not(.win-min), .subview.win-max:not(.collapsed) {
+            top: calc(24px + 44px * var(--btn-k, 1)) !important; bottom: calc(16px + 38px * var(--btn-k, 1)) !important;
+            left: 8px !important; right: 8px !important; width: auto !important; height: auto !important;
+            max-width: none !important; max-height: none !important; transform: none !important; animation: none !important;
+        }
+        body.fullscreen-mode #property-panel.win-max:not(.win-min), body.fullscreen-mode .subview.win-max:not(.collapsed) { top: 8px !important; bottom: 8px !important; }
+        #property-panel.win-max:not(.win-min) #property-panel-content { flex: 1 1 auto; }
+        #property-panel.win-max:not(.win-min) .cogo-table { width: 100%; }              /* 表も横いっぱい（行を押しやすく） */
+        #property-panel.win-max:not(.win-min) .cogo-table-wrap { max-height: 60vh; }    /* 表の行を多く見せる */
+        #property-panel.win-max:not(.win-min) #property-panel-header, .subview.win-max:not(.collapsed) .subview-head { cursor: default; } /* 広げているあいだは動かさない */
+        .subview.win-max .subview-grip { display: none; }
+        /* ▁ たたむ（パネル）: 見出しだけにする */
+        #property-panel.win-min #property-panel-content { display: none; }
+        #property-panel.win-min #property-panel-header { border-bottom-color: transparent; }
+        /* □（画面いっぱいに広げる）と ❐（元の大きさに戻す）の絵。窓が .win-max のときは ❐ */
+        .win-ico { display: block; width: 13px; height: 13px; }
+        .win-ico-restore, .win-max .win-ico-max { display: none; }
+        .win-max .win-ico-restore { display: block; }
         .cogo-table tr.helm-flag td { color:#ffcc00; }
         .helm-x { background:none; border:none; color:#ff6b6b; cursor:pointer; font-size:12px; padding:0 4px; }
         /* お気に入りのボタン（浮かぶバー）: ⠿ で動かす・⭐ でたたむ・＋ で登録。ボタンは左のツールバーと同じ形 */
@@ -860,12 +880,20 @@
     <!-- スナップの設定（中身は cad-snap.js が作る） -->
     <div id="osnap-panel"></div>
 
-    <!-- フローティング・プロパティパネル -->
+    <!-- 見出しのボタンの絵（□ 画面いっぱいに広げる・❐ 元の大きさに戻す。パネルと別窓で使う） -->
+    <svg width="0" height="0" style="position:absolute;" aria-hidden="true">
+        <symbol id="ico-win-max" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 4.2h9" stroke="currentColor" stroke-width="1.3"/></symbol>
+        <symbol id="ico-win-restore" viewBox="0 0 12 12"><rect x="1.5" y="4" width="6.5" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 4V1.5h6.5V8H8" fill="none" stroke="currentColor" stroke-width="1.3"/></symbol>
+    </svg>
+
+    <!-- フローティング・プロパティパネル（見出し: ⠿ で動かす・▁ たたむ・□ 画面いっぱい・✕ 閉じる） -->
     <div id="property-panel">
         <div id="property-panel-header">
             <span id="property-panel-title">プロパティ</span>
             <button id="property-panel-help" onclick="guidePanelHelp()" title="この画面の使い方" style="display:none;">？</button>
-            <button id="property-panel-close" onclick="hidePropertyPanel()">✕</button>
+            <button id="property-panel-min" class="win-btn" onclick="togglePropertyPanelMin()" title="たたむ（見出しだけにする）" aria-pressed="false">▁</button>
+            <button id="property-panel-max" class="win-btn" onclick="togglePropertyPanelMax()" title="画面いっぱいに広げる" aria-pressed="false"><svg class="win-ico win-ico-max" aria-hidden="true"><use href="#ico-win-max"></use></svg><svg class="win-ico win-ico-restore" aria-hidden="true"><use href="#ico-win-restore"></use></svg></button>
+            <button id="property-panel-close" class="win-btn" onclick="closePropertyPanel()" title="閉じる">✕</button>
         </div>
         <div id="property-panel-content">
             <!-- 動的コンテンツ -->

@@ -110,7 +110,7 @@ function _phRenderList() {
 }
 window.photoStartAdd = function() { delete _cogo.slots.PN; cogoPick('PN', 'photo'); };
 function _phAfterPick() {
-    if(cogoIsPicking()) { if(window.innerWidth >= 700) _phRenderList(); return; }
+    if(cogoIsPicking()) { if(!panelCoversDrawing()) _phRenderList(); return; }
     const s = _cogo.slots.PN;
     delete _cogo.slots.PN;
     if(!s) { _phRenderList(); return; } // やめたとき

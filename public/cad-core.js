@@ -601,12 +601,73 @@ function hidePropertyPanel() {
 function showPropertyPanel(title, htmlContent) {
     const p = document.getElementById('property-panel');
     if(!p) return;
-    document.getElementById('property-panel-title').textContent = title;
+    const t = document.getElementById('property-panel-title');
+    // ▁ たたむ・□ 画面いっぱいは、同じパネルの描き直し（タブの切り替えなど）では続ける。別のパネルにしたら元に戻す。
+    // たたんだパネルは、閉じたあとに開き直したときも広げて出す（開いたのに中身が見えないことがないように）
+    if(t.textContent !== title) p.classList.remove('win-min', 'win-max');
+    else if(p.style.display !== 'flex') p.classList.remove('win-min');
+    _ppSyncButtons(p);
+    t.textContent = title;
     document.getElementById('property-panel-content').innerHTML = htmlContent;
     if(typeof guideUpdatePanelHelp === 'function') guideUpdatePanelHelp(title); // 見出しの「？」（その画面の使い方）
     p.style.display = 'flex';
     applyPanelPosition(p); // 前に動かした位置を覚えている場合はそこに出す
     if(typeof favUpdateActive === 'function') favUpdateActive(); // お気に入りのバー: パネルのボタンの光り方
+}
+
+// ===== パネルの ▁ たたむ・□ 画面いっぱい =====
+// ▁: 見出しだけにする（図面を広く見たいとき）。もう一度押すと広げる。
+// □: 上のバーと下のステータスバーのあいだいっぱいに広げる（表・一覧を大きく見たいとき）。❐ で元の大きさ・位置に戻す。
+// 見た目は index.html の .win-min・.win-max（元の位置・大きさのインラインの指定は、そのまま残す）。✕ で閉じると元に戻す
+function setPropertyPanelMinimized(on) {
+    const p = document.getElementById('property-panel');
+    if(!p) return;
+    p.classList.toggle('win-min', !!on);
+    _ppSyncButtons(p);
+    if(!on) applyPanelPosition(p); // 見出しだけで画面の下のほうへ動かしていたら、広げた分がはみ出さない位置へ
+}
+function setPropertyPanelMaximized(on) {
+    const p = document.getElementById('property-panel');
+    if(!p) return;
+    p.classList.remove('win-min'); // たたんでいたら広げる
+    p.classList.toggle('win-max', !!on);
+    if(on) document.querySelectorAll('.subview').forEach((s) => { s.style.zIndex = ''; }); // 別窓より前に出す（パネルを触ったときと同じ）
+    _ppSyncButtons(p);
+    if(!on) applyPanelPosition(p); // 元の位置へ（広げているあいだに画面の大きさが変わっていたら、はみ出さない位置に）
+}
+window.togglePropertyPanelMin = function() {
+    const p = document.getElementById('property-panel');
+    if(p) setPropertyPanelMinimized(!p.classList.contains('win-min'));
+};
+window.togglePropertyPanelMax = function() {
+    const p = document.getElementById('property-panel');
+    if(p) setPropertyPanelMaximized(!p.classList.contains('win-max'));
+};
+// ✕: 閉じて、たたむ・画面いっぱいも元に戻す（次に開くときは、ふつうの大きさ）
+function closePropertyPanel() {
+    const p = document.getElementById('property-panel');
+    if(p) { p.classList.remove('win-min', 'win-max'); _ppSyncButtons(p); }
+    hidePropertyPanel();
+}
+function _ppSyncButtons(p) {
+    winSyncButtons(document.getElementById('property-panel-min'), document.getElementById('property-panel-max'), p.classList.contains('win-min'), p.classList.contains('win-max'));
+}
+// 見出しの ▁・□ ボタンの説明（押すと何をするか）を、いまの状態に合わせる（パネル・別窓）。□ と ❐ の絵は CSS の .win-max で切り替える
+function winSyncButtons(foldBtn, maxBtn, folded, maxed) {
+    if(foldBtn) { foldBtn.title = folded ? '広げる' : 'たたむ（見出しだけにする）'; foldBtn.setAttribute('aria-pressed', String(!!folded)); }
+    if(maxBtn) { maxBtn.title = maxed ? '元の大きさに戻す' : '画面いっぱいに広げる'; maxBtn.setAttribute('aria-pressed', String(!!maxed)); }
+}
+// 見出しの □ の絵（index.html の SVG の部品。窓が .win-max のときは ❐ を出す）。別窓の見出しで使う
+const WIN_MAX_ICONS = '<svg class="win-ico win-ico-max" aria-hidden="true"><use href="#ico-win-max"></use></svg>' +
+    '<svg class="win-ico win-ico-restore" aria-hidden="true"><use href="#ico-win-restore"></use></svg>';
+// 画面いっぱいに広げて出しているか（たたんでいるあいだは、元の位置・大きさの見出しだけなので含めない）
+function winMaxShown(el) {
+    return !!el && el.classList.contains('win-max') && !el.classList.contains('win-min') && !el.classList.contains('collapsed');
+}
+// パネルが図面を隠しているか（スマホの幅、または □ で画面いっぱいに広げているとき）。
+// 図面で点を指定するあいだ・図面に置いた表を見せるときは、パネルを隠す（指定が終わるとまた出す）
+function panelCoversDrawing() {
+    return window.innerWidth < 700 || winMaxShown(document.getElementById('property-panel'));
 }
 
 // ===== フローティングパネルの移動 =====
@@ -635,9 +696,10 @@ function _panelApplyPos(panel, left, top) {
     panel.dataset.moved = '1';
     return p;
 }
-// 動かしたパネルを、いまの画面サイズに合わせて置き直す（表示時・画面サイズ変更時）
+// 動かしたパネルを、いまの画面サイズに合わせて置き直す（表示時・画面サイズ変更時）。
+// 画面いっぱいのあいだは何もしない（元の位置は ❐ で戻すときのために、そのまま残す）
 function applyPanelPosition(panel) {
-    if(!panel) return;
+    if(!panel || winMaxShown(panel)) return;
     const pos = (panel.dataset.moved === '1') ? { left: parseFloat(panel.style.left) || 0, top: parseFloat(panel.style.top) || 0 } : _panelSavedPos(panel.dataset.posKey);
     if(!pos) return;
     _panelApplyPos(panel, pos.left, pos.top);
@@ -658,6 +720,7 @@ function makePanelDraggable(panel, handle, posKey) {
     handle.addEventListener('pointerdown', (e) => {
         if(e.button !== undefined && e.button !== 0) return;
         if(e.target.closest('button, input, select, textarea, a')) return; // 閉じるボタンなどの操作を邪魔しない
+        if(winMaxShown(panel)) return; // 画面いっぱいのあいだは動かさない（❐ で元の大きさ・位置に戻す）
         const r = panel.getBoundingClientRect();
         drag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false };
         _panelApplyPos(panel, r.left, r.top); // つまんだ瞬間の見た目の位置をそのまま引き継ぐ
@@ -683,7 +746,7 @@ function makePanelDraggable(panel, handle, posKey) {
     handle.addEventListener('pointercancel', end);
     // 見出しのダブルタップで元の位置（画面中央）に戻す
     handle.addEventListener('dblclick', (e) => {
-        if(e.target.closest('button')) return;
+        if(e.target.closest('button') || winMaxShown(panel)) return;
         resetPanelPosition(panel);
         showToast('パネルの位置を戻しました');
     });

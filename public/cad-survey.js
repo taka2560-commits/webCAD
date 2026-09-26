@@ -545,8 +545,8 @@ window.zoomToSurveyPoint = function(k) {
     render();
     const sv = wcsToSurvey(x, y);
     if(typeof showToast === 'function') showToast(`${p.name || '(名称なし)'}\nX ${formatSurveyNumber(sv.X)}  Y ${formatSurveyNumber(sv.Y)}`, 3000);
-    // スマホでは一覧が図面を隠すので閉じる（メニューからまた開ける）
-    if(window.innerWidth < 700) { const pp = document.getElementById('property-panel'); if(pp) pp.style.display = 'none'; }
+    // スマホ・画面いっぱいのときは一覧が図面を隠すので閉じる（メニューからまた開ける）
+    if(panelCoversDrawing()) { const pp = document.getElementById('property-panel'); if(pp) pp.style.display = 'none'; }
 };
 
 // ===== GNSS（現在地） =====

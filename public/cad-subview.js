@@ -2,6 +2,8 @@
 // cad-subview.js - 図面とは別の点の集まり（変換元の SIMA など）を、浮かぶ窓の中の小さな図面に表示する部品。
 //   窓: 今のフローティングパネルと同じく、見出しをつまんで動かす（位置を覚える・ダブルタップで戻す）。
 //       右下のつまみで大きさを変え、▁ でたたむ。スマホの縦画面では、最初は画面の下のほうに出し、たたむと下に寄せる。
+//       □ で画面いっぱい（パネルと同じ .win-max）・❐ で元の大きさ。見えていた範囲が、そのまま大きく見えるように倍率も合わせる。
+//       「全体」で点をすべて表示する（onFit）。
 //   中の図面: ホイール・2本指で拡大縮小、1本指・ドラッグで移動、タップで onTap（測量座標と画面の位置）。
 //   囲む: startShape('rect' | 'lasso', done) のあとの1回のドラッグで、四角・なぞった形を描き、done（測量座標の多角形）を呼ぶ。
 //   座標は測量座標（X＝北・Y＝東）。右が東、上が北（図面と同じ向き）。描くのは onDraw（g: 2D コンテキスト, api）。
@@ -15,8 +17,9 @@ function createSubView(opt) {
     el.className = 'subview glass-panel';
     el.style.display = 'none';
     el.innerHTML = '<div class="subview-head"><span class="subview-title"></span><span class="subview-btns">' +
-        '<button class="subview-btn" data-act="fit" title="全体を表示">⤢</button>' +
-        '<button class="subview-btn" data-act="fold" title="たたむ・広げる">▁</button>' +
+        '<button class="subview-btn subview-btn-txt" data-act="fit" title="全体を表示">全体</button>' +
+        '<button class="subview-btn" data-act="fold">▁</button>' +
+        '<button class="subview-btn" data-act="max">' + WIN_MAX_ICONS + '</button>' +
         '<button class="subview-btn" data-act="close" title="閉じる">✕</button></span></div>' +
         '<div class="subview-body"><canvas class="subview-canvas"></canvas><div class="subview-hint"></div><div class="subview-grip" title="大きさを変える"></div></div>';
     document.body.appendChild(el);
@@ -26,12 +29,15 @@ function createSubView(opt) {
     const v = { X: 0, Y: 0, s: 1 }; // 画面の中央の測量座標と、1単位あたりの画素数
     let drawPending = false;
     let shape = null; // 囲む操作 { kind, done, pts: 画面の点の列（描いている途中） }
+    let maxK = 1; // □ で広げたときに上げた倍率（❐ で戻すときに同じだけ下げる）
 
     const size = () => ({ w: body.clientWidth || cv.width || 320, h: body.clientHeight || cv.height || 240 });
+    const syncButtons = () => winSyncButtons(el.querySelector('[data-act="fold"]'), el.querySelector('[data-act="max"]'), api.collapsed, api.maximized);
     const api = {
         el, canvas: cv,
         isOpen: () => el.style.display !== 'none',
         get collapsed() { return el.classList.contains('collapsed'); },
+        get maximized() { return el.classList.contains('win-max'); },
         toScreen(X, Y) { const { w, h } = size(); return { x: w / 2 + (Y - v.Y) * v.s, y: h / 2 - (X - v.X) * v.s }; },
         toSurvey(sx, sy) { const { w, h } = size(); return { X: v.X - (sy - h / 2) / v.s, Y: v.Y + (sx - w / 2) / v.s }; },
         scale: () => v.s,
@@ -86,6 +92,27 @@ function createSubView(opt) {
                 delete el.dataset.dockFrom;
             }
             if(!on) api.redraw();
+            syncButtons();
+            api.fitPanel();
+        },
+        // □ 画面いっぱい・❐ 元の大きさ（たたんでいたら広げてから）。広げるときは、見えていた範囲がそのまま大きく見えるように倍率を上げ、
+        // 戻すときは上げた分だけ下げる（元の見え方に戻る）
+        setMaximized(on) {
+            on = !!on;
+            if(api.collapsed) api.setCollapsed(false);
+            if(on === api.maximized) return;
+            const a = size();
+            el.classList.toggle('win-max', on);
+            if(on) {
+                const b = size(), k = Math.min(b.w / a.w, b.h / a.h);
+                maxK = (k > 0 && isFinite(k)) ? k : 1;
+                el.style.zIndex = '100003'; // パネルより前に出す（触った窓を前に出すのと同じ）
+            }
+            v.s = Math.max(1e-6, Math.min(1e6, on ? v.s * maxK : v.s / maxK));
+            if(!on) maxK = 1;
+            syncButtons();
+            if(!on) applyPanelPosition(el); // 元の位置へ（広げているあいだに画面の大きさが変わっていたら、はみ出さない位置に）
+            api.redraw();
             api.fitPanel();
         },
         // (X, Y) を窓の真ん中に出す。minScale（1単位あたりの画素数）より小さく表示していれば、そこまで拡大する
@@ -127,8 +154,10 @@ function createSubView(opt) {
         const act = b.dataset.act;
         if(act === 'fit' && opt.onFit) opt.onFit();
         else if(act === 'fold') api.setCollapsed(!api.collapsed);
-        else if(act === 'close') api.close();
+        else if(act === 'max') api.setMaximized(!api.maximized);
+        else if(act === 'close') { if(api.maximized) api.setMaximized(false); api.close(); } // 次に開くときは、ふつうの大きさ
     }));
+    syncButtons();
     makePanelDraggable(el, head, opt.posKey);
 
     // 右下のつまみで大きさを変える（大きさは端末に覚える）

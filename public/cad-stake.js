@@ -134,7 +134,7 @@ window.stakeShowTarget = function() {
     if(view.scale < target) view.scale = target;
     _reanchorView(canvas.width / 2, canvas.height / 2, { x: t.x, y: t.y });
     render();
-    if(window.innerWidth < 700) hidePropertyPanel();
+    if(panelCoversDrawing()) hidePropertyPanel();
 };
 
 // ===== パネル =====
@@ -310,7 +310,7 @@ window.stakePlaceTable = function() {
     _cogoZoomTo(b.minX, Math.min(b.minY, b.maxY - r.height), b.maxX + h * 3 + r.width, b.maxY);
     addCommandLog(`-> 杭打ち表を置きました（${_stake.list.length}点、器械点 ${d.s.name || ''}・後視点 ${d.b.name || ''}）`);
     showToast('杭打ち表を置きました（移動で動かせます）', 3000);
-    if(window.innerWidth < 700) hidePropertyPanel();
+    if(panelCoversDrawing()) hidePropertyPanel();
 };
 window.stakeExportCsv = function() {
     const d = _stakeTsData();

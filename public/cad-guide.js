@@ -135,14 +135,16 @@ const GUIDE_TOURS = {
         onEnd: () => { const p = document.getElementById('osnap-panel'); if(p) p.style.display = 'none'; },
     },
     panel: {
-        title: 'パネルの移動', sample: false, screen: 'normal',
+        title: 'パネルの移動・たたむ・画面いっぱい', sample: false, screen: 'normal',
         steps: [
             { title: 'パネルを動かす', text: 'パネルの見出し（⠿ の帯）をつまんで、好きな場所へ動かせます。', target: '#property-panel-header',
                 onEnter: () => { if(typeof showOptionsPanel === 'function') showOptionsPanel(); _gPanelStart = _gPanelPos(); },
                 done: () => { const p = _gPanelPos(); return !!_gPanelStart && Math.hypot(p.x - _gPanelStart.x, p.y - _gPanelStart.y) > 20; } },
-            { title: '元の位置に戻す', text: '見出しをダブルタップすると、画面の中央に戻ります。置いた場所は次に開いたときも覚えています。', target: '#property-panel-header', next: 'おわる' },
+            { title: '元の位置に戻す', text: '見出しをダブルタップすると、画面の中央に戻ります。置いた場所は次に開いたときも覚えています。', target: '#property-panel-header', next: true },
+            { title: 'たたむ', text: '▁ で見出しだけにたたみます。図面を広く見たいときに使います。もう一度押すと広げます。', target: '#property-panel-min', next: true },
+            { title: '画面いっぱい', text: '□ で画面いっぱいに広げ、❐ で元の大きさに戻します。表や一覧を大きく見られます。\n別窓（変換の SIMA）の見出しにも ▁・□ があります。', target: '#property-panel-max', next: 'おわる' },
         ],
-        onEnd: () => { if(typeof hidePropertyPanel === 'function') hidePropertyPanel(); },
+        onEnd: () => { if(typeof closePropertyPanel === 'function') closePropertyPanel(); }, // たたむ・画面いっぱいも元に戻す
     },
     prefs: {
         title: '表示の設定', sample: false, screen: 'normal',

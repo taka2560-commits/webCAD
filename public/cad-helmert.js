@@ -333,7 +333,8 @@ window.helmSelectSource = function(i) {
     const v = _helmView(), sp = _helm.src.points[i];
     v.open();
     addCommandLog(`-> [変換] SIMA の点「${sp.name || sp.num}」を選びました。図面で同じ点をなぞって ☑確定`);
-    if(window.innerWidth < 700 && !v.collapsed) { v.setCollapsed(true); _helm.folded = true; } // スマホでは図面が見えるように別窓をたたむ（自分でたたんでいたら、そのまま）
+    // スマホ・画面いっぱいの別窓では、図面が見えるように別窓をたたむ（自分でたたんでいたら、そのまま）。指定が終わると広げ直す
+    if((window.innerWidth < 700 || v.maximized) && !v.collapsed) { v.setCollapsed(true); _helm.folded = true; }
     v.redraw();
     cogoPick('HT', 'helm');
     return true;
@@ -701,7 +702,7 @@ window.helmPlaceTable = function() {
     _cogoZoomTo(minX, maxY - t.height, maxX + h * 3 + t.width, maxY);
     addCommandLog('-> [変換] 結果の表を置きました');
     showToast('結果の表を置きました（移動で動かせます）', 3000);
-    if(window.innerWidth < 700) hidePropertyPanel(); // スマホでは置いた表を見せる
+    if(panelCoversDrawing()) hidePropertyPanel(); // スマホ・画面いっぱいのパネルでは置いた表を見せる
     return true;
 };
 

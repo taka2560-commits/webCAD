@@ -337,7 +337,7 @@ window.ulStartAlign = function() {
 };
 // 点の指定が終わった・やめたとき（cad-cogo-ui.js から）
 function _ulAfterPick() {
-    if(cogoIsPicking()) { if(window.innerWidth >= 700) _ulRender(); return; } // 指定の途中
+    if(cogoIsPicking()) { if(!panelCoversDrawing()) _ulRender(); return; } // 指定の途中
     const s = _cogo.slots;
     if(_ul.aligning && _ul.img && s.UA && s.UA2 && s.UB && s.UB2) {
         const r = ulAlignTwoPoints(_ul.img.T, s.UA, s.UA2, s.UB, s.UB2);

@@ -108,8 +108,11 @@ window.favRun = function(id) {
     const d = favDef(id);
     if(!d) return;
     try {
-        if(d.panel && _favPanelOpen(d.panel) && (!d.tab || _cogo.tab === d.tab)) hidePropertyPanel(); // 開いているパネルは閉じる
-        else if(typeof d.run === 'function') d.run();
+        if(d.panel && _favPanelOpen(d.panel) && (!d.tab || _cogo.tab === d.tab)) {
+            // 開いているパネルは閉じる（▁ でたたんでいたら広げる）
+            if(document.getElementById('property-panel').classList.contains('win-min')) setPropertyPanelMinimized(false);
+            else closePropertyPanel();
+        } else if(typeof d.run === 'function') d.run();
         else toggleCommand(d.id); // 左のツールバーと同じ（もう一度押すとやめる）
     } catch(e) {
         showToast(`「${d.label}」を始められませんでした: ${e.message}`, 3500);
