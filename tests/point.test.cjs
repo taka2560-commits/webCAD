@@ -1,6 +1,6 @@
 'use strict';
 // 点のコマンド（v5.23。cad-point.js・左のツールバーの「点」）とメニューボタンの絵のテスト:
-//   設定（点名の案・標高・まちがい）、マウス・座標の入力ではその場に置く、タッチは位置を決めて ☑確定、点名は次の番号（同じ点名は飛ばす）、
+//   設定（点名の案・標高・まちがい）、マウス・座標の入力・タッチはその場に置く（設定の窓が出たままでも）、点名は次の番号（同じ点名は飛ばす）、
 //   座標一覧に入る、「元に戻す」、置く前の印、コマンド PO、メニューボタンは「☰ メニュー」
 const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
@@ -63,6 +63,38 @@ describe('点のコマンド', () => {
         assert.match(app.eval(`document.getElementById('coord-list-rows').textContent`), /A1[\s\S]*A2/, '開いている一覧もすぐ新しくなる');
     });
 
+    it('「置き始める」を押さずに図面をタップしても、窓の点名・標高で置き、窓を閉じる（押す前のタップで点が入らなかった）', () => {
+        app.eval(`toggleCommand('POINT')`);
+        assert.equal(app.eval('cmdState.mode'), 'WAITING_POINT_PLACE', '始めから置く段階');
+        assert.equal(app.eval(`document.getElementById('property-panel').style.display`), 'flex');
+        app.eval(`document.getElementById('prop-point-name').value = 'T1'; document.getElementById('prop-point-z').value = '3.5'`);
+        app.eval('handlePointInput({ x: 5, y: 5 }, false)'); // タッチ
+        assert.deepEqual(points(), [['T1', 5, 5, 3.5]]);
+        assert.equal(app.eval(`document.getElementById('property-panel').style.display`), 'none');
+        app.eval('handlePointInput({ x: 8, y: 5 }, true)');
+        assert.deepEqual(points().map((p) => p[0]), ['T1', 'T2']);
+        // 窓の点名がまちがい（もうある）のときは置かずに、欄のそばに出す
+        app.eval(`resetCommand(); toggleCommand('POINT'); document.getElementById('prop-point-name').value = 'T1';`);
+        app.eval('handlePointInput({ x: 9, y: 9 }, false)');
+        assert.equal(points().length, 2);
+        assert.match(app.eval(`document.querySelector('.field-err').textContent`), /点名「T1」はもう図面にあります/);
+        // 窓を ✕ で閉じても、案の点名で置ける
+        app.eval('closePropertyPanel()');
+        app.eval('handlePointInput({ x: 10, y: 9 }, false)');
+        assert.deepEqual(points().map((p) => p[0]), ['T1', 'T2', 'T3']);
+        app.eval('resetCommand()');
+        assert.deepEqual(app.errors(), []);
+    });
+
+    it('マウスを動かさずに押しても（ペン・自動操作）、押した所に置く（前の位置・0,0 にしない）', () => {
+        start();
+        app.eval(`mouse.screenX = 0; mouse.screenY = 0; mouse.wcsX = 0; mouse.wcsY = 0; snapResult = null;
+            canvas.dispatchEvent(new MouseEvent('mousedown', { button: 0, clientX: 450, clientY: 250, bubbles: true }));`);
+        const w = app.val('screenToWcs(450, 250)');
+        assert.deepEqual(points(), [['P1', +w.x.toFixed(6), +w.y.toFixed(6), null]]);
+        assert.notDeepEqual([w.x, w.y], [0, 0]);
+    });
+
     it('同じ点名が図面にあれば飛ばす。設定のまちがいは欄のそばに。標高も入る。コマンド欄の PO と「X,Y」でも置ける', () => {
         start('K1');
         app.eval('handlePointInput({ x: 0, y: 0 }, true)');
@@ -72,7 +104,7 @@ describe('点のコマンド', () => {
         app.eval('resetCommand()');
         app.eval(`toggleCommand('POINT'); document.getElementById('prop-point-name').value = 'K1'; applyPointPreset();`);
         assert.match(app.eval(`document.querySelector('.field-err').textContent`), /点名「K1」はもう図面にあります.*案: K4/);
-        assert.equal(app.eval('cmdState.mode'), 'WAITING_POINT_PRESET');
+        assert.equal(app.eval(`document.getElementById('property-panel').style.display`), 'flex', 'まちがいのときは窓を閉じない');
         app.eval(`document.getElementById('prop-point-name').value = 'K9'; document.getElementById('prop-point-z').value = '12.5'; applyPointPreset();`);
         app.eval(`processCommand('100,200')`); // X＝北 100・Y＝東 200
         const p = points().find((q) => q[0] === 'K9');

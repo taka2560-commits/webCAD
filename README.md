@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.25（2026年9月27日リリース）**
+**現在のバージョン: v5.25.1（2026年9月27日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（579件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（581件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -262,6 +262,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
 
+* **2026-09-27: バージョン5.25.1（「点」を押してすぐタップしても座標一覧に入る）**
+  * 点のコマンドは始めから置く段階（WAITING_POINT_PLACE）。「点 作図設定」の窓が出ていれば、タップで窓の点名・標高を読んで置き、窓を閉じる（_ptReadPanel）。以前は「置き始める」を押す前のタップを何もせず、点が入らなかった。
+  * mousedown で押した所が mouse の位置と違えば、位置とスナップを計算し直す（mousemove の無いペン・自動操作で前の位置に置かない）。
 * **2026-09-27: バージョン5.25（点がすぐ座標一覧に載る・一覧から点を消す）** 🗑
   * 点のコマンドはタッチでも指を離した所にすぐ置く（v5.23 の「位置を決めて ☑確定」は、確定の前に終了・一覧を開くと点が入らず「座標一覧に載らない」ことがあった）。置く前の印（drawPointPreview）・pointConfirm を外した。
   * 座標一覧の行に 🗑（coordListDeletePoint。点と同じ gid の点名の文字もいっしょに消す・showUndoSnack）。_applyUndoSnapshot で開いている座標一覧も描き直す。

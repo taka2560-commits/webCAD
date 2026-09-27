@@ -45,6 +45,12 @@ function setupEventListeners() {
         if(Date.now() - lastTouchTime < 500) return; // タッチイベントに起因する疑似マウスイベントを無視
         if(e.button===1){mouse.isPanning=true;e.preventDefault();return;} // Middle click for panning
         if(e.button===0) {
+            // 動かさずに押したとき（ペン・自動操作などで mousemove が来ていない）も、押した所を使う（前の位置や 0,0 に置かない）
+            const r0 = canvas.getBoundingClientRect();
+            if(Math.abs(e.clientX - r0.left - mouse.screenX) > 1 || Math.abs(e.clientY - r0.top - mouse.screenY) > 1) {
+                updateMousePos(e);
+                snapResult = cmdState.mode !== 'IDLE' ? findSnap(mouse.screenX, mouse.screenY, mouse.wcsX, mouse.wcsY) : null;
+            }
             if (cmdState.mode === 'WAITING_TRIM' || cmdState.mode === 'WAITING_EXTEND') {
                 mouse.isTrimming = true;
                 cmdState.trimPath = [{x: mouse.wcsX, y: mouse.wcsY}];

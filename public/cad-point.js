@@ -1,7 +1,8 @@
 // ===== Web CAD 点（POINT コマンド） =====
 // cad-point.js - 図面をタップした所に測点を置き、座標一覧に入れる（左のツールバーの「点」・コマンド POINT / PO）
 //
-// ・初めに「点 作図設定」で最初の点名（次の番号の案が入る）と標高（空欄なら無し）を決め、「この点名で置き始める」
+// ・初めに「点 作図設定」の窓で最初の点名（次の番号の案が入る）と標高（空欄なら無し）を出す。窓が出たままでも図面をタップすれば、窓の点名で置く
+//   （v5.25 までは「この点名で置き始める」を押すまでタップを受け付けず、押さずにタップした点が入らなかった）
 // ・そのあとは、タップ（1本指でなぞるとルーペで狙える。指を離した所）・クリック・コマンド欄の「X,Y」で、その場に置く。
 //   （v5.23 はタッチを「位置を決めて ☑確定」にしていたが、確定の前に終了・座標一覧を開くと点が入らず「一覧に載らない」ことがあった。
 //    画面を動かすのは2本指なので、線分と同じくすぐ置き、まちがいは「↩ 元に戻す」で消す）。点名は P1 → P2 → … と自動で次の番号にする（同じ点名があれば飛ばす）。
@@ -31,29 +32,47 @@ function showPointPanel() {
     const html = `
         <div class="prop-row"><label for="prop-point-name">点名:</label><input type="text" id="prop-point-name" autocomplete="off" value="${escapeHtml(name)}" placeholder="例 P1"></div>
         <div class="prop-row"><label for="prop-point-z">標高${displayUnitTag('len')}:</label><input type="text" id="prop-point-z" inputmode="decimal" autocomplete="off" value="${_pt.z === null ? '' : _pt.z}" placeholder="なし"></div>
-        ${_cogoNote('タップした所に点を置き、座標一覧に入れます（スナップも効きます）。点名は置くたびに次の番号になります。まちがえて置いたら「↩ 元に戻す」で消せます。')}
-        <button class="prop-btn" onclick="applyPointPreset()">この点名で置き始める</button>`;
+        ${_cogoNote('図面をタップした所に、この点名で点を置き、座標一覧に入れます（この窓が出たままでも置けます。スナップも効きます）。点名は置くたびに次の番号になります。まちがえて置いたら「↩ 元に戻す」で消せます。')}
+        <button class="prop-btn" onclick="applyPointPreset()">この点名で置き始める（窓を閉じる）</button>`;
     showPropertyPanel('点 作図設定', html);
 }
-// 設定を決めて、置き始める
-window.applyPointPreset = function() {
+// 設定の欄を読む（まちがいは欄のそばに出して false）。欄が無ければ今の設定のまま true
+function _ptReadPanel() {
     const nEl = document.getElementById('prop-point-name'), zEl = document.getElementById('prop-point-z');
-    const name = nEl ? String(nEl.value).trim() : '';
-    if(nEl && !name) { fieldError(nEl, '点名を入れてください（例 P1）'); return; }
+    if(!nEl) return true;
+    const name = String(nEl.value).trim();
+    if(!name) { fieldError(nEl, '点名を入れてください（例 P1）'); return false; }
     const z = zEl ? fieldNum(zEl, { allowEmpty: true, what: '標高' }) : null;
-    if(z === undefined) return;
-    if(name && _ptNameTaken(name)) { fieldError(nEl, `点名「${name}」はもう図面にあります（別の点名にしてください。案: ${_ptFreeName(name)}）`); return; }
-    _pt.next = name || _ptSuggestName();
+    if(z === undefined) return false;
+    if(_ptNameTaken(name)) { fieldError(nEl, `点名「${name}」はもう図面にあります（別の点名にしてください。案: ${_ptFreeName(name)}）`); return false; }
+    _pt.next = name;
     _pt.z = (z === null) ? null : fromDisplayUnit(z, 'len');
+    return true;
+}
+// 設定を決めて、置き始める（設定の窓を閉じる）
+window.applyPointPreset = function() {
+    if(!_ptReadPanel()) return;
     hidePropertyPanel();
+    _ptStartPlacing();
+};
+// 置く段階にする（下のバーは「終了」だけ）
+function _ptStartPlacing() {
     cmdState.mode = 'WAITING_POINT_PLACE';
-    if(typeof showActionbarControls === 'function') showActionbarControls({ hideConfirm: true }); // 「終了」だけ
+    if(typeof showActionbarControls === 'function') showActionbarControls({ hideConfirm: true });
     _ptPrompt();
     addCommandLog(`-> [点] 点を置く位置をタップ（点名 ${_pt.next} から）`);
-};
+}
 function _ptPrompt() { setPrompt(`点を置く位置をタップ（次の点名 ${_pt.next}）→ 終わるときは「終了」`); }
 // 点の位置の入力（cad-command.js の _handlePointInputCore から）。タップ（指を離した所）・クリック・コマンド欄の「X,Y」で、その場に置く
-function pointInput(wcs) { pointPlaceAt(wcs); }
+// 「点 作図設定」の窓が出たままでも、図面をタップすれば窓の点名・標高で置く（v5.25 までは「置き始める」を押す前のタップは何もせず、点が入らなかった）
+function pointInput(wcs) {
+    const panel = document.getElementById('property-panel');
+    if(document.getElementById('prop-point-name') && panel && panel.style.display !== 'none') {
+        if(!_ptReadPanel()) return;
+        hidePropertyPanel();
+    }
+    pointPlaceAt(wcs);
+}
 
 // 図面にまだ点名が無いときの点名の文字の高さ: 今の画面で約14px になる高さを、きりのよい値（1・2・5 の10のべき）に丸める
 function _ptLabelHeight() {
@@ -82,9 +101,9 @@ function processPointCommand(cmd) {
     resetCommand();
     setActiveTool('POINT');
     activeCommandName = 'POINT';
-    cmdState.mode = 'WAITING_POINT_PRESET';
-    setPrompt('点名を決めて「この点名で置き始める」');
-    addCommandLog('-> [点] 点名・標高を決めて置き始めます');
     showPointPanel();
+    const nEl = document.getElementById('prop-point-name');
+    _pt.next = nEl ? nEl.value : _ptSuggestName();
+    _ptStartPlacing(); // 設定の窓が出ていても、図面をタップすればすぐ置ける（ほかの作図と同じ）
     return true;
 }
