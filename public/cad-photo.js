@@ -169,22 +169,23 @@ window.photoAddFile = function(camera) {
 async function photoAddFiles(files) {
     const p = _phPinById(_ph.editing);
     if(!p) return 0;
-    let n = 0;
-    for(const f of files) {
+    let n = 0, failed = 0;
+    if(files.length > 1) busyStart(`写真を追加しています（${files.length}枚）…`);
+    try { for(const f of files) {
         try {
             const r = await photoShrink(f);
             const key = _phNewKey();
             await photoSave(key, Object.assign(r, { name: f.name || '', time: new Date().toISOString() }));
             p.photos.push(key);
             n++;
-        } catch(e) { showToast('写真を追加できませんでした: ' + e.message, 4000); }
-    }
+        } catch(e) { failed++; addCommandLog(`注意: 写真を追加できませんでした（${f.name || ''}）: ${e.message}`); if(files.length === 1) showToast('写真を追加できませんでした: ' + e.message, { kind: 'error', ms: 4000 }); }
+    } } finally { if(files.length > 1) busyEnd(); }
     if(n) {
         if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
         addCommandLog(`-> 写真を ${n}枚 追加しました（ピン ${photoPins().indexOf(p) + 1}）`);
-        showToast(`写真を ${n}枚 追加しました`, 2000);
+        showToast(`写真を ${n}枚 追加しました` + (failed ? `（${failed}枚は追加できませんでした）` : ''), { kind: failed ? 'warn' : 'success', ms: failed ? 4500 : 2000 });
         render();
-    }
+    } else if(failed > 1) showToast(`写真を追加できませんでした（${failed}枚）`, { kind: 'error', ms: 4000 });
     if(_ph.editing === p.id && _phPanelOpen()) _phRenderThumbs(p);
     return n;
 }
@@ -309,12 +310,13 @@ let _phLedgerBusy = false;
 window.photoLedgerPdf = async function() {
     if(_phLedgerBusy) { showToast('写真台帳を作っています…', 1500); return null; }
     _phLedgerBusy = true;
-    try { return await _photoLedgerPdf(); }
+    busyStart('写真台帳を作っています…');
+    try { await busyPaint(); return await _photoLedgerPdf(); }
     catch(err) {
         addCommandLog('エラー: 写真台帳を作れませんでした');
         if(window.cadErrors) window.cadErrors.record('photo', '写真台帳を作れませんでした: ' + ((err && err.message) || err), err && err.stack);
         return null;
-    } finally { _phLedgerBusy = false; }
+    } finally { _phLedgerBusy = false; busyEnd(); }
 };
 async function _photoLedgerPdf() {
     const pins = photoPins();

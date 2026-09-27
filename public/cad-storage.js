@@ -194,7 +194,10 @@ function scheduleAutoSave() {
     clearTimeout(_autoSaveTimer);
     const wait = Math.max(0, Math.min(AUTOSAVE_DEBOUNCE_MS, _firstUnsavedAt + AUTOSAVE_MAX_WAIT_MS - now));
     _autoSaveTimer = setTimeout(() => { _autoSaveTimer = null; _doAutoSave(); }, wait);
+    // 変更の前（saveUndo の中）に呼ばれることが多いので、変更が済んでから印を合わせる
+    clearTimeout(_saveMarkTimer); _saveMarkTimer = setTimeout(_syncSaveMark, 0);
 }
+let _saveMarkTimer = null;
 
 function _hasUnsavedChanges() { return _changeSeq !== _savedSeq; }
 // 名前付きプロジェクトとして保存していない変更があるか
@@ -286,17 +289,22 @@ window.getStorageStatus = async function() {
     return st;
 };
 
-function _updateAutoSaveStatus(status) {
-    const el = document.getElementById('autosave-status');
-    if (!el) return;
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    const ss = String(now.getSeconds()).padStart(2, '0');
-    el.textContent = `💾 ${status} ${hh}:${mm}:${ss}`;
-    el.style.color = status === 'エラー' ? '#ff6b6b' : '#00ff88';
-    // 5秒後に薄くする
-    setTimeout(() => { if (el) el.style.color = '#666'; }, 5000);
+// 💾 の右上に、名前を付けて保存していない変更がある印（黄色の点）を付ける。
+// 以前は自動保存の知らせ（#autosave-status）を書く先が無く、保存の状態がどこにも出ていなかった
+function _syncSaveMark() {
+    const b = document.getElementById('btn-save');
+    if (!b) return;
+    const unsaved = _hasUnsavedProjectChanges();
+    b.classList.toggle('unsaved', unsaved);
+    const t = unsaved ? '保存（まだ保存していない変更があります）' : (_currentProjectName ? `保存（「${_currentProjectName}」に保存済み）` : '保存');
+    b.title = t;
+    b.setAttribute('aria-label', t);
+}
+_syncSaveMark(); // 起動したときの印
+// 自動保存が済んだ・失敗したとき（オプション画面を開いていれば、自動保存の欄も新しくする）
+function _updateAutoSaveStatus() {
+    _syncSaveMark();
+    if (document.getElementById('opt-autosave-status') && typeof refreshOfflineStatus === 'function') refreshOfflineStatus();
 }
 
 // ===== 手動保存（名前付きプロジェクト） =====
@@ -317,9 +325,10 @@ window.saveProject = async function(nameOverride) {
         await _dbPut(STORE_PROJECTS, undefined, data);
         _currentProjectName = name;
         _projectSavedSeq = _changeSeq;
+        _syncSaveMark();
         _requestPersistentStorage();
         addCommandLog(`-> プロジェクト「${name}」を保存しました (${entities.length}図形)`);
-        if (typeof showToast === 'function') showToast(`「${name}」を保存しました`, 2500);
+        if (typeof showToast === 'function') showToast(`「${name}」を保存しました`, { kind: 'success', ms: 2500 });
         if (typeof motionSuccess === 'function') motionSuccess(document.getElementById('btn-save')); // UIの動き（試用）: 保存のボタンに ✓
         _updateAutoSaveStatus('手動保存');
         // タイトル更新
@@ -337,6 +346,7 @@ window.saveProject = async function(nameOverride) {
 window.setCurrentProjectName = function(name) {
     _currentProjectName = name || null;
     _projectSavedSeq = _changeSeq;
+    _syncSaveMark();
     document.title = name ? `${name} - WebCAD` : 'Web CAD';
 };
 
@@ -346,6 +356,7 @@ window.restoreProjectState = function(s) {
     if (!s) return;
     _currentProjectName = s.name || null;
     _projectSavedSeq = s.savedSeq;
+    _syncSaveMark();
     document.title = _currentProjectName ? `${_currentProjectName} - WebCAD` : 'Web CAD';
 };
 
@@ -450,6 +461,7 @@ window.loadProjectFromList = async function(name) {
         if (data && applyProjectData(data)) {
             _currentProjectName = name;
             _projectSavedSeq = _changeSeq;
+            _syncSaveMark();
             if (typeof setDrawingName === 'function' && data.drawingName) setDrawingName(data.drawingName);
             document.title = `${name} - WebCAD`;
             notify(`-> プロジェクト「${name}」を開きました (${entities.length}図形)`, { kind: 'success', ms: 2500 });
@@ -471,6 +483,7 @@ window.deleteProjectFromList = async function(name) {
         if (_currentProjectName === name) {
             _currentProjectName = null;
             document.title = 'WebCAD';
+            _syncSaveMark();
         }
         // リスト更新
         window.showProjectList();

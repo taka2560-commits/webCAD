@@ -7,8 +7,14 @@ function _cleanCadMtext(s) { return (typeof parseCadText === 'function') ? parse
 
 // ===== DXF読み込み =====
 function loadDxfFile(file) {
+    busyStart('DXF を読み込み中…');
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onerror = () => { busyEnd(); reportImportFailure('DXF', file.name, reader.error || new Error('ファイルを読めません')); };
+    reader.onload = async (e) => { try { await busyPaint(); _loadDxfBuffer(file, e); } finally { busyEnd(); } };
+    reader.readAsArrayBuffer(file);
+}
+function _loadDxfBuffer(file, e) {
+    {
         const buffer = e.target.result;
         const bytes = new Uint8Array(buffer);
 
@@ -55,8 +61,7 @@ function loadDxfFile(file) {
             reportImportFailure('DXF', file.name, err);
             console.error('DXFパースエラー:', err);
         }
-    };
-    reader.readAsArrayBuffer(file);
+    }
 }
 
 // ===== 取り込みオプション =====
@@ -799,6 +804,7 @@ function exportDxf() {
 
 // ===== DWG読み込み（libredwg-web ラッパークラス版） =====
 async function loadDwgFile(file) {
+    busyStart('DWG を読み込み中…');
     addCommandLog(`DWGファイルを解析中: ${file.name}...`);
     addCommandLog('  libredwg-web を初期化しています...');
 
@@ -810,7 +816,8 @@ async function loadDwgFile(file) {
         const magic = String.fromCharCode(fileBytes[0], fileBytes[1], fileBytes[2], fileBytes[3]);
         if(magic !== 'AC10') {
             addCommandLog('エラー: DWGファイルの形式が不正です');
-            if(typeof showToast === 'function') showToast('DWGファイルの形式が不正です（中身がDWGではありません）', 5000);
+            if(typeof _restoreAfterFailedImport === 'function') _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
+            if(typeof showToast === 'function') showToast('DWGファイルの形式が不正です（中身がDWGではありません）', { kind: 'error', ms: 5000 });
             return;
         }
         const verStr = String.fromCharCode(...fileBytes.slice(0, 6));
@@ -821,7 +828,7 @@ async function loadDwgFile(file) {
         let LibreDwg;
         try {
             if(typeof window.loadLibreDwg !== 'function') throw new Error('DWG読込エンジンの読み込み口がありません。ページを再読み込みしてください');
-            if(typeof showToast === 'function') showToast('DWG読込エンジンを準備中…', 2500);
+            await busyStep('  DWG の読込エンジンを準備中…');
             const mod = await window.loadLibreDwg();
             LibreDwg = mod.LibreDwg;
         } catch(importErr) {
@@ -832,15 +839,15 @@ async function loadDwgFile(file) {
             throw importErr;
         }
 
-        addCommandLog('  WASMモジュールを作成中...');
+        await busyStep('  DWG の読込エンジンを起動中…');
         // WASM はモジュールに埋め込み済みのため、取得先の指定なしで生成する
         const libredwg = await LibreDwg.create();
 
-        addCommandLog('  DWGデータを展開中...');
+        await busyStep('  DWG のデータを展開中…');
         // 0 = Dwg_File_Type.DWG
         const dwg = libredwg.dwg_read_data(fileBytes, 0);
 
-        addCommandLog('  エンティティをJSオブジェクトに変換中...');
+        await busyStep('  図形に変換中…');
         const db = libredwg.convert(dwg);
 
         // C側のメモリ解放
@@ -849,7 +856,8 @@ async function loadDwgFile(file) {
         if(!db || !db.entities || db.entities.length === 0) {
             addCommandLog('注意: エンティティを検出できませんでした。');
             addCommandLog('ヒント: DXF形式に変換して読み込むこともできます。');
-            if(typeof showToast === 'function') showToast('DWGから図形を読み取れませんでした\n（ファイル破損または未対応の形式）。DXFに変換して開いてください', 6000);
+            if(typeof _restoreAfterFailedImport === 'function') _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
+            if(typeof showToast === 'function') showToast('DWGから図形を読み取れませんでした\n（ファイル破損または未対応の形式）。DXFに変換して開いてください', { kind: 'error', ms: 6000 });
             return;
         }
 
@@ -858,7 +866,8 @@ async function loadDwgFile(file) {
 
         if(importResult.entities.length === 0) {
             addCommandLog('注意: 対応する図形が見つかりませんでした。');
-            if(typeof showToast === 'function') showToast('DWG内に表示できる図形が見つかりませんでした', 5000);
+            if(typeof _restoreAfterFailedImport === 'function') _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
+            if(typeof showToast === 'function') showToast('DWG内に表示できる図形が見つかりませんでした', { kind: 'error', ms: 5000 });
             return;
         }
 
@@ -878,7 +887,8 @@ async function loadDwgFile(file) {
         const unitNote = applyFileUnit(db.header && db.header.INSUNITS, 'DWG');
         if(unitNote) addCommandLog('-> ' + unitNote);
         zoomExtents(); render();
-        if(typeof showToast === 'function') showToast(`読み込み完了: ${importResult.entities.length}個の図形` + (unitNote ? '\n' + unitNote : ''), unitNote ? 7000 : 4000);
+        const skipNote = importResult.warnings.length ? `\n（読めなかったものが ${importResult.warnings.length}件あります。詳しくはコマンド欄）` : '';
+        if(typeof showToast === 'function') showToast(`読み込み完了: ${importResult.entities.length}個の図形` + (unitNote ? '\n' + unitNote : '') + skipNote, { kind: skipNote ? 'warn' : 'success', ms: (unitNote || skipNote) ? 7000 : 4000 });
         if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 
     } catch(err) {
@@ -886,7 +896,7 @@ async function loadDwgFile(file) {
         reportImportFailure('DWG', file.name, err);
         addCommandLog('ヒント: DXF形式に変換して読み込むこともできます。');
         console.error('DWGパースエラー:', err);
-    }
+    } finally { busyEnd(); }
 }
 
 // ===== LibreDwg DwgDatabase からアプリ用エンティティへの変換 =====

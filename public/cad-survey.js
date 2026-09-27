@@ -182,7 +182,8 @@ async function loadSimaFile(file) {
         const data = parseSima(dec.text);
         if(!data.points.length) {
             addCommandLog('注意: 座標データ（A01）が見つかりませんでした');
-            if(typeof showToast === 'function') showToast('SIMAファイルに座標データ（A01）が見つかりませんでした', 5000);
+            if(typeof _restoreAfterFailedImport === 'function') _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
+            if(typeof showToast === 'function') showToast('SIMAファイルに座標データ（A01）が見つかりませんでした', { kind: 'error', ms: 5000 });
             return null;
         }
         const r = addSurveyData(data.points, data.lots);
@@ -259,7 +260,8 @@ async function loadCoordCsvFile(file) {
         const dec = await _readTextFile(file);
         const data = parseCoordCsv(dec.text);
         if(!data.points.length) {
-            if(typeof showToast === 'function') showToast('座標を読み取れませんでした。\n「点名,X,Y,標高」または「点番号,点名,X,Y,標高」の並びにしてください', 6000);
+            if(typeof _restoreAfterFailedImport === 'function') _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
+            if(typeof showToast === 'function') showToast('座標を読み取れませんでした。\n「点名,X,Y,標高」または「点番号,点名,X,Y,標高」の並びにしてください', { kind: 'error', ms: 6000 });
             addCommandLog('注意: 座標を読み取れませんでした');
             return null;
         }

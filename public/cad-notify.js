@@ -71,3 +71,78 @@ function notify(msg, opt) {
     const area = document.getElementById('command-line-area');
     if(!area || area.classList.contains('collapsed')) showToast(String(msg).replace(/^-> /, ''), opt);
 }
+
+// ===== 処理中の印（v5.20） =====
+// 時間のかかる処理（読み込み・PDF・TS への送信）のあいだ、画面の上に「回る印＋何をしているか」を出す。
+// 重い処理は画面を止めてしまうので、印を出したら busyPaint() で一度画面を描かせてから始める（回る印は CSS の transform なので、止まっていても回って見える）
+const _busyTexts = []; // 重なったときは、閉じると前の文に戻す
+let _busyDepth = 0;
+function busyStart(text) {
+    _busyDepth++;
+    _busyTexts.push(text);
+    _busySet(text);
+}
+function _busySet(text) {
+    let b = document.getElementById('cad-busy');
+    if(!b) {
+        b = document.createElement('div');
+        b.id = 'cad-busy';
+        b.setAttribute('role', 'status');
+        b.setAttribute('aria-live', 'polite');
+        b.innerHTML = '<span class="bz-spin" aria-hidden="true"></span><span class="bz-text"></span>';
+        document.body.appendChild(b);
+    }
+    b.querySelector('.bz-text').textContent = String(text || '処理中…').trim();
+    b.classList.add('show');
+    document.body.setAttribute('aria-busy', 'true');
+}
+// 段階を変える（コマンド欄の記録にも書く）。そのあと一度画面を描かせる
+async function busyStep(text) {
+    addCommandLog(text);
+    if(_busyDepth) { _busyTexts[_busyTexts.length - 1] = text; _busySet(text); }
+    await busyPaint();
+}
+function busyEnd() {
+    _busyDepth = Math.max(0, _busyDepth - 1);
+    _busyTexts.pop();
+    if(_busyDepth) { _busySet(_busyTexts[_busyTexts.length - 1]); return; }
+    const b = document.getElementById('cad-busy');
+    if(b) b.classList.remove('show');
+    document.body.removeAttribute('aria-busy');
+}
+function busyActive() { return _busyDepth > 0; }
+// 一度画面を描かせる（裏にあるタブでは requestAnimationFrame が来ないので、時間でも進める）
+function busyPaint() {
+    return new Promise((resolve) => {
+        let done = false;
+        const fin = () => { if(!done) { done = true; resolve(); } };
+        if(typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(fin, 0));
+        setTimeout(fin, 50);
+    });
+}
+// fn のあいだ処理中の印を出す
+async function withBusy(text, fn) {
+    busyStart(text);
+    try { await busyPaint(); return await fn(); } finally { busyEnd(); }
+}
+
+// ===== オフラインの印（v5.20） =====
+// 電波が無いときは上のバーの下に「📴 オフライン」を出す（押すと説明）。切れた・戻ったときはお知らせでも知らせる
+function netSync(announce) {
+    const off = (typeof navigator !== 'undefined' && navigator.onLine === false);
+    document.body.classList.toggle('offline', off);
+    let p = document.getElementById('net-pill');
+    if(off && !p) {
+        p = document.createElement('button');
+        p.id = 'net-pill';
+        p.type = 'button';
+        p.textContent = '📴 オフライン';
+        p.onclick = () => showToast('インターネットにつながっていません。図面の作図・保存と、端末に保存した地図・読込エンジンは使えます。つながると、地図を読み直します', { kind: 'warn', ms: 6000 });
+        document.body.appendChild(p);
+    }
+    if(p) p.style.display = off ? '' : 'none';
+    if(announce) showToast(off ? 'オフラインになりました（作図・保存と、端末に保存した地図は使えます）' : 'インターネットにつながりました', { kind: off ? 'warn' : 'success', ms: 3500 });
+}
+window.addEventListener('offline', () => netSync(true));
+window.addEventListener('online', () => netSync(true));
+netSync(false);

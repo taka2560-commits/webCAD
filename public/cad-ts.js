@@ -170,8 +170,10 @@ window.tsConnect = async function() {
     let port;
     try { port = await navigator.serial.requestPort(); }
     catch(e) { if(e && e.name !== 'NotFoundError') showToast('機械を選べませんでした: ' + e.message, 4000); return; } // NotFoundError は選ぶのをやめたとき
+    busyStart('機械とつないでいます…');
     try { await port.open({ baudRate: o.baudRate, dataBits: o.dataBits, parity: o.parity, stopBits: o.stopBits, flowControl: 'none', bufferSize: 4096 }); }
-    catch(e) { showToast('ポートを開けませんでした（ほかのアプリが使っていないか確かめてください）: ' + e.message, 5000); return; }
+    catch(e) { showToast('ポートを開けませんでした（ほかのアプリが使っていないか確かめてください）: ' + e.message, { kind: 'error', ms: 5000 }); return; }
+    finally { busyEnd(); }
     _ts.port = port; _ts.xoff = false; _ts.buf = ''; _ts.rxBytes = 0; _ts.rxLines = 0;
     if(port.addEventListener) port.addEventListener('disconnect', _tsOnLost);
     addCommandLog('-> TS とつながりました');
@@ -406,6 +408,7 @@ window.tsSendPoints = async function() {
     if(!(await cadConfirm({ title: 'TS へ送る（SDR33）', message: `${selected ? '選んだ' : 'すべての'}測点 ${pts.length}点を SDR33 で機械へ送ります。\n機械を「既知点 → 外部入力 → S タイプ → SD」で待ち受けにしてから「送る」を押してください。`, ok: '送る' }))) return;
     const r = buildSdr33Records(pts, { job: _baseName().replace(/[^\x20-\x7e]/g, '').slice(0, 16) || 'WEBCAD' });
     _ts.sending = true;
+    busyStart(`測点 ${pts.length}点を送っています…`);
     try {
         await _tsWrite(sdrCommsText(r.lines));
         const note = r.renamed.length ? `（点名を使えない ${r.renamed.length}点は P0001 などにしました）` : '';
@@ -413,8 +416,8 @@ window.tsSendPoints = async function() {
         showToast(`測点 ${pts.length}点を送りました${note ? '\n' + note : ''}`, 3500);
     } catch(e) {
         addCommandLog('-> TS への送信に失敗: ' + e.message);
-        showToast('送れませんでした: ' + e.message, 5000);
-    } finally { _ts.sending = false; }
+        showToast('送れませんでした: ' + e.message, { kind: 'error', ms: 5000 });
+    } finally { _ts.sending = false; busyEnd(); }
 };
 
 // ===== SIMA を機械へ送る（T タイプの「既知点 → 外部入力 → APA-SIMA（座標）」） =====
@@ -434,6 +437,7 @@ async function tsSendSimaLines(lines, pointCount, what) {
     if(!_ts.port || !_ts.port.writable || _ts.sending) return false;
     if(!(await cadConfirm({ title: 'TS へ送る（SIMA）', message: `${what || ''}測点 ${pointCount}点を SIMA（APA-SIMA の座標）で機械へ送ります。\n機械を「既知点 → 外部入力 → APA-SIMA（座標）」で待ち受けにしてから「送る」を押してください。`, ok: '送る' }))) return false;
     _ts.sending = true;
+    busyStart(`SIMA で測点 ${pointCount}点を送っています…`);
     try {
         await _tsSendLines(lines);
         addCommandLog(`-> TS へ SIMA で${what || ''}測点 ${pointCount}点を送りました`);
@@ -441,9 +445,9 @@ async function tsSendSimaLines(lines, pointCount, what) {
         return true;
     } catch(e) {
         addCommandLog('-> TS への送信に失敗: ' + e.message);
-        showToast('送れませんでした: ' + e.message, 6000);
+        showToast('送れませんでした: ' + e.message, { kind: 'error', ms: 6000 });
         return false;
-    } finally { _ts.sending = false; _ts.sendNote = ''; _tsScheduleUi(); }
+    } finally { _ts.sending = false; _ts.sendNote = ''; _tsScheduleUi(); busyEnd(); }
 }
 // 行を1行ずつ送る（Shift-JIS・CR LF）。ACK のやり取りをするときは、1行ごとに機械の ACK を待ち、NAK なら送り直す（3回まで）
 async function _tsSendLines(lines) {

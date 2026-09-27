@@ -367,6 +367,22 @@
         #cad-snack:not(.show) button { pointer-events:none; }
         #cad-snack .sn-act { padding:0 14px; background:rgba(var(--brand-rgb),0.14); border:1px solid rgba(var(--brand-rgb),0.55); color:var(--brand); }
         #cad-snack .sn-x { width:38px; padding:0; background:none; border:1px solid var(--border-1); color:#aaa; }
+        /* 処理中の印（cad-notify.js の busyStart。読み込み・PDF・TS への送信のあいだ） */
+        #cad-busy { position:fixed; left:0; right:0; margin:0 auto; width:fit-content; max-width:90vw; box-sizing:border-box; top:calc(24px + 44px * var(--btn-k, 1) + 56px); z-index:1000002;
+            display:flex; align-items:center; gap:10px; padding:8px 14px; border-radius:20px; background:rgba(var(--float-rgb),0.95); border:1px solid rgba(var(--brand-rgb),0.45);
+            color:#e0e0e0; font:600 13px 'Segoe UI',sans-serif; box-shadow:0 6px 20px rgba(0,0,0,0.5); opacity:0; pointer-events:none; transition:opacity .15s; }
+        #cad-busy.show { opacity:1; }
+        #cad-busy .bz-spin { flex-shrink:0; width:16px; height:16px; box-sizing:border-box; border-radius:50%; border:2.5px solid rgba(var(--brand-rgb),0.25); border-top-color:var(--brand); animation:bzSpin 0.8s linear infinite; }
+        @keyframes bzSpin { to { transform:rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { #cad-busy .bz-spin { animation-duration:1.6s; } } /* 動きを減らす設定でも、止まっていないことは分かるように遅く回す */
+        /* オフラインの印（上のバーの下・右。押すと説明） */
+        #net-pill { position:fixed; right:10px; top:calc(16px + 44px * var(--btn-k, 1)); z-index:25; height:28px; padding:0 10px; border-radius:14px; cursor:pointer;
+            background:rgba(var(--float-rgb),0.92); border:1px solid rgba(255,204,0,0.6); color:#ffcc00; font:700 11px 'Segoe UI',sans-serif; }
+        /* 未保存の変更がある印（💾 の右上の黄色の点。cad-storage.js の _syncSaveMark） */
+        #btn-save { position:relative; }
+        #btn-save.unsaved::after { content:''; position:absolute; top:2px; right:2px; width:8px; height:8px; border-radius:50%; background:#ffcc00; box-shadow:0 0 0 2px rgba(var(--float-rgb),1); }
+        /* 押せないボタン（押せるボタンと見分けられるように薄く） */
+        .prop-btn:disabled, .sel-btn:disabled, .top-btn:disabled, .menu-item-btn:disabled, .status-btn:disabled { opacity:0.42; cursor:not-allowed; filter:saturate(0.5); }
         /* 確認画面（cad-dialog.js。ブラウザの confirm・prompt の代わり） */
         #cad-dialog { position:fixed; inset:0; z-index:1000010; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,0.55); }
         #cad-dialog.show { display:flex; }

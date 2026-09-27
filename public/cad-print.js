@@ -388,6 +388,7 @@ let _printBusy = false;
 window.printMakePdf = async function(openIt) {
     if(_printBusy) { showToast('PDF を作っています…', 1500); return null; }
     _printBusy = true;
+    busyStart('PDF を作っています…');
     let win = null;
     try { return await _printMakePdf(openIt, (w) => { win = w; }); }
     catch(err) {
@@ -395,7 +396,7 @@ window.printMakePdf = async function(openIt) {
         addCommandLog('エラー: PDF を作れませんでした');
         if(window.cadErrors) window.cadErrors.record('print', 'PDF を作れませんでした: ' + ((err && err.message) || err), err && err.stack);
         return null;
-    } finally { _printBusy = false; }
+    } finally { _printBusy = false; busyEnd(); }
 };
 async function _printMakePdf(openIt, gotWin) {
     const o = printOpts();
@@ -403,6 +404,7 @@ async function _printMakePdf(openIt, gotWin) {
     // 開いて印刷: 押した操作のうちに窓を開いておく（あとから開くと止められることがある）
     const win = openIt ? window.open('', '_blank') : null;
     gotWin(win);
+    await busyPaint(); // 窓を開いてから（あとで開くと止められることがある）、処理中の印を描かせる
     const center = screenToWcs(canvas.width / 2, canvas.height / 2);
     const d = new Date();
     const page = printCompose(o, center, view.rotation || 0, { title, author: o.author || '', date: `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日` });

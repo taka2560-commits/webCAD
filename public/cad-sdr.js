@@ -257,7 +257,8 @@ async function loadSdrFile(file) {
         const r = parseSdr(dec.text);
         if(!r.points.length) {
             addCommandLog('注意: 座標・観測の記録（02・08・09）が見つかりませんでした');
-            if(typeof showToast === 'function') showToast('SDR ファイルに点の記録（器械点・既知点・観測）が見つかりませんでした', 5000);
+            if(typeof _restoreAfterFailedImport === 'function') _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
+            if(typeof showToast === 'function') showToast('SDR ファイルに点の記録（器械点・既知点・観測）が見つかりませんでした', { kind: 'error', ms: 5000 });
             return null;
         }
         const n = sdrAddToDrawing(r);

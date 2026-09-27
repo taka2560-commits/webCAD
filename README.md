@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.19（2026年9月27日リリース）**
+**現在のバージョン: v5.20（2026年9月27日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -32,6 +32,7 @@
 - **👁 画層一括管理（v5.17）** — 上のバーの 👁
   - うっすら表示の濃さのスライダー（5〜70%・端末に覚える）。画層の色を一覧の色の四角から変える。□ で画面いっぱいにすると、一覧を大きな行で何列かに並べる。
   - 👆 タッチで非表示は、タップで「消す候補」（赤く光る・もう一度で外す）にし、☑確定（または Enter）でまとめて非表示（押し間違い・なぞっただけで消えない）。
+- **⏳ 処理中・保存・オフライン（v5.20）** — 読み込み・PDF・TS への送信のあいだは「回る印＋何をしているか」。💾 に未保存の黄色い点。電波が無いときは「📴 オフライン」。
 - **💬 お知らせと確認画面（v5.19）** — 確認はアプリの中の画面（大きなボタン・危ない操作は赤・Esc で閉じる）。ファイルを開くときは「置き換える／今の図面に追加／やめる」。削除のあとは「↩ 元に戻す」つきのお知らせ。お知らせに ✓ ⚠ ✕ の種類。
 - **🎨 デザイン色（v5.18）** — オプションの「表示・操作」の「デザイン色」
   - 標準（今までの色）と、UI 配色チートシートの暗い配色5つ（GOLD STANDARD・ELECTRIC BLUE・MINT TERMINAL・ULTRAVIOLET・LIME SYSTEM）から選ぶ。見本を押すとすぐ変わり、端末に覚える（起動のときから色がちらつかない。スマホのアドレスバーの色も合わせる）。
@@ -199,7 +200,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（545件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（552件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -256,6 +257,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-09-27: バージョン5.20（処理中・保存・オフラインの表示）** ⏳
+  * cad-notify.js に処理中の印（busyStart・busyStep・busyEnd・withBusy。重い処理の前に busyPaint で一度描く）とオフラインの印（netSync・#net-pill）。DXF・DWG・印刷 PDF・写真台帳・写真の追加・TS の接続/送信で出す。
+  * 💾 の未保存の印（cad-storage.js の _syncSaveMark。使われていなかった #autosave-status の代わり）。押せないボタンの見た目。DWG の読めなかったもの・写真の追加できなかった枚数をお知らせに。置き換えで開いたファイルに図形・点が無かったときも元の図面に戻す。
 
 * **2026-09-27: バージョン5.19（お知らせと確認画面）** 💬
   * cad-dialog.js: アプリの確認画面（cadConfirm・cadPrompt・cadChoose。Promise と、答えで呼ぶ cb）。ブラウザの confirm・prompt・alert をすべて置き換えた（cad-errors.js のコピーの予備だけ残す）。読み込みは「置き換える／今の図面に追加／やめる」。テストは window.__cadNativeDialogs で今までどおり window.confirm・prompt で答える。
