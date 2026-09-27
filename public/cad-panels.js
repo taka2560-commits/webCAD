@@ -549,6 +549,8 @@ function _propNum(v, kind, autoDigits) {
 // プロパティ欄で座標・長さとして入れる項目（入れた数は表示の単位なので、図面の単位に直す）
 const PROP_COORD_KEYS = ['x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy'];
 const PROP_LENGTH_KEYS = ['radius', 'rx', 'ry', 'height'];
+// 数ではない欄（文字・色・名前・点番号・表示・標高（空欄＝なし））
+const PROP_TEXT_KEYS = ['color', 'text', 'name', 'num', 'z', 'textOverride', 'hidden'];
 
 function updatePropertiesPanel() {
     const p = document.getElementById('props-content');
@@ -654,6 +656,20 @@ window.changeEntityPropById = function(id, prop, val) {
 };
 window.changeEntityProp = function(idx, prop, val) {
     if(!entities[idx]) return;
+    // 数の欄: 数でない値（空欄など）や、0 以下の長さ（半径・高さ）は受け付けず、欄を元の値に戻す
+    // （以前は NaN やマイナスの半径がそのまま入り、図形が描けなくなった）
+    if(!PROP_TEXT_KEYS.includes(prop)) {
+        const num = parseFloat(typeof cogoHalfWidth === 'function' ? cogoHalfWidth(val) : val);
+        const bad = !isFinite(num) ? '数を入れてください'
+            : ((PROP_LENGTH_KEYS.includes(prop) || prop === 'size') && num <= 0) ? '0 より大きい数を入れてください'
+            : (prop === 'alpha' && (num < 0 || num > 1)) ? '0〜1 の数を入れてください' : '';
+        if(bad) {
+            if(typeof showToast === 'function') showToast(`${bad}（元の値に戻しました）`, 2500);
+            updatePropertiesPanel();
+            return;
+        }
+        val = String(num);
+    }
     saveUndo();
     if(prop==='color') {
         entities[idx].color = (val === '' || val === 'null' || val === null) ? null : val;

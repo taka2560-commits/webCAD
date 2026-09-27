@@ -725,13 +725,14 @@ function _renderRelativePanel() {
     const r = _relInput; if(!r) return;
     const u = wcsToUcs(r.base.x, r.base.y), unit = _surveyUnitText();
     const seg = (m, text) => `<button class="prop-btn opt-bg-btn ${r.mode === m ? 'active' : ''}" style="flex:1;margin-top:0;" onclick="setRelativeMode('${m}')">${text}</button>`;
-    const field = (id, label, ph) => `<div class="prop-row" style="margin-bottom:0;"><div class="prop-label">${label}</div><input id="${id}" class="prop-val" type="text" inputmode="decimal" placeholder="${ph}" style="min-width:0;"></div>`;
+    // 数字だけのキーボード（inputmode="decimal"）は、マイナスの無い端末（iPhone）があるので、正の数の欄（距離）だけに使う
+    const field = (id, label, ph, positive) => `<div class="prop-row" style="margin-bottom:0;"><div class="prop-label">${label}</div><input id="${id}" class="prop-val" type="text"${positive ? ' inputmode="decimal"' : ''} placeholder="${ph}" style="min-width:0;"></div>`;
     const html = `
         <div style="font-size:11px;color:#aaa;">基準点: ${escapeHtml(r.baseLabel)}</div>
         <div style="font-family:Consolas,monospace;color:#00ff88;font-size:13px;">X ${formatCoordValue(u.y, 'loupe')}&nbsp;&nbsp;Y ${formatCoordValue(u.x, 'loupe')}</div>
         <div style="display:flex;gap:6px;">${seg('dxy', '北・東へ')}${seg('polar', '距離・方向角')}</div>
         ${r.mode === 'polar'
-            ? field('rel-a', `距離 (${unit})`, '12.345') + field('rel-b', '方向角', '45 30 15 または 45.5') + '<div id="rel-az-note" style="font-size:10px;color:#888;">方向角は北から時計回り（度、または 度 分 秒）</div>'
+            ? field('rel-a', `距離 (${unit})`, '12.345', true) + field('rel-b', '方向角', '45 30 15 または 45.5') + '<div id="rel-az-note" style="font-size:10px;color:#888;">方向角は北から時計回り（度、または 度 分 秒）</div>'
             : field('rel-a', `北へ X (${unit})`, '南はマイナス') + field('rel-b', `東へ Y (${unit})`, '西はマイナス')}
         <button class="prop-btn" onclick="applyRelativeInput()">この点を入力</button>
         <div style="font-size:10px;color:#888;">入力した点が次の基準点になります（続けて入力できます）</div>`;
@@ -741,7 +742,8 @@ window.setRelativeMode = function(m) { if(_relInput) { _relInput.mode = (m === '
 window.applyRelativeInput = function() {
     const r = _relInput; if(!r) return;
     const aEl = document.getElementById('rel-a'), bEl = document.getElementById('rel-b');
-    const a = parseFloat(aEl && aEl.value), b = (r.mode === 'polar') ? parseAzimuth(bEl && bEl.value) : parseFloat(bEl && bEl.value);
+    const half = (el) => (typeof cogoHalfWidth === 'function') ? cogoHalfWidth(el ? el.value : '') : (el ? el.value : ''); // 全角でもよい
+    const a = parseFloat(half(aEl)), b = (r.mode === 'polar') ? parseAzimuth(half(bEl)) : parseFloat(half(bEl));
     const aa = isFinite(a) ? a : 0, bb = isFinite(b) ? b : 0;
     // 距離・北へ・東へ は表示の単位で入る（方向角はそのまま）
     const la = fromDisplayUnit(aa, 'len'), lb = (r.mode === 'polar') ? bb : fromDisplayUnit(bb, 'len');

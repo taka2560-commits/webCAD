@@ -79,20 +79,28 @@ function ulVisibleTiles(type) {
     for(let x = Math.floor(t0.x); x <= Math.floor(t1.x); x++) for(let y = Math.floor(t0.y); y <= Math.floor(t1.y); y++) list.push({ z, x, y });
     return { zone, z, list };
 }
+// 読めなかったタイルは、30秒たつと（電波が戻ったときはすぐ）読み直す。以前は一度読めないと、消すまで読み直さなかった
+const UL_RETRY_MS = 30000;
 function _ulTile(type, z, x, y) {
     const key = `${type}/${z}/${x}/${y}`;
     let t = _ul.tiles.get(key);
-    if(t) return t;
+    if(t && !(t.err && Date.now() - t.errAt >= UL_RETRY_MS)) return t;
+    if(t) _ul.tiles.delete(key);
     if(_ul.tiles.size > 400) _ul.tiles.delete(_ul.tiles.keys().next().value); // 古いものから捨てる
     const img = new window.Image();
     img.crossOrigin = 'anonymous'; // 地理院タイルは CORS に対応（保存できる形で読み、図面の画面も汚さない）
     t = { img, ok: false, err: false };
     img.onload = () => { t.ok = true; _ulScheduleRender(); };
-    img.onerror = () => { t.err = true; _ulWarnOnce('net', '地図を読み込めません（インターネットの接続を確かめてください）'); };
+    img.onerror = () => { t.err = true; t.errAt = Date.now(); _ulWarnOnce('net', '地図を読み込めません（インターネットの接続を確かめてください）'); };
     img.src = ulTileUrl(type, z, x, y);
     _ul.tiles.set(key, t);
     return t;
 }
+// 読めなかったタイルを忘れて、次に描くときに読み直す
+function ulForgetFailedTiles() {
+    for(const [k, t] of _ul.tiles) if(t.err) _ul.tiles.delete(k);
+}
+window.addEventListener('online', () => { ulForgetFailedTiles(); _ul.warned.net = 0; _ulScheduleRender(); });
 // 画像の3点（左上・右上・左下）が画面のどこに来るかから、描く変換を決めて描く
 function _ulDrawAffine(src, w, h, p0, p1, p2) {
     ctx.setTransform((p1.x - p0.x) / w, (p1.y - p0.y) / w, (p2.x - p0.x) / h, (p2.y - p0.y) / h, p0.x, p0.y);

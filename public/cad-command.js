@@ -609,7 +609,10 @@ window.executeExtend = executeExtend;
 
 function isPointOnSegment(px, py, x1, y1, x2, y2, tol = 0.001) { return distPointToSeg(px, py, x1, y1, x2, y2) <= tol; }
 
+// 戻り値: 読めない入力なら false（コマンド欄は打った字を残す）
 function processCommand(cmdText) {
+    // 全角の数字・記号（日本語入力のまま打った「１２．５，３０」など）は半角にする（かな・漢字を含む入力はそのまま）
+    if(typeof cogoHalfWidth === 'function' && !/[぀-ヿ一-鿿]/.test(cmdText)) cmdText = cogoHalfWidth(cmdText);
     const cmd = cmdText.toUpperCase().trim();
     const coordMatch = cmd.match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
     // 「X,Y」の順（画面の座標表示と同じ。X＝北、Y＝東）。以前は「東,北」の順で、表示と逆になっていた
@@ -626,6 +629,7 @@ function processCommand(cmdText) {
     if(numMatch) {
         const val = fromDisplayUnit(parseFloat(numMatch[1]), 'len');
         if(cmdState.mode==='WAITING_CIRCLE_RADIUS') {
+            if(!(val > 0)) { _cmdInputError('半径は 0 より大きい数を入れてください'); return false; } // マイナス・0 の円を作らない
             saveUndo(); entities.push({type:'CIRCLE',layer:currentLayerIndex,color:null,cx:cmdState.startWcs.x,cy:cmdState.startWcs.y,radius:val});
             addCommandLog(`-> 円作成 半径: ${lengthText(val)}`); resetCommand(); return;
         }
@@ -835,9 +839,17 @@ function processCommand(cmdText) {
     else if(typeof processFavCommand === 'function' && processFavCommand(cmd)) { /* お気に入りの登録（FAV）処理済み */ }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
     else {
-        addCommandLog(`不明なコマンドです "${cmdText}"`); resetCommand();
-        if(typeof motionShake === 'function') motionShake(document.getElementById('command-line-area')); // UIの動き（試用）: コマンド欄を揺らす
+        // 作図の途中の打ち間違いでは、コマンドを取り消さない（以前は取り消して、打った字も消えた）
+        _cmdInputError(cmdState.mode === 'IDLE' ? `不明なコマンドです "${cmdText}"` : `読めない入力です "${cmdText}"（コマンドはそのまま続きます）`);
+        return false;
     }
+}
+// コマンド欄の入力のまちがいを知らせる（コマンド欄を畳んでいるときはトーストでも）。打った字は欄に残る（cad-input.js）
+function _cmdInputError(msg) {
+    addCommandLog(msg);
+    const area = document.getElementById('command-line-area');
+    if(area && area.classList.contains('collapsed') && typeof showToast === 'function') showToast(msg, 3000);
+    if(typeof motionShake === 'function') motionShake(area); // UIの動き（試用）: コマンド欄を揺らす
 }
 
 

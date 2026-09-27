@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.18（2026年9月27日リリース）**
+**現在のバージョン: v5.18.1（2026年9月27日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -198,7 +198,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（530件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（537件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -255,6 +255,11 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-09-27: バージョン5.18.1（見つけた不具合の修正）** 🔧
+  * 同じ名前で保存すると上書きしていた（_askProjectName で上書きを聞き、やめたら「名前_2」）。置き換えで開いたファイルが読めないと図面が空になっていた（cad-import-target.js の _restoreAfterFailedImport で元の図面・プロジェクト名に戻す）。
+  * プロパティ欄の NaN・0 以下の長さ・範囲外の透明度を受け付けない。コマンド欄の打ち間違いで作図中のコマンドを取り消さず、字を残す（processCommand が false）。全角の数・座標を読む。円の半径 0 以下を受け付けない。
+  * 相対入力の符号つきの欄から inputmode="decimal" を外した（iPhone でマイナス）。PDF・写真台帳の二度押しを受け付けない。読めなかった地図のタイルを30秒後・online で読み直す。
 
 * **2026-09-27: バージョン5.18（デザイン色）** 🎨
   * オプションの「デザイン色」: 標準＋暗い配色5つ（UI 配色チートシートの 09・17〜20）。public/cad-theme.js が BASE・MAIN・ACCENT から CSS の変数を作って `<html>` に書く（head で読み込み、保存した配色を最初の表示の前に付ける）。

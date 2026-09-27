@@ -498,7 +498,7 @@ function setupEventListeners() {
     }, {passive:true});
 
     commandInput.addEventListener('keydown',(e)=>{
-        if(e.key==='Enter'){const v=commandInput.value.trim(); if(v){addCommandLog(v);processCommand(v);commandInput.value='';} else{if(cmdState.mode==='WAITING_LINE_P2'){resetCommand();addCommandLog('-> LINE終了');}else if(cmdState.mode==='WAITING_PLINE_NEXT'){finishPline(false);}else if(cmdState.mode==='WAITING_LAYOFF_TOUCH'){layoffConfirm();}}}
+        if(e.key==='Enter'){const v=commandInput.value.trim(); if(v){addCommandLog(v); if(processCommand(v) === false) commandInput.select(); else commandInput.value='';} else{if(cmdState.mode==='WAITING_LINE_P2'){resetCommand();addCommandLog('-> LINE終了');}else if(cmdState.mode==='WAITING_PLINE_NEXT'){finishPline(false);}else if(cmdState.mode==='WAITING_LAYOFF_TOUCH'){layoffConfirm();}}}
         if(e.key==='Escape'){if(cmdState.mode!=='IDLE'){addCommandLog('* キャンセル *');processCommand('CANCEL');}}
     });
     window.addEventListener('keydown',(e)=>{

@@ -302,7 +302,19 @@ function photoLedgerPages(entries, title) {
     }
     return pages;
 }
+// 作っているあいだは、もう一度押しても受け付けない（写真が多いと時間がかかる）
+let _phLedgerBusy = false;
 window.photoLedgerPdf = async function() {
+    if(_phLedgerBusy) { showToast('写真台帳を作っています…', 1500); return null; }
+    _phLedgerBusy = true;
+    try { return await _photoLedgerPdf(); }
+    catch(err) {
+        addCommandLog('エラー: 写真台帳を作れませんでした');
+        if(window.cadErrors) window.cadErrors.record('photo', '写真台帳を作れませんでした: ' + ((err && err.message) || err), err && err.stack);
+        return null;
+    } finally { _phLedgerBusy = false; }
+};
+async function _photoLedgerPdf() {
     const pins = photoPins();
     if(!pins.length) return null;
     const entries = [];
@@ -321,7 +333,7 @@ window.photoLedgerPdf = async function() {
     addCommandLog(`-> 写真台帳を作りました（${entries.length}件）`);
     showToast(`写真台帳（${entries.length}件）を保存しました`, 3000);
     return bytes;
-};
+}
 
 // ===== コマンド =====
 function processPhotoCommand(cmd) {

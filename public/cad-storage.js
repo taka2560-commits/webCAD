@@ -309,7 +309,7 @@ window.saveProject = async function(nameOverride) {
     }
     let name = nameOverride || _currentProjectName;
     if (!name) {
-        name = prompt('プロジェクト名を入力してください:', `図面_${new Date().toLocaleDateString('ja-JP')}`);
+        name = await _askProjectName('プロジェクト名を入力してください:', `図面_${new Date().toLocaleDateString('ja-JP')}`);
         if (!name) return; // キャンセル
     }
     try {
@@ -340,8 +340,38 @@ window.setCurrentProjectName = function(name) {
     document.title = name ? `${name} - WebCAD` : 'Web CAD';
 };
 
+// 置き換えで開いたファイルが読めなかったときに、プロジェクトの名前と「保存済み」の状態を戻す（cad-import-target.js）
+window.getProjectState = function() { return { name: _currentProjectName, savedSeq: _projectSavedSeq }; };
+window.restoreProjectState = function(s) {
+    if (!s) return;
+    _currentProjectName = s.name || null;
+    _projectSavedSeq = s.savedSeq;
+    document.title = _currentProjectName ? `${_currentProjectName} - WebCAD` : 'Web CAD';
+};
+
+// 保存する名前を聞く。同じ名前のプロジェクトがあれば、上書きしてよいか聞く（やめたら、空いている名前を出して聞き直す）。
+// 以前は黙って上書きしていた（既定の名前「図面_日付」で同じ日に2回保存すると、先の図面が消えた）
+async function _projectNameTaken(name) {
+    try { return !!(await _dbGet(STORE_PROJECTS, name)); } catch { return false; }
+}
+async function _askProjectName(message, suggestion) {
+    let def = suggestion;
+    for (let i = 0; i < 20; i++) {
+        const raw = prompt(message, def);
+        if (raw === null || raw === undefined) return null;
+        const name = String(raw).trim();
+        if (!name) return null;
+        if (!(await _projectNameTaken(name))) return name;
+        if (confirm(`「${name}」はすでに保存されています。上書きしますか？\n\n[OK] 上書きする\n[キャンセル] 別の名前にする`)) return name;
+        let k = 2;
+        while (k < 1000 && await _projectNameTaken(`${name}_${k}`)) k++;
+        def = `${name}_${k}`;
+    }
+    return null;
+}
+
 window.saveProjectAs = async function() {
-    const name = prompt('新しいプロジェクト名を入力してください:', _currentProjectName || `図面_${new Date().toLocaleDateString('ja-JP')}`);
+    const name = await _askProjectName('新しいプロジェクト名を入力してください:', _currentProjectName || `図面_${new Date().toLocaleDateString('ja-JP')}`);
     if (!name) return;
     _currentProjectName = null; // リセットして新しい名前で保存
     await window.saveProject(name);

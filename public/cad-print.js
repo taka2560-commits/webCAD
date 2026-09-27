@@ -383,11 +383,26 @@ window.printFitScale = function() {
     printSet('scale', s);
     showToast(`縮尺 1/${s} にしました`, 2000);
 };
+// PDF を作っているあいだは、もう一度押しても受け付けない（以前は2回押すと PDF が2つできた）
+let _printBusy = false;
 window.printMakePdf = async function(openIt) {
+    if(_printBusy) { showToast('PDF を作っています…', 1500); return null; }
+    _printBusy = true;
+    let win = null;
+    try { return await _printMakePdf(openIt, (w) => { win = w; }); }
+    catch(err) {
+        if(win) try { win.close(); } catch { /* 閉じられなくてもよい */ }
+        addCommandLog('エラー: PDF を作れませんでした');
+        if(window.cadErrors) window.cadErrors.record('print', 'PDF を作れませんでした: ' + ((err && err.message) || err), err && err.stack);
+        return null;
+    } finally { _printBusy = false; }
+};
+async function _printMakePdf(openIt, gotWin) {
     const o = printOpts();
     const title = _printTitle();
     // 開いて印刷: 押した操作のうちに窓を開いておく（あとから開くと止められることがある）
     const win = openIt ? window.open('', '_blank') : null;
+    gotWin(win);
     const center = screenToWcs(canvas.width / 2, canvas.height / 2);
     const d = new Date();
     const page = printCompose(o, center, view.rotation || 0, { title, author: o.author || '', date: `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日` });
@@ -399,7 +414,7 @@ window.printMakePdf = async function(openIt) {
     addCommandLog(`-> PDF を作りました: 1/${o.scale} ${o.paper}${o.orient === 'port' ? '縦' : '横'}（図形 ${page.count}）`);
     showToast(openIt ? 'PDF を開きました。印刷は「実際のサイズ（100%）」で' : `PDF を保存しました（1/${o.scale} ${o.paper}）`, 3500);
     return bytes;
-};
+}
 
 // ===== 重ね表示（用紙の枠・表題欄・方位記号の場所） =====
 function _printPanelOpen() {
