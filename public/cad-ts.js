@@ -49,6 +49,12 @@ function _tsSel(id, label, list, cur) {
     return `<div class="prop-row cogo-row"><div class="prop-label cogo-label">${label}</div><select id="${id}" class="prop-val" onchange="tsSetOpt()" style="min-width:0;">` +
         list.map(([v, t]) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${t}</option>`).join('') + '</select></div>';
 }
+// 2〜3つの選択は、一覧（select）に隠さず並べて見せる（押すとすぐ変わる）
+function _tsSeg(key, label, list, cur) {
+    return `<div class="prop-row cogo-row"><div class="prop-label cogo-label">${label}</div><div class="cogo-seg" style="flex:1;min-width:0;">` +
+        list.map(([v, t]) => `<button class="prop-btn opt-bg-btn ${String(v) === String(cur) ? 'active' : ''}" aria-pressed="${String(v) === String(cur)}" onclick="tsSetOptKey('${key}', ${JSON.stringify(v).replace(/"/g, '&quot;')})">${t}</button>`).join('') + '</div></div>';
+}
+window.tsSetOptKey = function(key, v) { const o = _tsOpts(); if(!(key in o)) return; o[key] = v; _tsSaveOpts(o); _tsRender(); };
 function _tsRender() {
     const o = _tsOpts();
     let h = '<div class="ts-sec">ファイル（USB メモリ・SD カード）</div>' +
@@ -60,9 +66,9 @@ function _tsRender() {
         h += _cogoNote('このブラウザでは機械と直接つなげません。PC の Chrome・Edge（117 以降）、Android の Chrome（137 以降）で使えます。iPhone・iPad は、ファイル（SIMA・SDR）で受け渡します。');
     } else if(!_ts.port) {
         h += _tsSel('ts-baud', 'ボーレート', TS_BAUDS.map((b) => [b, b + ' bps']), o.baudRate) +
-            _tsSel('ts-bits', 'データ長', [[8, '8 ビット'], [7, '7 ビット']], o.dataBits) +
-            _tsSel('ts-parity', 'パリティ', [['none', 'なし'], ['even', '偶数'], ['odd', '奇数']], o.parity) +
-            _tsSel('ts-stop', 'ストップビット', [[1, '1 ビット'], [2, '2 ビット']], o.stopBits) +
+            _tsSeg('dataBits', 'データ長', [[8, '8 ビット'], [7, '7 ビット']], o.dataBits) +
+            _tsSeg('parity', 'パリティ', [['none', 'なし'], ['even', '偶数'], ['odd', '奇数']], o.parity) +
+            _tsSeg('stopBits', 'ストップビット', [[1, '1 ビット'], [2, '2 ビット']], o.stopBits) +
             '<button class="prop-btn" onclick="tsConnect()">🔌 機械とつなぐ</button>' +
             _tsHowTo();
     } else {

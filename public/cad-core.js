@@ -246,8 +246,12 @@ window.onCircleModeRadioChange = function(mode) {
 
 // 円: 半径を確定して作図開始
 function applyCirclePreset(){
-    const el=document.getElementById('prop-circle-r'); const v=el?parseFloat(el.value):NaN;
-    if(v>0){ lastParams.radius=String(fromDisplayUnit(v, 'len')); } // 入力は表示の単位（オプションの長さの単位）
+    const el=document.getElementById('prop-circle-r');
+    if(el && lastParams.circleMode === 'auto') { // 固定半径: 読めない・0 以下なら欄に理由を出して始めない（以前は黙って前の半径で始めた）
+        const v = fieldNum(el, { gt: 0, what: '半径' });
+        if(v === undefined) return;
+        lastParams.radius=String(fromDisplayUnit(v, 'len')); // 入力は表示の単位（オプションの長さの単位）
+    }
     saveLastParams();
     hidePropertyPanel();
     
@@ -271,7 +275,13 @@ function applyCirclePreset(){
 // 長方形: 幅・高さを確定して1点クリックで作図
 function applyRectPreset(){
     const ew=document.getElementById('prop-rect-w'), eh=document.getElementById('prop-rect-h');
-    const w0=ew?parseFloat(ew.value):NaN, h0=eh?parseFloat(eh.value):NaN;
+    // 両方空欄なら2点で作図。片方だけ・0 以下・読めないときは、欄に理由を出して止める
+    const empty = (e) => !e || String(e.value).trim() === '';
+    let w0=NaN, h0=NaN;
+    if(!(empty(ew) && empty(eh))) {
+        w0 = fieldNum(ew, { gt: 0, what: '幅' }); if(w0 === undefined) return;
+        h0 = fieldNum(eh, { gt: 0, what: '高さ' }); if(h0 === undefined) return;
+    }
     if(w0>0&&h0>0){
         const w=fromDisplayUnit(w0, 'len'), h=fromDisplayUnit(h0, 'len'); // 入力は表示の単位
         cmdState.presetW=w; cmdState.presetH=h; lastParams.rectW=String(w); lastParams.rectH=String(h); saveLastParams();
@@ -281,8 +291,9 @@ function applyRectPreset(){
 }
 // オフセット: 距離を確定して対象選択へ
 function applyOffsetPreset(){
-    const el=document.getElementById('prop-offset-d'); const v0=el?parseFloat(el.value):NaN;
-    if(!(v0>0)){ notify('-> 0 より大きい距離を入れてください', { kind: 'warn', ms: 2500 }); return; }
+    const el=document.getElementById('prop-offset-d');
+    const v0 = fieldNum(el, { gt: 0, what: '距離' });
+    if(v0 === undefined) return;
     const v=fromDisplayUnit(v0, 'len'); // 入力は表示の単位
     cmdState.offsetDist=Math.abs(v); lastParams.offset=String(v); saveLastParams();
     cmdState.mode='WAITING_OFFSET_SELECT'; setPrompt('オフセット対象:');
@@ -292,6 +303,7 @@ function applyOffsetPreset(){
 function applyRotatePreset(){
     // 度の数、または度 分 秒（角度の表示が度分秒のとき）。空欄なら参照点方式
     const el=document.getElementById('prop-rotate-a'); const v=(el && String(el.value).trim()!=='')?parseAngleInput(el.value):NaN;
+    if(el && String(el.value).trim()!=='' && !isFinite(v)) { fieldError(el, '角度は 45.5（度）か 45 30 15（度 分 秒）のように入れてください'); return; }
     if(!isNaN(v)){ cmdState.presetAngleDeg=v; lastParams.angle=String(v); saveLastParams(); addCommandLog(`-> 角度 ${angleText(v)} を設定。対象を選択→基点で確定`); }
     hidePropertyPanel();
 }
@@ -780,10 +792,13 @@ function startTextPlacement() {
     const hInput = document.getElementById('prop-text-h');
     const contInput = document.getElementById('prop-text-cont');
     
-    if(!txtInput.value) { showToast('文字を入れてください', { kind: 'warn', ms: 2500 }); txtInput.focus(); return; }
+    if(!txtInput.value) { fieldError(txtInput, '文字を入れてください'); return; }
+    fieldOk(txtInput);
+    // 高さ: 空欄なら 20。読めない・0 以下なら欄に理由を出す（以前は黙って 20 にした）
+    const hv = hInput ? fieldNum(hInput, { gt: 0, allowEmpty: true, what: '高さ' }) : null;
+    if(hv === undefined) return;
     
     cmdState.textStr = txtInput.value;
-    const hv = parseFloat(hInput.value);
     cmdState.textHeight = (hv > 0) ? fromDisplayUnit(hv, 'len') : 20; // 入力は表示の単位
     cmdState.isContinuous = contInput ? contInput.checked : true;
     cmdState.previewWcs = { x: mouse.wcsX || 0, y: mouse.wcsY || 0 };

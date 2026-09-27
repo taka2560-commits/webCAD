@@ -229,7 +229,7 @@ describe('測量計算: パネルと図面での指定', () => {
         app.eval(`cogoSlotTyped('IB', '15,20')`);
         assert.equal(app.eval(`_cogo.slots.IB.name`), 'KP3'); // 座標で入れても同じ位置の測点名を使う
         app.eval(`cogoSlotTyped('IA', '無い点')`);
-        assert.match(app.eval(`document.getElementById('cad-toast').textContent`), /見つかりません/);
+        assert.match(app.eval(`document.querySelector('.field-err').textContent`), /見つかりません.*前に入れた点のまま/); // 欄のそばに（v5.21）
         assert.equal(app.eval(`_cogo.slots.IA.name`), 'KP2'); // 前の指定は残る
     });
     it('点の追加: 方向角と距離・後視点と夾角・座標。元に戻すは1回で1点', () => {

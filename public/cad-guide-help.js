@@ -549,7 +549,7 @@ function _ghRender() {
         return ts.length ? `<div class="gh-cat" data-cat="${id}"><div class="gh-sec">${escapeHtml(title)}</div>${ts.map(_ghTopicHtml).join('')}</div>` : '';
     }).join('');
     const html = back +
-        `<input id="gh-search" class="prop-val gh-search" type="search" autocomplete="off" enterkeyhint="search" placeholder="🔍 さがす（例: 求積・きゅうせき・SIMA・寸法）" value="${escapeHtml(_ghQuery)}" oninput="guideHelpSearch(this.value)">` +
+        `<div class="gh-search-row"><input id="gh-search" class="prop-val gh-search" type="search" autocomplete="off" enterkeyhint="search" placeholder="🔍 さがす（例: 求積・きゅうせき・SIMA・寸法）" value="${escapeHtml(_ghQuery)}" oninput="guideHelpSearch(this.value)">${searchClearBtn('gh-search')}</div>` +
         '<div id="gh-found" class="gh-found"></div>' +
         _ghToursHtml() + cats + _ghCommandsHtml() + _ghHintsHtml();
     showPropertyPanel(GUIDE_HELP_TITLE, html);

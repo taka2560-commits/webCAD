@@ -106,8 +106,9 @@ function _cogoSlotHtml(key, owner) {
     return `<div class="cogo-slot">
         <div class="prop-row cogo-row"><div class="prop-label cogo-label">${COGO_SLOT_LABELS[key][0]}</div>
             <input id="cogo-slot-${key}" class="prop-val" type="text" autocomplete="off" placeholder="点名 または X,Y" value="${escapeHtml(_cogoSlotValue(key))}"
-                onchange="cogoSlotTyped('${key}', this.value${own})" style="min-width:0;">
+                onchange="cogoSlotTyped('${key}', this.value${own})" oninput="pointSuggestUpdate(this, (v) => cogoSlotTyped('${key}', v${own}))" style="min-width:0;">
             <button class="prop-btn btn-sub cogo-pick" onclick="cogoPick('${key}'${own})" title="図面でなぞって指定">📍</button></div>
+        ${pointSuggestHtml('cogo-slot-' + key)}
         <div id="cogo-xy-${key}" class="cogo-xy">${_cogoSlotXyText(key)}</div></div>`;
 }
 function _cogoSlotsHtml() { return _cogoTabSlots().map((k) => _cogoSlotHtml(k)).join(''); }
@@ -122,7 +123,11 @@ window.cogoSlotTyped = function(key, text, owner) {
     else {
         const xy = cogoParseXY(t);
         const p = xy ? { x: xy.x, y: xy.y, name: cogoPointNameAt(xy.x, xy.y) } : cogoFindPoint(t);
-        if(!p) { showToast(`点「${t}」が見つかりません（点名・点番号、または X,Y で入れてください）`, 3500); return; }
+        if(!p) { // 欄の下に理由を出す（打った字は残して直せる）。前に入れた点はそのまま使う
+            fieldError(document.getElementById('cogo-slot-' + key), `点「${t}」が見つかりません（点名・点番号、または X,Y で入れてください）${_cogo.slots[key] ? '。下の座標は前に入れた点のままです' : ''}`);
+            return;
+        }
+        fieldOk(document.getElementById('cogo-slot-' + key));
         _cogo.slots[key] = { x: p.x, y: p.y, name: p.name || '', snapped: true };
     }
     _cogoRefreshSlot(key);

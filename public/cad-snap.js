@@ -747,8 +747,9 @@ window.applyRelativeInput = function() {
     const aa = isFinite(a) ? a : 0, bb = isFinite(b) ? b : 0;
     // 距離・北へ・東へ は表示の単位で入る（方向角はそのまま）
     const la = fromDisplayUnit(aa, 'len'), lb = (r.mode === 'polar') ? bb : fromDisplayUnit(bb, 'len');
-    if(r.mode === 'polar' && (!isFinite(a) || !isFinite(b))) { showToast('距離と方向角を入れてください'); return; }
-    if(r.mode === 'dxy' && !isFinite(a) && !isFinite(b)) { showToast('北・東へ動かす量を入れてください'); return; }
+    if(r.mode === 'polar' && !isFinite(a)) { fieldError(aEl, '距離を入れてください（例 12.345）'); return; }
+    if(r.mode === 'polar' && !isFinite(b)) { fieldError(bEl, '方向角を入れてください（例 45 30 15 または 45.5）'); return; }
+    if(r.mode === 'dxy' && !isFinite(a) && !isFinite(b)) { fieldError(aEl, '北・東へ動かす量を入れてください（南・西はマイナス）'); return; }
     const t = relativeTarget(r.base, r.mode, la, lb);
     addCommandLog(r.mode === 'polar' ? `-> 相対入力: 距離 ${lengthText(la)} 方向角 ${_fmtDms(bb)}` : `-> 相対入力: 北へ ${lengthText(la)} 東へ ${lengthText(lb)}`);
     if(cmdState.mode === 'IDLE') { showToast('コマンドが終わっています'); return; }

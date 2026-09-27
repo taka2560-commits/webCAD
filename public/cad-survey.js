@@ -463,7 +463,7 @@ window.showCoordListPanel = function() {
     const ucsActive = !(ucs.originX === 0 && ucs.originY === 0 && ucs.angle === 0);
     const html = `
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-            <input id="coord-search" class="prop-val" type="search" placeholder="点名・点番号で検索" oninput="updateCoordListContent()" style="flex:1;">
+            <input id="coord-search" class="prop-val" type="search" placeholder="点名・点番号で検索" oninput="updateCoordListContent()" style="flex:1;">${searchClearBtn('coord-search')}
         </div>
         <div id="coord-list-note" style="font-size:10px;color:#888;margin-bottom:6px;">X＝北、Y＝東（図面の座標・単位 ${unit}）${ucsActive ? '<br><span style="color:#ffcc00;">※UCS設定中ですが、一覧と出力は図面の座標（WCS）です</span>' : ''}</div>
         <div id="coord-list-rows" style="max-height:48vh;overflow:auto;border:1px solid var(--border-2);border-radius:var(--r-sub);"></div>

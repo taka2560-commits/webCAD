@@ -81,8 +81,8 @@ function displayUnitNum(v, kind) {
     const s = displayUnitScale(kind);
     return String(s === 1 ? v : +(v * s).toPrecision(12));
 }
-// 入力欄の見出しに付ける単位（「図面どおり」なら何も付けない＝以前と同じ）
-function displayUnitTag(kind) { const u = displayUnitChosen(kind); return u ? `(${u})` : ''; }
+// 入力欄の見出しに付ける単位。「図面どおり」のときも図面の単位（m・mm）を付ける（以前は付けず、何の単位で入れるのか分からなかった）
+function displayUnitTag(kind) { return `(${displayUnit(kind)})`; }
 
 // 寸法・長さの数の文字（x は表示の単位の値、unit はその単位 'm' / 'mm'）。桁はオプション「寸法の桁」。
 // 「自動」は m なら小数3桁まで（末尾の0は省く）、mm なら整数。どちらも 1mm の細かさ

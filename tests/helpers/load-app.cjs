@@ -16,7 +16,7 @@ const { IDBFactory, IDBKeyRange } = require('fake-indexeddb');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 // index.html と同じ読み込み順（cad-errors.js・cad-theme.js は head、残りは body 末尾）
-const APP_SCRIPTS = ['cad-errors.js', 'cad-theme.js', 'cad-text-parse.js', 'cad-dimension.js', 'cad-io.js', 'cad-import-target.js', 'cad-core.js', 'cad-notify.js', 'cad-dialog.js',
+const APP_SCRIPTS = ['cad-errors.js', 'cad-theme.js', 'cad-text-parse.js', 'cad-dimension.js', 'cad-io.js', 'cad-import-target.js', 'cad-core.js', 'cad-notify.js', 'cad-dialog.js', 'cad-form.js',
     'cad-prefs.js', 'cad-view.js', 'cad-geom.js', 'cad-snap.js', 'cad-render.js', 'cad-command.js', 'cad-input.js', 'cad-panels.js',
     'cad-survey.js', 'cad-cogo.js', 'cad-cogo-ui.js', 'cad-sdr.js', 'cad-ts.js', 'cad-stake.js', 'cad-print.js', 'cad-underlay.js', 'cad-photo.js', 'cad-editgeom.js', 'cad-edit.js', 'cad-grip.js', 'cad-subview.js', 'cad-helmert.js', 'cad-fav.js', 'cad-motion.js', 'cad-storage.js', 'cad-guide.js', 'cad-guide-tours.js', 'cad-guide-help.js', 'cad-boot.js'];
 

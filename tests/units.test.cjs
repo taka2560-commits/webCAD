@@ -42,7 +42,7 @@ describe('表示の単位（m / mm）', () => {
         assert.equal(app.eval(`dimFormat(12.3456)`), '12.346');
         assert.equal(app.eval(`measFormatLength(12.3456)`), '12.346');
         assert.equal(app.eval(`lengthText(0.5)`), '0.5'); // 単位を選んでいなければ単位は付けない（以前と同じ）
-        assert.equal(app.eval(`displayUnitTag('len')`), '');
+        assert.equal(app.eval(`displayUnitTag('len')`), '(m)', '入力欄の見出しには、図面どおりでも単位を付ける（v5.21）');
     });
 
     it('1単位＝1m の図面を mm で表示: 寸法・測定・座標', () => {

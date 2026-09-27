@@ -286,6 +286,17 @@
         .gh-acts { display:flex; flex-wrap:wrap; gap:6px; }
         .gh-acts .prop-btn { flex:1 1 45%; margin-top:0; min-height:36px; font-size:12px; }
         .gh-search { width:100%; box-sizing:border-box; font-size:14px; min-height:40px; }
+        /* 入力欄（cad-form.js）: まちがいは赤い枠と、欄のすぐ下の理由 */
+        .field-bad, .prop-val.field-bad { border-color:#ff6b6b !important; box-shadow:0 0 0 1px rgba(255,107,107,0.5); }
+        .field-err { margin:2px 0 4px; padding-left:2px; color:#ff6b6b; font-size:12px; line-height:1.4; }
+        /* 点名の候補（チップ）。押すと欄に入る */
+        .pt-suggest { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 4px; }
+        .pt-suggest:empty { display:none; }
+        .pt-chip { min-height:32px; padding:0 10px; border-radius:16px; border:1px solid rgba(var(--brand-rgb),0.45); background:rgba(var(--brand-rgb),0.10); color:var(--brand); font:600 12px 'Segoe UI',sans-serif; cursor:pointer; }
+        /* 検索の欄の ×（押すと文字を消す） */
+        .gh-search-row { display:flex; gap:6px; align-items:center; }
+        .gh-search-row .gh-search { flex:1; min-width:0; }
+        .search-x { flex-shrink:0; width:36px; height:36px; border-radius:var(--r-sub); border:1px solid var(--border-1); background:var(--btn-fill); color:#ddd; font-size:18px; line-height:1; cursor:pointer; }
         .gh-found { font-size:11.5px; color:var(--brand); display:none; }
         .gh-back { margin-top:0; position:sticky; top:-12px; z-index:3; box-shadow:0 4px 10px rgba(0,0,0,0.45); } /* 説明を読みながらでも、いつでも元のパネルに戻れる */
         .gh-tour-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; }
@@ -862,12 +873,12 @@
     </style>
 </head>
 <body>
-    <input type="file" id="dxf-file-input" accept=".dxf,.dwg" style="display:none;">
+    <input type="file" id="dxf-file-input" accept=".dxf,.dwg,.sim,.csv,.txt,.sdr" style="display:none;">
     <div id="canvas-container"><canvas id="cad-canvas"></canvas></div>
     
     <!-- トップバー (案B: 最適化レイアウト) -->
     <div id="top-bar" class="glass-panel">
-        <button class="top-btn" id="btn-load-dxf" title="ファイルを開く (DXF/DWG)">📁 開く</button>
+        <button class="top-btn" id="btn-load-dxf" title="ファイルを開く（DXF・DWG・SIMA（.sim）・座標CSV（点名,X,Y,標高）・SDR）">📁 開く</button>
         <button id="btn-save" class="top-btn primary" onclick="saveProject()" title="プロジェクト保存">💾 保存</button>
         <button id="btn-undo" class="top-btn icon-only" onclick="undo()" title="元に戻す (Ctrl+Z)">↩</button>
         <button class="top-btn icon-only" onclick="redo()" title="やり直し (Ctrl+Y)">↪</button>
@@ -1216,6 +1227,7 @@
     <script src="cad-core.js"></script>
     <script src="cad-notify.js"></script>
     <script src="cad-dialog.js"></script>
+    <script src="cad-form.js"></script>
     <script src="cad-prefs.js"></script>
     <script src="cad-view.js"></script>
     <script src="cad-geom.js"></script>
