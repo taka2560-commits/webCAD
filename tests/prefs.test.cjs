@@ -145,7 +145,7 @@ describe('表示・操作の設定', () => {
         app.eval(`setDisplayPref('loupeZoom', '4'); showOptionsPanel();`);
         const html = app.eval(`document.getElementById('property-panel-content').innerHTML`);
         assert.match(html, /表示・操作/);
-        for(const label of ['ルーペの大きさ', 'ルーペの倍率', '座標の文字', '座標の桁', '寸法の文字', '吸着の範囲']) assert.match(html, new RegExp(label));
+        for(const label of ['デザイン色', 'ルーペの大きさ', 'ルーペの倍率', '座標の文字', '座標の桁', '寸法の文字', '吸着の範囲']) assert.match(html, new RegExp(label));
         const active = app.eval(`[...document.querySelectorAll('.opt-pref-btn.active[data-pref="loupeZoom"]')].map(b => b.textContent).join()`);
         assert.equal(active, '4倍');
         // ボタンを押すと強調が移る（テスト環境は onclick 属性を実行しないので、属性の中身をそのまま実行する）
@@ -161,7 +161,7 @@ describe('表示・操作の設定', () => {
         assert.equal(app.eval(`displayPref('coordDecimals')`), null);
         assert.equal(app.eval(`localStorage.getItem('cad_display_prefs')`), '{}');
         const active = app.eval(`[...document.querySelectorAll('.opt-pref-btn.active')].map(b => b.dataset.pref + '=' + b.dataset.key).sort().join()`);
-        assert.equal(active, 'angleFormat=deg,btnSize=m,coordDecimals=std,coordFont=m,coordUnit=auto,dimDecimals=auto,dimText=m,lenUnit=auto,loupeSize=m,loupeZoom=3,motion=off,outdoor=off,snapRange=m');
+        assert.equal(active, 'angleFormat=deg,btnSize=m,coordDecimals=std,coordFont=m,coordUnit=auto,dimDecimals=auto,dimText=m,lenUnit=auto,loupeSize=m,loupeZoom=3,motion=off,outdoor=off,snapRange=m,theme=std');
     });
 
     it('未捕捉エラーが起きない', () => {

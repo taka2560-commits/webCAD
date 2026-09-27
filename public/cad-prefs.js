@@ -10,6 +10,9 @@ const DISPLAY_PREFS_KEY = 'cad_display_prefs';
 const DISPLAY_UNIT_OPTIONS = [['auto', '図面どおり', null], ['m', 'm', 'm'], ['mm', 'mm', 'mm']];
 // 設定の一覧。options は [保存する値, ボタンの文字, 実際に使う値]
 const DISPLAY_PREF_DEFS = {
+    // デザイン色（cad-theme.js の配色。kind: 'swatch' は切り替えボタンの列ではなく、色の見本を並べる）
+    theme:         { label: 'デザイン色',     def: 'std', kind: 'swatch',
+        options: ((window.cadTheme && window.cadTheme.list) || [{ key: 'std', name: '標準' }]).map(t => [t.key, t.name, t.key]) },
     loupeSize:     { label: 'ルーペの大きさ', def: 'm',   options: [['s', '小', 55], ['m', '中', 70], ['l', '大', 90], ['xl', '特大', 115]] },
     loupeZoom:     { label: 'ルーペの倍率',   def: '3',   options: [['2', '2倍', 2], ['3', '3倍', 3], ['4', '4倍', 4], ['6', '6倍', 6]] },
     coordFont:     { label: '座標の文字',     def: 'm',   options: [['s', '小', 0.85], ['m', '中', 1], ['l', '大', 1.3], ['xl', '特大', 1.6]] },
@@ -233,13 +236,15 @@ window.toggleOutdoorMode = function() {
 
 // ===== 反映 =====
 // 座標の文字の大きさは CSS 変数（--coord-scale）で、ステータスバー・全画面の座標表示に効かせる。
-// ボタンの大きさは CSS 変数（--btn-k）、屋外モードは body の outdoor-mode、UIの動き（試用）は body の motion-ui で画面の部品に効かせる
+// ボタンの大きさは CSS 変数（--btn-k）、屋外モードは body の outdoor-mode、UIの動き（試用）は body の motion-ui で画面の部品に効かせる。
+// デザイン色は cad-theme.js が <html> に配色の変数を書く
 function applyDisplayPrefs() {
     const root = document.documentElement;
     if(root && root.style) {
         root.style.setProperty('--coord-scale', String(displayPref('coordFont') || 1));
         root.style.setProperty('--btn-k', String(displayPref('btnSize') || 1));
     }
+    if(window.cadTheme) window.cadTheme.apply(displayPrefKey('theme'));
     if(document.body) {
         document.body.classList.toggle('outdoor-mode', isOutdoor());
         document.body.classList.toggle('motion-ui', displayPref('motion') === true);
@@ -253,7 +258,7 @@ window.setDisplayPref = function(name, key) {
     _displayPrefs[name] = key;
     _saveDisplayPrefs();
     applyDisplayPrefs();
-    document.querySelectorAll(`.opt-pref-btn[data-pref="${name}"]`).forEach(b => b.classList.toggle('active', b.dataset.key === key));
+    document.querySelectorAll(`.opt-pref-btn[data-pref="${name}"]`).forEach(b => _markPrefBtn(b, b.dataset.key === key));
     if(name === 'coordDecimals' || name === 'coordFont' || name === 'coordUnit') refreshCoordDisplay();
     if(name === 'dimDecimals' || name === 'coordUnit' || name === 'lenUnit' || name === 'angleFormat' || name === 'outdoor') _refreshShownValues(); // 寸法の文字・線・プロパティの数を描き直す
     if(name === 'coordUnit' || name === 'lenUnit') _updateUnitNote();
@@ -278,7 +283,7 @@ window.resetDisplayPrefs = function() {
     _displayPrefs = {};
     _saveDisplayPrefs();
     applyDisplayPrefs();
-    document.querySelectorAll('.opt-pref-btn').forEach(b => b.classList.toggle('active', b.dataset.key === DISPLAY_PREF_DEFS[b.dataset.pref].def));
+    document.querySelectorAll('.opt-pref-btn').forEach(b => _markPrefBtn(b, b.dataset.key === DISPLAY_PREF_DEFS[b.dataset.pref].def));
     refreshCoordDisplay();
     _refreshShownValues();
     _updateUnitNote();
@@ -287,12 +292,30 @@ window.resetDisplayPrefs = function() {
     if(typeof render === 'function') render();
 };
 
+// 設定のボタンの「選んでいる」印（色と、読み上げ用の aria-pressed）
+function _markPrefBtn(b, on) {
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+// デザイン色の見本（名前・言葉・3色の帯。選んでいるものに ✓）
+function _themeSwatchRowHtml(name, d, cur) {
+    const list = (window.cadTheme && window.cadTheme.list) || [];
+    const btns = d.options.map(o => {
+        const t = list.find(x => x.key === o[0]) || { chips: [], words: '' };
+        const chips = t.chips.map(c => `<i style="background:${safeColor(c)}"></i>`).join('');
+        return `<button class="opt-theme-btn opt-pref-btn ${o[0] === cur ? 'active' : ''}" data-pref="${name}" data-key="${o[0]}" aria-pressed="${o[0] === cur}" onclick="setDisplayPref('${name}','${o[0]}')">` +
+            `<span class="opt-theme-chips">${chips}</span><span class="opt-theme-name">${escapeHtml(o[1])}</span><span class="opt-theme-words">${escapeHtml(t.words)}</span></button>`;
+    }).join('');
+    return `<div class="opt-pref-row opt-theme-row"><span class="opt-pref-label">${d.label}</span><div class="opt-theme-grid">${btns}</div>` +
+        '<div class="opt-theme-note">バー・パネル・ボタンと、選んでいる印の色が変わります。確定・保存（緑）、削除（赤）などの役割の色と図面の色は変わりません（図面の背景は上の「背景色」で選びます）</div></div>';
+}
 // オプション画面の「表示・操作」欄
 function displayPrefsSectionHtml() {
     const rows = Object.keys(DISPLAY_PREF_DEFS).map(name => {
         const d = DISPLAY_PREF_DEFS[name], cur = displayPrefKey(name);
+        if(d.kind === 'swatch') return _themeSwatchRowHtml(name, d, cur);
         const btns = d.options.map(o =>
-            `<button class="prop-btn opt-bg-btn opt-pref-btn ${o[0] === cur ? 'active' : ''}" data-pref="${name}" data-key="${o[0]}" onclick="setDisplayPref('${name}','${o[0]}')">${o[1]}</button>`
+            `<button class="prop-btn opt-bg-btn opt-pref-btn ${o[0] === cur ? 'active' : ''}" data-pref="${name}" data-key="${o[0]}" aria-pressed="${o[0] === cur}" onclick="setDisplayPref('${name}','${o[0]}')">${o[1]}</button>`
         ).join('');
         return `<div class="opt-pref-row"><span class="opt-pref-label">${d.label}</span><div class="opt-pref-seg">${btns}</div></div>`;
     }).join('');

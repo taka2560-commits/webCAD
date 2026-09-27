@@ -169,7 +169,7 @@ function applyProjectData(data) {
 function _syncUcsLabels() {
     const isWcs = ucs.originX === 0 && ucs.originY === 0 && ucs.angle === 0;
     const text = isWcs ? 'WCS' : 'UCS';
-    const color = isWcs ? 'var(--highlight-color)' : 'var(--ucs-color)';
+    const color = isWcs ? 'var(--coord-color)' : 'var(--ucs-color)';
     const disp = document.getElementById('ucs-status-display');
     if (disp) { disp.textContent = text; disp.style.color = color; }
     const label = document.getElementById('ucs-label');

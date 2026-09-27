@@ -37,7 +37,7 @@ function setCanvasBackground(c){
     try { localStorage.setItem('cad_canvas_bg', c); } catch(e){}
     if(container) container.style.backgroundColor = c;
     render();
-    document.querySelectorAll('.opt-bg-btn').forEach(b=>b.classList.toggle('active', b.dataset.bg===c));
+    document.querySelectorAll('.opt-bg-btn[data-bg]').forEach(b=>b.classList.toggle('active', b.dataset.bg===c)); // 背景色のボタンだけ（ほかの切り替えボタンの選択は外さない）
 }
 function showOptionsPanel(){
     const opts = [['#000','黒'],['#808080','グレー'],['#ffffff','白']];

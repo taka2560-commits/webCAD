@@ -58,8 +58,8 @@ function setUCS(wx, wy, angle) {
 }
 function resetUCS() {
     ucs.originX = 0; ucs.originY = 0; ucs.angle = 0;
-    if(ucsStatusDisplay) { ucsStatusDisplay.textContent = 'WCS'; ucsStatusDisplay.style.color = 'var(--highlight-color)'; }
-    if(ucsLabel) { ucsLabel.textContent = 'WCS'; ucsLabel.style.color = 'var(--highlight-color)'; }
+    if(ucsStatusDisplay) { ucsStatusDisplay.textContent = 'WCS'; ucsStatusDisplay.style.color = 'var(--coord-color)'; }
+    if(ucsLabel) { ucsLabel.textContent = 'WCS'; ucsLabel.style.color = 'var(--coord-color)'; }
     resetCommand();
     addCommandLog('-> WCSにリセット');
     render();

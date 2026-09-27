@@ -75,7 +75,7 @@ window.updateBlockManagerContent = function() {
         const first = entities[selIdx[0]];
         const isGroup = selGids.size >= 1;
         const label = isGroup ? `🧩 ${escapeHtml(first && first.blockName || 'グループ')}${selGids.size > 1 ? ` 他${selGids.size - 1}` : ''} (${selIdx.length}個)` : `${selIdx.length}個を選択中`;
-        html += `<div style="font-size:12px; color:#00ff88; font-weight:bold;">${label}</div>
+        html += `<div style="font-size:12px; color:var(--brand); font-weight:bold;">${label}</div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
             ${isGroup ? btn('分解（グループ解除）', 'explodeSelection()', '#ffcc00') : ''}
             ${(!isGroup && selIdx.length > 1) ? btn('🧩 グループ化', 'groupSelection()', '#00ff88') : ''}

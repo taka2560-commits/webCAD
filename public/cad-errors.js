@@ -56,7 +56,7 @@
         st.textContent = [
             '#cad-err-banner{position:fixed;left:50%;bottom:calc(64px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);',
             'z-index:200002;display:flex;align-items:center;gap:8px;max-width:min(92vw,520px);padding:8px 8px 8px 12px;',
-            'background:rgba(18,22,28,0.96);border:1px solid rgba(255,204,0,0.55);border-radius:12px;color:#e0e0e0;',
+            'background:rgba(var(--float-rgb,18,22,28),0.96);border:1px solid rgba(255,204,0,0.55);border-radius:12px;color:#e0e0e0;',
             'font:600 12px "Segoe UI",sans-serif;box-shadow:0 6px 20px rgba(0,0,0,0.5);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;}',
             '#cad-err-banner.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0);}',
             '#cad-err-banner .msg{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
