@@ -48,10 +48,11 @@ window.noteViewGesture = noteViewGesture;
 function _isViewGestureActive() {
     return !!(touchState.isPinch || mouse.isPanning || performance.now() < _viewGestureUntil);
 }
-// 図形の見た目に影響する状態（選択・ハイライト・画層の表示/色・薄表示・UCS）の要約
+// 図形の見た目に影響する状態（選択・ハイライト・画層の表示/色・薄表示とその濃さ・タッチ非表示の候補・UCS）の要約
 function _baseSignature() {
-    let s = cmdState.highlightIdx + '|' + (cmdState.selectedIndices || []).join(',') + '|' + (window.ghostLayerMode ? 1 : 0) +
-        '|' + ucs.originX + ',' + ucs.originY + ',' + ucs.angle + '|';
+    const pick = layoffPickSet();
+    let s = cmdState.highlightIdx + '|' + (cmdState.selectedIndices || []).join(',') + '|' + (window.ghostLayerMode ? ghostLayerAlpha() : 0) +
+        '|' + (pick ? [...pick].join(',') : '') + '|' + ucs.originX + ',' + ucs.originY + ',' + ucs.angle + '|';
     for(let i = 0; i < layers.length; i++) s += (layers[i].visible ? '1' : '0') + layers[i].color + ';';
     return s;
 }
@@ -376,6 +377,8 @@ function drawEntities() {
     const selSet = new Set(cmdState.selectedIndices || []);
     const hlIdx = cmdState.highlightIdx;
     const ghost = !!window.ghostLayerMode;
+    const ghostAlpha = ghost ? ghostLayerAlpha() : 0; // うっすら表示の濃さ（画層一括管理のスライダー）
+    const layoffPick = layoffPickSet(); // タッチ非表示で消す候補にした画層（赤く描く）
     const baseTransform = ctx.getTransform();
 
     // カリング用の画面の表示範囲 (WCS座標)。100ピクセルずつ余裕をもたせる
@@ -420,11 +423,12 @@ function drawEntities() {
         const bb = e.bbox;
         if(bb && (bb.maxX < viewMinX || bb.minX > viewMaxX || bb.maxY < viewMinY || bb.minY > viewMaxY)) continue;
 
-        const alpha = lyrVisible ? 1 : 0.15; // 非表示レイヤーはうっすら（15%不透明度）表示
+        const alpha = lyrVisible ? 1 : ghostAlpha; // 非表示レイヤーはうっすら表示（濃さはスライダー。初めは15%）
         let raw = null;
         if(lyrVisible) {
             if(i === hlIdx) raw = '#ff6b6b';
             else if(selSet.has(i)) raw = '#ffaa33'; // 複数選択時はオレンジ
+            else if(layoffPick && layoffPick.has(e.layer)) raw = '#ff6b6b'; // タッチ非表示で消す候補の画層（☑確定で非表示）
         }
         const color = _strokeColorFor(raw || getEntityColor(e));
         const t = e.type;

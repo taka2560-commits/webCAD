@@ -601,7 +601,7 @@ const GUIDE_HINTS = [
     { key: 'COGO', title: '📍 点の指定', prefix: 'WAITING_DIMCOGO_', steps: [
         { modes: ['PT'], text: () => ({ touch: `${_guidePickLabel()}までなぞって（緑の記号＝スナップ）☑確定。空いている欄があれば、続けて次の欄の点を指定します`, pc: `${_guidePickLabel()}をクリック（測点に吸い付きます）。空いている欄があれば、続けて次の欄の点を指定します` }) }] },
     { key: 'COGOLOT', title: '🧮 求積', prefix: 'WAITING_COGO_LOT', steps: [{ modes: [''], text: '求積する区画（閉じたポリライン・長方形）の線か内側をタップ' }] },
-    { key: 'LAYOFF', title: '🚫 タッチ非表示', prefix: 'WAITING_LAYOFF', steps: [{ modes: [''], text: '非表示にしたい画層の図形をタップ。終わるときは下の「非表示終了」' }] },
+    { key: 'LAYOFF', title: '🚫 タッチ非表示', prefix: 'WAITING_LAYOFF', steps: [{ modes: [''], text: '非表示にしたい画層の図形をタップ（赤く光る。もう一度タップで外す）→ ☑確定 で非表示。終わるときは下の「非表示終了」' }] },
 ];
 
 let _hintSession = null; // { key, hidden }

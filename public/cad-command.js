@@ -42,34 +42,8 @@ function handlePointInput(wcs, fromMouse = false) {
 function _handlePointInputCore(wcs, fromMouse) {
     const m = cmdState.mode;
     if(m==='WAITING_LAYOFF_TOUCH') {
-        const idx = hitTestEntity(mouse.screenX, mouse.screenY);
-        if(idx >= 0) {
-            const e = entities[idx];
-            const layerIdx = e.layer;
-            if(layerIdx !== undefined && layers[layerIdx]) {
-                saveUndo();
-                layers[layerIdx].visible = false;
-                addCommandLog(`-> タッチされた図形の画層「${layers[layerIdx].name}」を非表示にしました`);
-                
-                if (typeof window.updateLayerManagerContent === 'function') {
-                    window.updateLayerManagerContent();
-                }
-                
-                if(cmdState.highlightIdx === idx) {
-                    cmdState.highlightIdx = -1;
-                    updatePropertiesPanel();
-                }
-                if(cmdState.selectedIndices) {
-                    cmdState.selectedIndices = cmdState.selectedIndices.filter(i => entities[i] && entities[i].layer !== layerIdx);
-                }
-                
-                updateLayerPanel();
-                render();
-                if(navigator.vibrate) navigator.vibrate(30); // 振動フィードバック
-            }
-        } else {
-            addCommandLog('-> 図形がタッチされませんでした');
-        }
+        // タップした図形の画層を「消す候補」にする（もう一度で外す）。消すのは ☑確定 のとき（cad-panels.js）
+        layoffPickAt(mouse.screenX, mouse.screenY);
         return;
     }
     if(m==='WAITING_UCS_ORIGIN') { setUCS(wcs.x, wcs.y, 0); return; }
@@ -672,8 +646,8 @@ function processCommand(cmdText) {
             return;
         }
         cmdState.mode='WAITING_LAYOFF_TOUCH';
-        setPrompt('タッチ非表示: 非表示にする画層の図形をタッチしてください');
-        addCommandLog('-> 画層タッチ非表示モード: 図面上のオブジェクトをタッチするとその画層が非表示になります（終了するには画面下の終了ボタン、Esc、またはもう一度タッチ非表示ボタンを押す）');
+        cmdState.layoffPick = []; // 消す候補の画層
+        addCommandLog('-> 画層タッチ非表示モード: 図面の図形をタップすると、その画層を消す候補にします（赤く光ります。もう一度タップで外す）。☑確定 で非表示にします（終了するには画面下の終了ボタン、Esc、またはもう一度タッチ非表示ボタンを押す）');
         
         if (typeof window.showLayerManagerPanel === 'function') {
             window.showLayerManagerPanel();
@@ -684,7 +658,7 @@ function processCommand(cmdText) {
         if (ab) {
             ab.style.display = 'flex';
             const confirmBtn = ab.querySelector('button[onclick="dimConfirmPoint()"]');
-            if (confirmBtn) confirmBtn.style.display = 'none'; // 確定ボタンは不要
+            if (confirmBtn) confirmBtn.style.display = 'none'; // ☑確定 は、消す候補を選んでから出す（_layoffShowState）
             const toggleBtn = document.getElementById('dim-mode-toggle');
             if (toggleBtn) toggleBtn.style.display = 'none'; // 設定ボタンも不要
             if (typeof _hideMeasureButtons === 'function') _hideMeasureButtons();
@@ -693,10 +667,12 @@ function processCommand(cmdText) {
             if (cancelBtn) {
                 cancelBtn.textContent = '✖ 非表示終了';
                 cancelBtn.style.background = '#ff6b6b';
+                cancelBtn.style.color = '#1e2228'; // 赤い地に赤い文字で読めなかった
                 cancelBtn.style.padding = '8px 20px';
                 cancelBtn.style.borderRadius = '16px';
             }
         }
+        _layoffShowState(); // プロンプト・☑確定（候補を選ぶまでは出さない）・画層一括管理の案内
         return;
     }
     // 寸法コマンドの処理（cad-dimension.js から登録）
@@ -873,6 +849,7 @@ window.plineCloseFromBar = function() {
     else if(typeof showToast === 'function') showToast('閉じるには3点以上が必要です');
 };
 window.dimConfirmPoint = function() {
+    if(cmdState.mode === 'WAITING_LAYOFF_TOUCH') { layoffConfirm(); return; } // タッチ非表示: 消す候補の画層を非表示に（cad-panels.js）
     if(typeof editConfirm === 'function' && editConfirm()) return; // 結合・配列の確定（cad-edit.js）
     if(cmdState.mode === 'WAITING_PLINE_NEXT') { finishPline(false); return; } // ポリラインの完了
     if(cmdState.mode.startsWith('WAITING_DIM')) {

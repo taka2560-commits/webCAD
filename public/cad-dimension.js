@@ -370,6 +370,7 @@ function drawDimOrdinate(e, color) {
 function drawAllDimensions() {
     ctx.save();
     const hlIdx = cmdState.highlightIdx;
+    const pick = layoffPickSet(); // タッチ非表示で消す候補にした画層（赤く描く）
     entities.forEach((e, i) => {
         if(e.type !== 'DIMENSION') return;
 
@@ -381,10 +382,11 @@ function drawAllDimensions() {
 
         ctx.save();
         if (!lyrVisible) {
-            ctx.globalAlpha = 0.15; // 非表示レイヤーの寸法はうっすら表示
+            ctx.globalAlpha = ghostLayerAlpha(); // 非表示レイヤーの寸法はうっすら表示（濃さは画層一括管理のスライダー）
         }
 
-        const color = i === hlIdx ? '#ff6b6b' : null;
+        // ハイライト中・タッチ非表示で消す候補の画層は赤
+        const color = (i === hlIdx || (lyrVisible && pick && pick.has(e.layer))) ? '#ff6b6b' : null;
         if(e.subType === 'LINEAR') drawDimLinear(e, color);
         else if(e.subType === 'ALIGNED') drawDimAligned(e, color);
         else if(e.subType === 'RADIUS') drawDimRadius(e, color);

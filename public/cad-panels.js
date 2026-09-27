@@ -227,6 +227,80 @@ window.toggleGhostLayerMode = function(enabled) {
     render();
     addCommandLog(`-> 非表示画層のうっすら表示を ${window.ghostLayerMode ? '有効' : '無効'} にしました`);
 };
+// うっすら表示の濃さ（非表示の画層を描く不透明度）。画層一括管理のスライダーで 5〜70%（以前は 15% に決まっていた）。端末に覚える
+const GHOST_ALPHA_KEY = 'cad_ghost_alpha';
+const GHOST_ALPHA_MIN = 0.05, GHOST_ALPHA_MAX = 0.7, GHOST_ALPHA_DEF = 0.15;
+let _ghostAlpha = (() => {
+    try { const v = parseFloat(localStorage.getItem(GHOST_ALPHA_KEY)); return v >= GHOST_ALPHA_MIN && v <= GHOST_ALPHA_MAX ? v : GHOST_ALPHA_DEF; } catch { return GHOST_ALPHA_DEF; }
+})();
+function ghostLayerAlpha() { return _ghostAlpha; }
+// スライダーを動かしたとき（pct: 5〜70）。うっすら表示が切なら入にする（見ながら濃さを合わせられるように）
+window.setGhostLayerAlpha = function(pct) {
+    const v = Math.min(GHOST_ALPHA_MAX, Math.max(GHOST_ALPHA_MIN, (parseFloat(pct) || 0) / 100));
+    _ghostAlpha = Math.round(v * 100) / 100;
+    try { localStorage.setItem(GHOST_ALPHA_KEY, String(_ghostAlpha)); } catch { /* 保存できなくても、今回の表示には反映する */ }
+    const lab = document.getElementById('ghost-alpha-val');
+    if(lab) lab.textContent = Math.round(_ghostAlpha * 100) + '%';
+    if(!window.ghostLayerMode) {
+        window.ghostLayerMode = true;
+        const cb = document.getElementById('ghost-layer-toggle');
+        if(cb) cb.checked = true;
+    }
+    render();
+};
+
+// ===== タッチで非表示（LAYOFF）=====
+// 図形をタップすると、その画層を「消す候補」にする（図面で赤く示す。もう一度タップで外す。いくつでも選べる）。
+// ☑確定（または Enter）で、候補の画層をまとめて非表示にする。以前はタップしたとたんに消えたため、
+// なぞっただけ・押し間違いでも画層が消えていた
+function layoffPickAt(sx, sy) {
+    const idx = hitTestEntity(sx, sy);
+    const e = idx >= 0 ? entities[idx] : null;
+    if(!e || e.layer === undefined || !layers[e.layer]) { addCommandLog('-> 図形がタッチされませんでした'); return; }
+    const pick = cmdState.layoffPick || (cmdState.layoffPick = []);
+    const k = pick.indexOf(e.layer);
+    if(k >= 0) pick.splice(k, 1); else pick.push(e.layer);
+    addCommandLog(`-> 画層「${layers[e.layer].name}」を${k >= 0 ? '消す候補から外しました' : '消す候補にしました（☑確定 で非表示）'}`);
+    if(navigator.vibrate) navigator.vibrate(10);
+    _layoffShowState();
+    render();
+}
+// 消す候補の画層を非表示にする（☑確定・Enter）。タッチ非表示は続ける
+function layoffConfirm() {
+    const pick = (cmdState.layoffPick || []).filter((i) => layers[i]);
+    if(!pick.length) { showToast('非表示にする画層の図形をタップしてから ☑確定 を押します'); return; }
+    saveUndo();
+    pick.forEach((i) => { layers[i].visible = false; });
+    if(cmdState.highlightIdx >= 0 && entities[cmdState.highlightIdx] && pick.includes(entities[cmdState.highlightIdx].layer)) cmdState.highlightIdx = -1;
+    if(cmdState.selectedIndices) cmdState.selectedIndices = cmdState.selectedIndices.filter((i) => entities[i] && !pick.includes(entities[i].layer));
+    const names = pick.map((i) => `「${layers[i].name}」`).join('');
+    addCommandLog(`-> 画層${names}を非表示にしました（元に戻すは ↩）`);
+    showToast(`画層${names}を非表示にしました`, 2500);
+    cmdState.layoffPick = [];
+    if(navigator.vibrate) navigator.vibrate(30);
+    updatePropertiesPanel();
+    updateLayerPanel();
+    _layoffShowState(); // 画層一括管理の一覧もここで描き直す
+    render();
+}
+// タッチ非表示の途中で、消す候補にした画層の集まり（図面で赤く示す）。途中でなければ null
+function layoffPickSet() {
+    return (cmdState.mode === 'WAITING_LAYOFF_TOUCH' && cmdState.layoffPick && cmdState.layoffPick.length) ? new Set(cmdState.layoffPick) : null;
+}
+// プロンプト・☑確定のボタン（候補の数。候補が無いあいだは出さない）・画層一括管理の一覧を、いまの候補に合わせる
+function _layoffShowState() {
+    const pick = cmdState.layoffPick || [];
+    setPrompt(pick.length ? `タッチ非表示: ${pick.map((i) => `「${layers[i].name}」`).join('')}→ ☑確定 で非表示（もう一度タップで外す）` : 'タッチ非表示: 非表示にする画層の図形をタップ → ☑確定');
+    const ab = document.getElementById('fs-dim-actionbar');
+    const cb = ab && ab.querySelector('button[onclick="dimConfirmPoint()"]');
+    if(cb) { cb.style.display = pick.length ? '' : 'none'; cb.textContent = `☑️ 確定（${pick.length}）`; }
+    if(typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
+}
+// 色の入力欄（type="color"）に入れられる #rrggbb（#rgb も直す。読めない色は白）
+function _layerColorHex(c) {
+    const rgb = _hexRgb(safeColor(c));
+    return rgb ? _rgbHex(rgb) : '#ffffff';
+}
 
 // 全画層の表示・非表示一括設定
 window.setAllLayersVisibility = function(visible) {
@@ -297,8 +371,30 @@ window.updateLayerManagerContent = function() {
         }
     });
 
-    // タッチ非表示モードのアクティブ状態チェック
+    // タッチ非表示モードのアクティブ状態チェック（消す候補の画層は、一覧でも赤く示す）
     const isLayoffActive = cmdState.mode === 'WAITING_LAYOFF_TOUCH';
+    const pick = isLayoffActive ? (cmdState.layoffPick || []).filter((i) => layers[i]) : [];
+    const ghostPct = Math.round(ghostLayerAlpha() * 100);
+    // 画層の1行: 👁️（表示・非表示）・色（押すと色を選ぶ）・名前（押すと作図画層）。画面いっぱいのときは CSS で大きく・何列かに並べる
+    const layerRow = (l, hidden) => {
+        const isCurrent = l.index === currentLayerIndex;
+        const curColor = hidden ? '#ffcc00' : '#00ff88';
+        const currentMark = isCurrent ? `<span style="color:${curColor}; font-weight:bold; margin-right:4px;" title="現在の作図画層">📌</span>` : '';
+        const textStyle = isCurrent ? `font-weight:bold; color:${curColor};` : (hidden ? 'color:#888;' : 'color:#ddd;');
+        const eye = hidden
+            ? `<button class="status-btn lm-eye" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); color:#888;" onclick="toggleLayerVisibility(${l.index})" title="表示する">➖</button>`
+            : `<button class="status-btn lm-eye" style="background:rgba(0,255,136,0.1); border:1px solid rgba(0,255,136,0.3); color:#00ff88;" onclick="toggleLayerVisibility(${l.index})" title="非表示にする">👁️</button>`;
+        const picked = pick.includes(l.index);
+        return `
+            <div class="prop-row lm-row${hidden ? ' lm-off' : ''}${picked ? ' lm-pick' : ''}">
+                ${eye}
+                <input type="color" class="lm-color" value="${_layerColorHex(l.color)}" onchange="changeLayerColorGlobal(${l.index}, this.value)" title="画層の色を変える: ${escapeHtml(l.name)}" aria-label="画層「${escapeHtml(l.name)}」の色">
+                <div class="lm-name" style="${textStyle}" onclick="changeCurrentLayer('${l.index}')" title="クリックで作図画層に設定: ${escapeHtml(l.name)}">
+                    ${currentMark}${escapeHtml(l.name)}
+                </div>
+                ${picked ? '<span class="lm-pick-badge">消す候補</span>' : ''}
+            </div>`;
+    };
     const layoffBtnStyle = isLayoffActive 
         ? 'background:#00ff88; color:#1e2228; border:1px solid #00ff88; font-weight:bold; padding:6px 12px; border-radius:14px; cursor:pointer; flex:1;'
         : 'background:rgba(40,44,52,0.9); color:#ffcc00; border:1px solid #ffcc00; font-weight:bold; padding:6px 12px; border-radius:14px; cursor:pointer; flex:1;';
@@ -308,12 +404,19 @@ window.updateLayerManagerContent = function() {
     // 1. グローバル設定・操作エリア
     html += `
     <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.1);">
-        <div style="display:flex; align-items:center; gap:8px; padding:4px 8px; background:rgba(255,255,255,0.05); border-radius:6px;">
-            <input type="checkbox" id="ghost-layer-toggle" ${window.ghostLayerMode ? 'checked' : ''} onchange="toggleGhostLayerMode(this.checked)" style="cursor:pointer; width:16px; height:16px;">
-            <label for="ghost-layer-toggle" style="cursor:pointer; font-weight:bold; color:#ddd; font-size:12px; user-select:none;">非表示画層をうっすら表示する</label>
+        <div style="display:flex; flex-direction:column; gap:4px; padding:4px 8px; background:rgba(255,255,255,0.05); border-radius:6px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="ghost-layer-toggle" ${window.ghostLayerMode ? 'checked' : ''} onchange="toggleGhostLayerMode(this.checked)" style="cursor:pointer; width:16px; height:16px;">
+                <label for="ghost-layer-toggle" style="cursor:pointer; font-weight:bold; color:#ddd; font-size:12px; user-select:none;">非表示画層をうっすら表示する</label>
+            </div>
+            <div class="lm-ghost-row" title="うっすら表示の濃さ（動かすと、うっすら表示を入にします）">
+                <span>濃さ</span>
+                <input type="range" id="ghost-alpha" min="${Math.round(GHOST_ALPHA_MIN * 100)}" max="${Math.round(GHOST_ALPHA_MAX * 100)}" step="5" value="${ghostPct}" oninput="setGhostLayerAlpha(this.value)" aria-label="うっすら表示の濃さ">
+                <span id="ghost-alpha-val">${ghostPct}%</span>
+            </div>
         </div>
         <div style="display:flex; gap:8px;">
-            <button class="prop-btn" style="${layoffBtnStyle}" onclick="issueCommand('LAYOFF')" title="キャンバス上の図形をタッチして、その画層を即座に非表示にします（連続操作可能）">
+            <button class="prop-btn" style="${layoffBtnStyle}" onclick="issueCommand('LAYOFF')" title="図面の図形をタップして消す候補にし、☑確定 でその画層を非表示にします（続けてできます）">
                 ${isLayoffActive ? '👆 タッチ非表示中' : '👆 タッチで非表示'}
             </button>
             <button class="prop-btn" style="background:rgba(40,44,52,0.9); color:#00ff88; border:1px solid #00ff88; font-weight:bold; padding:6px 12px; border-radius:14px; cursor:pointer; flex:1;" onclick="invertLayersVisibility()" title="すべての画層の表示・非表示を反転します">
@@ -325,12 +428,12 @@ window.updateLayerManagerContent = function() {
             if(hiddenEntCount === 0) return '';
             return `<button class="prop-btn" style="background:rgba(40,44,52,0.9); color:#61afef; border:1px solid #61afef; font-weight:bold; padding:6px 12px; border-radius:14px; cursor:pointer;" onclick="showHiddenEntities()" title="インポート時に非表示化された円弧などを再表示します">⭕ 隠れ図形を再表示 (${hiddenEntCount}個)</button>`;
         })()}
-        ${isLayoffActive ? '<div style="color:#ffcc00; font-size:10px; text-align:center; margin-top:2px; font-weight:bold;">図面上の図形をタップして画層を消せます (Escで終了)</div>' : ''}
+        ${isLayoffActive ? `<div style="color:#ffcc00; font-size:10px; text-align:center; margin-top:2px; font-weight:bold;">図面の図形をタップすると、その画層が赤く光ります（もう一度タップで外す）。☑確定 で非表示にします（Escで終了）${pick.length ? `<br><span style="color:#ff6b6b;">消す候補: ${pick.map((i) => `「${escapeHtml(layers[i].name)}」`).join('')}</span>` : ''}</div>` : ''}
     </div>
     `;
 
-    // 2. スクロール可能な画層リストエリア（MAX高さを持たせてスクロール）
-    html += `<div style="max-height: 250px; overflow-y: auto; display:flex; flex-direction:column; gap:8px; padding-right:4px;">`;
+    // 2. スクロール可能な画層リストエリア（ふつうは高さ 250px まで。画面いっぱいのときはパネルの高さいっぱい。index.html の .lm-list）
+    html += `<div class="lm-list">`;
 
     // A. 表示中の画層セクション
     html += `
@@ -343,19 +446,7 @@ window.updateLayerManagerContent = function() {
     if (visibleLayers.length === 0) {
         html += `<div style="color:#666; font-size:11px; font-style:italic; padding:6px 8px;">表示中の画層はありません</div>`;
     } else {
-        visibleLayers.forEach(l => {
-            const isCurrent = l.index === currentLayerIndex;
-            const currentMark = isCurrent ? '<span style="color:#00ff88; font-weight:bold; margin-right:4px;" title="現在の作図画層">📌</span>' : '';
-            const textStyle = isCurrent ? 'font-weight:bold; color:#00ff88;' : 'color:#ddd;';
-            html += `
-            <div class="prop-row" style="margin-bottom:6px; display:flex; align-items:center; background:rgba(255,255,255,0.02); padding:4px 6px; border-radius:4px;">
-                <button class="status-btn" style="padding:2px 5px; margin-right:6px; font-size:12px; width:28px; text-align:center; background:rgba(0,255,136,0.1); border:1px solid rgba(0,255,136,0.3); color:#00ff88; border-radius:3px; cursor:pointer;" onclick="toggleLayerVisibility(${l.index})" title="非表示にする">👁️</button>
-                <div style="width:12px;height:12px;background-color:${safeColor(l.color)};border:1px solid rgba(255,255,255,0.2);border-radius:2px;margin-right:8px;box-shadow:0 0 3px rgba(0,0,0,0.5);"></div>
-                <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; font-size:12px; ${textStyle}" onclick="changeCurrentLayer('${l.index}')" title="クリックで作図画層に設定: ${escapeHtml(l.name)}">
-                    ${currentMark}${escapeHtml(l.name)}
-                </div>
-            </div>`;
-        });
+        html += `<div class="lm-rows">${visibleLayers.map((l) => layerRow(l, false)).join('')}</div>`;
     }
     html += `</div>`;
 
@@ -370,19 +461,7 @@ window.updateLayerManagerContent = function() {
     if (hiddenLayers.length === 0) {
         html += `<div style="color:#666; font-size:11px; font-style:italic; padding:6px 8px;">非表示の画層はありません</div>`;
     } else {
-        hiddenLayers.forEach(l => {
-            const isCurrent = l.index === currentLayerIndex;
-            const currentMark = isCurrent ? '<span style="color:#ffcc00; font-weight:bold; margin-right:4px;" title="現在の作図画層">📌</span>' : '';
-            const textStyle = isCurrent ? 'font-weight:bold; color:#ffcc00;' : 'color:#888;';
-            html += `
-            <div class="prop-row" style="margin-bottom:6px; display:flex; align-items:center; background:rgba(255,255,255,0.01); padding:4px 6px; border-radius:4px;">
-                <button class="status-btn" style="padding:2px 5px; margin-right:6px; font-size:12px; width:28px; text-align:center; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); color:#888; border-radius:3px; cursor:pointer;" onclick="toggleLayerVisibility(${l.index})" title="表示する">➖</button>
-                <div style="width:12px;height:12px;background-color:${safeColor(l.color)};border:1px solid rgba(255,255,255,0.1);border-radius:2px;margin-right:8px;opacity:0.5;"></div>
-                <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; font-size:12px; ${textStyle}" onclick="changeCurrentLayer('${l.index}')" title="クリックで作図画層に設定: ${escapeHtml(l.name)}">
-                    ${currentMark}${escapeHtml(l.name)}
-                </div>
-            </div>`;
-        });
+        html += `<div class="lm-rows">${hiddenLayers.map((l) => layerRow(l, true)).join('')}</div>`;
     }
     html += `</div>`;
 
@@ -678,6 +757,7 @@ window.toggleOsnapPanel = function(e) {
     }
 };
 
+// 画層の色を変える（プロパティ欄・画層一括管理の色の欄）。上のバーの作図画層の色・画層一括管理の一覧も合わせる
 window.changeLayerColorGlobal = function(layerId, color) {
     if(layers[layerId]) {
         saveUndo();
@@ -685,5 +765,7 @@ window.changeLayerColorGlobal = function(layerId, color) {
         addCommandLog(`-> 画層「${layers[layerId].name}」の色を ${color} に変更しました`);
         render();
         updatePropertiesPanel();
+        if(String(layerId) === String(currentLayerIndex)) updateLayerColorDisplay();
+        updateLayerPanel(); // 画層一括管理の一覧も描き直す
     }
 };

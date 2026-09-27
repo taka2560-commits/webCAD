@@ -567,6 +567,32 @@
         .win-ico { display: block; width: 13px; height: 13px; }
         .win-ico-restore, .win-max .win-ico-max { display: none; }
         .win-max .win-ico-restore { display: block; }
+        /* 画層一括管理: うっすら表示の濃さのスライダーと、画層の一覧（1行＝👁️・色・名前）。
+           画面いっぱい（□）のときは、一覧だけをパネルの高さいっぱいでスクロールし（上の操作は動かさない）、行を大きくして何列かに並べる */
+        .lm-ghost-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #bbb; }
+        .lm-ghost-row input[type="range"] { flex: 1; min-width: 0; height: 24px; margin: 0; accent-color: var(--green); cursor: pointer; }
+        .lm-ghost-row span:last-child { min-width: 36px; text-align: right; font-family: Consolas, monospace; color: #ddd; }
+        .lm-list { max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+        .lm-rows { display: flex; flex-direction: column; gap: 6px; }
+        .lm-row { display: flex; align-items: center; gap: 6px; margin: 0; padding: 4px 6px; border-radius: 4px; background: rgba(255,255,255,0.02); }
+        .lm-row.lm-off { background: rgba(255,255,255,0.01); }
+        .lm-row.lm-pick { background: rgba(255,107,107,0.14); box-shadow: inset 0 0 0 1px rgba(255,107,107,0.7); } /* タッチ非表示で消す候補 */
+        .lm-eye { flex: 0 0 auto; width: 28px; padding: 2px 5px; font-size: 12px; justify-content: center; border-radius: 3px; cursor: pointer; }
+        .lm-color { flex: 0 0 auto; width: 22px; height: 22px; padding: 0; border: 1px solid rgba(255,255,255,0.25); border-radius: 4px; background: none; cursor: pointer; }
+        .lm-color::-webkit-color-swatch-wrapper { padding: 0; }
+        .lm-color::-webkit-color-swatch { border: none; border-radius: 3px; }
+        .lm-color::-moz-color-swatch { border: none; border-radius: 3px; }
+        .lm-off .lm-color { opacity: 0.5; }
+        .lm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; font-size: 12px; }
+        .lm-pick-badge { flex: 0 0 auto; font-size: 10px; font-weight: 700; color: #ff6b6b; }
+        #property-panel.win-max:not(.win-min) #layer-manager-container { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+        #property-panel.win-max:not(.win-min) .lm-list { max-height: none; flex: 1 1 auto; min-height: 0; }
+        #property-panel.win-max:not(.win-min) .lm-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px 12px; }
+        #property-panel.win-max:not(.win-min) .lm-row { padding: 8px 10px; gap: 10px; border: 1px solid rgba(255,255,255,0.06); }
+        #property-panel.win-max:not(.win-min) .lm-eye { width: 40px; height: 34px; font-size: 16px; }
+        #property-panel.win-max:not(.win-min) .lm-color { width: 30px; height: 30px; }
+        #property-panel.win-max:not(.win-min) .lm-name { font-size: 14px; }
+        #property-panel.win-max:not(.win-min) .lm-pick-badge { font-size: 12px; }
         .cogo-table tr.helm-flag td { color:#ffcc00; }
         .helm-x { background:none; border:none; color:#ff6b6b; cursor:pointer; font-size:12px; padding:0 4px; }
         /* お気に入りのボタン（浮かぶバー）: ⠿ で動かす・⭐ でたたむ・＋ で登録。ボタンは左のツールバーと同じ形 */

@@ -540,9 +540,9 @@ function resetCommand() {
         const plineClose = document.getElementById('pline-close-btn'); if (plineClose) plineClose.style.display = 'none';
         actionbar.style.display = 'none';
         const confirmBtn = actionbar.querySelector('button[onclick="dimConfirmPoint()"]');
-        if (confirmBtn) confirmBtn.style.display = '';
+        if (confirmBtn) { confirmBtn.style.display = ''; confirmBtn.textContent = '☑️ 確定'; } // タッチ非表示では「☑️ 確定（数）」にしている
         const cancelBtn = document.getElementById('dim-cancel-btn');
-        if (cancelBtn) { cancelBtn.textContent = '❌ 終了'; cancelBtn.style.background = 'transparent'; cancelBtn.style.padding = ''; cancelBtn.style.borderRadius = ''; }
+        if (cancelBtn) { cancelBtn.textContent = '❌ 終了'; cancelBtn.style.background = 'transparent'; cancelBtn.style.color = '#ff6b6b'; cancelBtn.style.padding = ''; cancelBtn.style.borderRadius = ''; }
         const writeBtn = document.getElementById('dim-meas-write'); if (writeBtn) writeBtn.style.display = 'none';
         const measBaseBtn = document.getElementById('dim-meas-base'); if (measBaseBtn) measBaseBtn.style.display = 'none';
     }
