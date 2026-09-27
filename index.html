@@ -50,7 +50,7 @@
         body,html { overflow:clip; }
 
         /* ボタンや入力欄などのUI要素は確実にタッチ・クリックを受け付ける */
-        button, input, select, .glass-panel, .top-btn, .cg-btn, .tool-btn, #top-bar, #toolbar, #command-line-area, #properties-panel, #layer-panel, #property-panel {
+        button, input, select, .glass-panel, .top-btn, .tool-btn, #top-bar, #toolbar, #command-line-area, #properties-panel, #layer-panel, #property-panel {
             touch-action: manipulation;
             pointer-events: auto;
             -webkit-tap-highlight-color: rgba(255,255,255,0.2);
@@ -80,8 +80,8 @@
         #toolbar::-webkit-scrollbar { display:none; }
         
         /* マイクロインタラクション（ボタン） */
-        .top-btn, .cg-btn, .tool-btn { transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1); }
-        .top-btn:active, .cg-btn:active, .tool-btn:active { transform: scale(0.92); }
+        .top-btn, .tool-btn { transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1); }
+        .top-btn:active, .tool-btn:active { transform: scale(0.92); }
         
         .top-btn { flex:0 0 auto;height:34px;padding:0 10px;background-color:var(--btn-glass);border:1px solid var(--border-3);color:var(--text-color);border-radius:var(--r-pill);cursor:pointer;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:5px;white-space:nowrap; }
         .top-btn:hover { background-color:var(--btn-hover); }
@@ -175,8 +175,6 @@
         body.fullscreen-mode #command-line-area,
         body.fullscreen-mode #status-bar { display: none !important; }
         
-        #btn-exit-fullscreen { display: none; }
-        body.fullscreen-mode #btn-exit-fullscreen { display: inline-block; background-color: rgba(255,107,107,0.2); color: #ff6b6b; font-size: 13px; font-weight:bold; border: 1px solid #ff6b6b; border-radius: 8px; cursor: pointer; padding: 6px 12px; position:absolute; top:10px; right:10px; z-index:9999; }
 
         /* === 全画面 座標読取モード UI (案C) === */
         #fs-overlay { display: none; }
@@ -348,8 +346,9 @@
             border: 1px solid var(--border-color); border-radius: var(--r-card);
             box-shadow: 0 12px 36px rgba(0,0,0,0.5); padding: 12px;
             flex-direction: column; gap: 10px; font-size: 13px;
-            animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            animation: menuIn 0.2s cubic-bezier(0.33, 1, 0.68, 1);
         }
+        @keyframes menuIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
         .menu-section-title { font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: 0.1em; margin-bottom: 4px; }
         .menu-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
         .menu-item-btn { min-height: 36px; padding: 0 8px; border-radius: var(--r-sub); background: var(--btn-glass-menu); border: 1px solid var(--border-3); color: var(--text-color); font: 600 12px 'Segoe UI', sans-serif; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
@@ -392,6 +391,26 @@
         /* 未保存の変更がある印（💾 の右上の黄色の点。cad-storage.js の _syncSaveMark） */
         #btn-save { position:relative; }
         #btn-save.unsaved::after { content:''; position:absolute; top:2px; right:2px; width:8px; height:8px; border-radius:50%; background:#ffcc00; box-shadow:0 0 0 2px rgba(var(--float-rgb),1); }
+        /* スイッチ（入・切の設定。中身はチェックボックス。つまみは背景の丸で描くので、どのブラウザでも同じ） */
+        input[type="checkbox"].sw { -webkit-appearance:none; appearance:none; flex-shrink:0; width:40px; height:22px; margin:0; border-radius:11px; cursor:pointer; vertical-align:middle;
+            border:1px solid var(--border-1); background:radial-gradient(circle at 11px 50%, #aeb4bd 0 7px, transparent 7.5px), var(--btn-fill); transition:background-color .15s, border-color .15s; }
+        input[type="checkbox"].sw:checked { border-color:var(--brand); background:radial-gradient(circle at calc(100% - 11px) 50%, var(--brand) 0 7px, transparent 7.5px), rgba(var(--brand-rgb),0.25); }
+        input[type="checkbox"].sw:focus-visible { outline:2px solid var(--highlight-color); outline-offset:2px; }
+        /* バッジ（⋯ のエラーの数・？ の「新」） */
+        .nb-badge { position:absolute; top:-4px; right:-4px; min-width:16px; height:16px; padding:0 4px; box-sizing:border-box; border-radius:8px; background:#ff6b6b; color:#1e2228;
+            font:800 10px/16px 'Segoe UI',sans-serif; text-align:center; pointer-events:none; }
+        .nb-badge[hidden] { display:none; }
+        .nb-badge.nb-new { background:#ffcc00; }
+        #btn-top-menu { position:relative; } /* ？（#guide-help-btn）はもともと position:absolute（右下）なので、そのままでバッジが付く */
+        #guide-help-btn { overflow:visible; }
+        /* 続きがある印（上のバーは横、左のバーは縦にスクロールする。端を薄くして続きがあると分かるように。cad-form.js の scrollCue） */
+        #top-bar.more-right { -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 36px), transparent); mask-image:linear-gradient(to right, #000 calc(100% - 36px), transparent); }
+        #top-bar.more-left { -webkit-mask-image:linear-gradient(to left, #000 calc(100% - 36px), transparent); mask-image:linear-gradient(to left, #000 calc(100% - 36px), transparent); }
+        #top-bar.more-left.more-right { -webkit-mask-image:linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image:linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+        #toolbar.more-down { -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 36px), transparent); mask-image:linear-gradient(to bottom, #000 calc(100% - 36px), transparent); }
+        #toolbar.more-up { -webkit-mask-image:linear-gradient(to top, #000 calc(100% - 36px), transparent); mask-image:linear-gradient(to top, #000 calc(100% - 36px), transparent); }
+        #toolbar.more-up.more-down { -webkit-mask-image:linear-gradient(to bottom, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image:linear-gradient(to bottom, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+        .gh-new .gh-new-item { text-align:left; margin-top:0; }
         /* 押せないボタン（押せるボタンと見分けられるように薄く） */
         .prop-btn:disabled, .sel-btn:disabled, .top-btn:disabled, .menu-item-btn:disabled, .status-btn:disabled { opacity:0.42; cursor:not-allowed; filter:saturate(0.5); }
         /* 確認画面（cad-dialog.js。ブラウザの confirm・prompt の代わり） */
@@ -763,7 +782,7 @@
         /* ===== オプション「ボタンの大きさ」（cad-prefs.js が --btn-k を 小 0.85・中 1・大 1.25・特大 1.5 にする） =====
            バーのボタンそのものを zoom で大きくし、ボタンを並べる帯の幅・高さと、帯に合わせて置いた部品の位置を calc で合わせる。
            中（1）のときは以前と同じ大きさ・位置 */
-        .tool-btn, .top-btn, .status-btn, .sel-btn, #sel-label, .fav-btn, .fav-head, #layer-select, #current-layer-color, #btn-exit-fullscreen,
+        .tool-btn, .top-btn, .status-btn, .sel-btn, #sel-label, .fav-btn, .fav-head, #layer-select, #current-layer-color,
         #fs-dim-actionbar > button, #fs-controls button, #fs-zoom-panel button { zoom: var(--btn-k, 1); }
         #top-bar { min-height: calc(44px * var(--btn-k, 1)); }
         #toolbar { top: calc(16px + 44px * var(--btn-k, 1)); bottom: calc(17px + 38px * var(--btn-k, 1)); width: calc(52px * var(--btn-k, 1)); }
@@ -822,12 +841,12 @@
            端末の「動きを減らす」が入のときは、どれも動かさない */
         @media (prefers-reduced-motion: no-preference) {
             /* 押したとき: 少し沈んで内側に影（縮めすぎるとボタンが逃げて見えるので 95%）。離すと一度だけ弾んで戻る */
-            body.motion-ui :where(.top-btn, .tool-btn, .cg-btn, .status-btn, .sel-btn, .fav-btn, .fsd-btn, .subview-btn, .win-btn, .menu-item-btn, .gnss-btn, .prop-btn),
+            body.motion-ui :where(.top-btn, .tool-btn, .status-btn, .sel-btn, .fav-btn, .fsd-btn, .subview-btn, .win-btn, .menu-item-btn, .gnss-btn, .prop-btn),
             body.motion-ui #fs-controls button, body.motion-ui #fs-zoom-panel button, body.motion-ui #fs-dim-actionbar > button, body.motion-ui #command-pill, body.motion-ui #property-panel-help {
                 transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms cubic-bezier(0.33, 1, 0.68, 1),
                     background-color 160ms cubic-bezier(0.33, 1, 0.68, 1), border-color 160ms cubic-bezier(0.33, 1, 0.68, 1), color 160ms cubic-bezier(0.33, 1, 0.68, 1);
             }
-            body.motion-ui :where(.top-btn, .tool-btn, .cg-btn, .status-btn, .sel-btn, .fav-btn, .fsd-btn, .subview-btn, .win-btn, .menu-item-btn, .gnss-btn, .prop-btn):active,
+            body.motion-ui :where(.top-btn, .tool-btn, .status-btn, .sel-btn, .fav-btn, .fsd-btn, .subview-btn, .win-btn, .menu-item-btn, .gnss-btn, .prop-btn):active,
             body.motion-ui #fs-controls button:active, body.motion-ui #fs-zoom-panel button:active, body.motion-ui #fs-dim-actionbar > button:active, body.motion-ui #command-pill:active, body.motion-ui #property-panel-help:active {
                 transform: scale(0.95); box-shadow: inset 0 2px 7px rgba(0,0,0,0.5); transition-duration: 80ms;
             }
@@ -893,7 +912,7 @@
         <button id="btn-extents" class="top-btn" onclick="zoomExtents()" title="全体表示">🔍 全体</button>
         <button id="btn-coordread" class="top-btn primary" onclick="toggleFullscreen()" title="全画面表示で座標読取に特化">🎯 座標読取</button>
         <button class="top-btn" onclick="togglePropertiesPanel()" title="プロパティパネル表示切替">📋</button>
-        <button id="btn-top-menu" class="top-btn" onclick="toggleTopMenu()" title="その他のメニュー (エクスポート・UCS・設定)">⋯</button>
+        <button id="btn-top-menu" class="top-btn" onclick="toggleTopMenu()" title="その他のメニュー (エクスポート・UCS・設定)">⋯<span class="nb-badge err-badge" hidden></span></button>
     </div>
 
     <!-- トップメニューモーダル (案B: その他機能集約) -->
@@ -995,15 +1014,14 @@
     <!-- ステータスバー (案B: 整理＆座標表示) -->
     <div id="status-bar" class="glass-panel">
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-            <button id="btn-exit-fullscreen" onclick="toggleFullscreen()">✖ 解除</button>
             <span id="ucs-label" style="color:var(--coord-color);font-weight:bold;">WCS</span>
             <span class="paper-space-label" style="opacity:0.6;font-size:0.85em;">モデル</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-            <button id="btn-area-select" class="status-btn" title="範囲選択 ON/OFF" onclick="toggleAreaSelect()">範囲: OFF</button>
-            <button id="btn-ortho" class="status-btn" title="直交モード (F8)" onclick="toggleOrtho()">ORTHO</button>
+            <button id="btn-area-select" class="status-btn" aria-pressed="false" title="範囲選択 ON/OFF" onclick="toggleAreaSelect()">範囲: OFF</button>
+            <button id="btn-ortho" class="status-btn" aria-pressed="false" title="直交モード (F8)" onclick="toggleOrtho()">ORTHO</button>
             <div style="position:relative;display:inline-flex;">
-                <button id="btn-osnap" class="status-btn active" title="オブジェクトスナップ (F3)" onclick="toggleOsnapMain()">OSNAP</button>
+                <button id="btn-osnap" class="status-btn active" aria-pressed="true" title="オブジェクトスナップ (F3)" onclick="toggleOsnapMain()">OSNAP</button>
                 <button id="btn-osnap-panel" class="status-btn" style="padding:0 3px;margin-left:-4px;" onclick="toggleOsnapPanel(event)">▼</button>
             </div>
             <span id="snap-indicator" style="color:#00ff00;width:30px;font-size:10px;"></span>
@@ -1159,11 +1177,11 @@
         <!-- 案C: 右下コントロール群 (誤タップ防止の間隔) -->
         <div id="fs-controls">
             <div style="position:relative; display:flex; flex-direction:column; align-items:center;">
-                <button id="fs-btn-osnap" class="fs-active" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
+                <button id="fs-btn-osnap" class="fs-active" aria-pressed="true" onclick="toggleFsOsnap()" title="OSNAP ON/OFF">⊕</button>
                 <button id="fs-btn-osnap-panel" onclick="toggleOsnapPanel(event)" style="width:28px; height:22px; margin-top:-6px; font-size:10px; background:rgba(30,34,40,0.9); border:1px solid rgba(255,255,255,0.3); color:#fff; border-radius:10px; z-index:100001;" title="OSNAP設定">▼</button>
             </div>
             <button id="fs-btn-help" onclick="showGuideHelp()" title="ヘルプ・操作ガイド">？</button>
-            <button id="fs-btn-coord" class="fs-active" onclick="toggleFsCoordAlways()" title="座標表示 ON/OFF">XY</button>
+            <button id="fs-btn-coord" class="fs-active" aria-pressed="true" onclick="toggleFsCoordAlways()" title="座標表示 ON/OFF">XY</button>
             <button id="fs-btn-extents" onclick="zoomExtents()" title="全体表示">⛶</button>
             <button id="fs-btn-exit" onclick="toggleFullscreen()" title="全画面解除" style="border-color:#ff6b6b;color:#ff6b6b;">✕</button>
         </div>
@@ -1426,7 +1444,7 @@
             fsOsnapEnabled = !fsOsnapEnabled;
             const btn = document.getElementById('fs-btn-osnap');
             if(btn) {
-                btn.classList.toggle('fs-active', fsOsnapEnabled);
+                btn.classList.toggle('fs-active', fsOsnapEnabled); btn.setAttribute('aria-pressed', String(!!fsOsnapEnabled));
                 btn.style.opacity = fsOsnapEnabled ? '1' : '0.4';
             }
             // cad-core.js 側のOSNAP状態も連動
@@ -1441,7 +1459,7 @@
             fsCoordAlways = !fsCoordAlways;
             const btn = document.getElementById('fs-btn-coord');
             if(btn) {
-                btn.classList.toggle('fs-active', fsCoordAlways);
+                btn.classList.toggle('fs-active', fsCoordAlways); btn.setAttribute('aria-pressed', String(!!fsCoordAlways));
                 btn.style.opacity = fsCoordAlways ? '1' : '0.4';
             }
             if(!fsCoordAlways) {

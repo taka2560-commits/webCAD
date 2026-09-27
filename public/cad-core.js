@@ -48,8 +48,8 @@ function showOptionsPanel(){
         <div style="display:flex;gap:6px;">${btns}</div>
         ${(typeof displayPrefsSectionHtml === 'function') ? displayPrefsSectionHtml() : ''}
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" ${window.groupSelectEnabled?'checked':''} onchange="setGroupSelectEnabled(this.checked)" style="width:16px;height:16px;"> タップでブロック全体を選択</label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" ${hideArcs?'checked':''} onchange="setImportHideArcs(this.checked)" style="width:16px;height:16px;"> 取り込み時に円弧を非表示にする</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" class="sw" role="switch" ${window.groupSelectEnabled?'checked':''} onchange="setGroupSelectEnabled(this.checked)"> タップでブロック全体を選択</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" class="sw" role="switch" ${hideArcs?'checked':''} onchange="setImportHideArcs(this.checked)"> 取り込み時に円弧を非表示にする</label>
             <div style="color:#888;font-size:10px;">非表示にした円弧は、画層管理の「隠れ図形を再表示」で表示できます</div>
         </div>
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
@@ -571,10 +571,6 @@ function setActiveTool(name) { document.querySelectorAll('.tool-btn').forEach(b=
 
 // === 新UI: ツールバー展開 / コマンドピル ===
 // 左ツールバーを 44pxレール ⇔ 148pxオーバーレイ で切り替える
-function toggleToolbar() {
-    const tb = document.getElementById('toolbar');
-    if (tb) tb.classList.toggle('expanded');
-}
 // コマンドラインを 32pxピル ⇔ 展開（ログ+入力）で切り替える
 function toggleCommandLine() {
     const area = document.getElementById('command-line-area');

@@ -121,3 +121,30 @@ function searchClear(id) {
     el.dispatchEvent(new window.Event('input', { bubbles: true }));
     el.focus();
 }
+
+// ===== 続きがある印（v5.22） =====
+// 上のバー（横）と左のバー（縦）は、ボタンが入りきらないとスクロールする。続きがある側の端を薄くして分かるようにする（CSS の .more-*）
+function scrollCue(el, axis) {
+    if(!el) return;
+    const eps = 2;
+    if(axis === 'x') {
+        const can = el.scrollWidth - el.clientWidth > eps;
+        el.classList.toggle('more-left', can && el.scrollLeft > eps);
+        el.classList.toggle('more-right', can && el.scrollLeft < el.scrollWidth - el.clientWidth - eps);
+    } else {
+        const can = el.scrollHeight - el.clientHeight > eps;
+        el.classList.toggle('more-up', can && el.scrollTop > eps);
+        el.classList.toggle('more-down', can && el.scrollTop < el.scrollHeight - el.clientHeight - eps);
+    }
+}
+function scrollCueAll() {
+    scrollCue(document.getElementById('top-bar'), 'x');
+    scrollCue(document.getElementById('toolbar'), 'y');
+}
+(function() {
+    const tb = document.getElementById('top-bar'), tl = document.getElementById('toolbar');
+    if(tb) tb.addEventListener('scroll', () => scrollCue(tb, 'x'), { passive: true });
+    if(tl) tl.addEventListener('scroll', () => scrollCue(tl, 'y'), { passive: true });
+    window.addEventListener('resize', scrollCueAll);
+    setTimeout(scrollCueAll, 300); // 起動して並びが決まってから
+})();

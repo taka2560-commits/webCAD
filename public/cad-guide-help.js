@@ -361,6 +361,22 @@ const GUIDE_TOPICS = [
         ],
         tips: ['動きは見た目だけです。押した結果（コマンド・パネル・状態）は、動きを待たずにすぐ変わります。', '端末の「動きを減らす（視差効果を減らす）」が入のときは、入にしても動きません。'],
         open: { label: '⚙ オプションを開く', run: () => showOptionsPanel() } },
+    { id: 'notice', cat: 'setting', title: 'お知らせ・確認画面・元に戻す', keys: 'おしらせ かくにん もとにもどす とりけし しょりちゅう ほぞん おふらいん ばっじ 確認 元に戻す 取り消し 処理中 未保存 オフライン エラー 新',
+        lead: '操作の結果や、確かめたいことを画面に出します。',
+        steps: [
+            '確認画面: ボタンに何をするか（「閉じる」「削除する」など）を書いています。戻せない操作は赤いボタンで、初めは「やめる」を選んでいます。Esc か「やめる」で閉じます。',
+            '元に戻す: 長押しで文字・寸法を消したとき、削除、写真のピンを消したとき、画層をまとめて非表示・表示反転したときは、画面の下に「↩ 元に戻す」が6秒出ます。',
+            'お知らせの印: ✓ できた・⚠ 注意・✕ できなかった。コマンド欄を畳んでいるときも、書き出しの結果などはお知らせで出ます。',
+            '処理中: 読み込み・PDF・TS への送信のあいだは、画面の上に回る印と「DWG のデータを展開中…」のような説明が出ます。',
+            '💾 の黄色い点は、名前を付けて保存していない変更があるしるしです。📴 オフライン は、インターネットにつながっていないしるしです（作図・保存はできます）。',
+            '⋯ の赤い数はエラーの記録の数、？ の「新」はアプリが新しくなったしるしです。',
+        ] },
+    { id: 'fields', cat: 'setting', title: '入力欄（まちがい・点名の候補・単位）', keys: 'にゅうりょく らん まちがい えらー こうほ てんめい たんい ぜんかく 入力 欄 候補 点名 単位 全角',
+        steps: [
+            '使えない値を入れると、その欄が赤い枠になり、すぐ下に理由が出ます。打った字は残るので、直してもう一度押します（直し始めると理由は消えます）。',
+            '測量計算・杭打ち・変換の点の欄に打ち始めると、図面の測点の名前・番号から合うものがボタンで出ます。押すとその点になります。',
+            '入力欄の見出しには、いつも単位（m・mm）が付きます。数は全角（１２．５）でも読みます。',
+        ] },
     { id: 'theme', cat: 'setting', title: 'デザイン色（画面の配色）', keys: 'でざいんいろ いろ はいしょく てーま からー ごーるど ぶるー みんと ばいおれっと らいむ 色 配色 テーマ カラー 見た目 GOLD BLUE MINT ULTRAVIOLET LIME',
         lead: 'バー・パネル・ボタンと、選んでいる印の色を、6つの配色から選べます（初めは「標準」＝今までの色）。',
         where: '⋯ メニュー → ⚙ オプション → 表示・操作 の「デザイン色」',
@@ -521,6 +537,19 @@ const GUIDE_TOUR_MENU = [
     ['grip', '✏️ 点を動かす（グリップ）'], ['photo', '📷 写真・メモ（ピン）'], ['print', '🖨 印刷・PDF'], ['view', '🖐 画面の動かし方'], ['measure', '📐 測る（基点測定）'],
     ['snap', '🧲 スナップの設定'], ['panel', '⠿ パネルの移動・大きさ'], ['prefs', '⚙ 表示の設定'],
 ];
+// 新しくなったこと（アプリが新しくなってから、ヘルプを初めて開いたときに上に出す）
+let _ghShowNew = false;
+const GUIDE_WHATS_NEW = [
+    ['theme', '🎨 デザイン色: 画面の配色を6つから選べます（⚙ オプション → 表示・操作）'],
+    ['notice', '💬 確認はアプリの中の画面に。削除のあとは「↩ 元に戻す」で戻せます'],
+    ['notice', '⏳ 読み込み中の印・💾 の未保存の印・📴 オフラインの印'],
+    ['fields', '✏️ 入力のまちがいは欄のそばに。点の欄には点名の候補'],
+];
+function _ghWhatsNewHtml() {
+    if(!_ghShowNew) return '';
+    return '<div class="gh-extra gh-new"><div class="gh-sec">🆕 新しくなったこと</div>' +
+        GUIDE_WHATS_NEW.map(([id, text]) => `<button class="prop-btn btn-sub gh-new-item" onclick="guideHelpOpen('${id}')">${escapeHtml(text)}</button>`).join('') + '</div>';
+}
 function _ghToursHtml() {
     const done = (id) => (_guide.tours && _guide.tours[id] === 'done') ? ' ✓' : '';
     const list = GUIDE_TOUR_MENU.filter(([id]) => GUIDE_TOURS[id])
@@ -551,7 +580,7 @@ function _ghRender() {
     const html = back +
         `<div class="gh-search-row"><input id="gh-search" class="prop-val gh-search" type="search" autocomplete="off" enterkeyhint="search" placeholder="🔍 さがす（例: 求積・きゅうせき・SIMA・寸法）" value="${escapeHtml(_ghQuery)}" oninput="guideHelpSearch(this.value)">${searchClearBtn('gh-search')}</div>` +
         '<div id="gh-found" class="gh-found"></div>' +
-        _ghToursHtml() + cats + _ghCommandsHtml() + _ghHintsHtml();
+        _ghWhatsNewHtml() + _ghToursHtml() + cats + _ghCommandsHtml() + _ghHintsHtml();
     showPropertyPanel(GUIDE_HELP_TITLE, html);
     _ghApplySearch();
     if(_ghFocus) {
@@ -611,6 +640,9 @@ function _ghApplySearch() {
  * ヘルプを開く（探す言葉は空に戻す）。topicId: 開いてすぐ見せる説明、back: { label, run }（「◀ 戻る」で開き直すパネル）
  */
 window.showGuideHelp = function(topicId, back) {
+    _ghShowNew = (typeof guideWhatsNew === 'function') && guideWhatsNew(); // 新しくなってから初めて開いたときは、上に「新しくなったこと」を出す
+    try { localStorage.removeItem('cad_whats_new'); } catch { /* 消せなくてもよい */ }
+    if(typeof guideSyncWhatsNew === 'function') guideSyncWhatsNew();
     _ghBack = back || null;
     _ghFocus = topicId || null;
     _ghQuery = '';

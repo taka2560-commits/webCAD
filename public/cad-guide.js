@@ -287,6 +287,8 @@ function _tourComplete() {
     setTimeout(() => { if(_tour === t && t.i === at) _tourGo(at + 1); }, GUIDE_STEP_DONE_MS);
 }
 window.guideTourNext = function() { if(_tour) _tourGo(_tour.i + 1); };
+// ひとつ前の手順へ（説明を読み直す）
+window.guideTourPrev = function() { if(_tour && _tour.i > 0) _tourGo(_tour.i - 1); };
 window.guideTourSkip = function() { if(_tour) _tourGo(_tour.i + 1); };
 // 手順のボタン（act: { label, run }）: 練習用のデータを読むなど、その手順の操作を代わりに行って次へ
 window.guideTourAct = function() {
@@ -442,7 +444,7 @@ function _tourRenderCard() {
         <div class="gc-title">${escapeHtml(step.title)}</div>
         <div class="gc-text">${escapeHtml(_gt(step.text))}</div>
         <div class="gc-ok" style="display:none;">✓ できました</div>
-        <div class="gc-btns">${extra}${nextLabel ? '' : '<button class="gc-btn" onclick="guideTourSkip()">スキップ</button>'}${act}${nextLabel ? `<button class="gc-btn primary" onclick="${isLast ? 'endGuideTour(true)' : 'guideTourNext()'}">${escapeHtml(nextLabel)}</button>` : ''}</div>`;
+        <div class="gc-btns">${t.i > 0 ? '<button class="gc-btn gc-prev" onclick="guideTourPrev()">◀ 前へ</button>' : ''}${extra}${nextLabel ? '' : '<button class="gc-btn" onclick="guideTourSkip()">スキップ</button>'}${act}${nextLabel ? `<button class="gc-btn primary" onclick="${isLast ? 'endGuideTour(true)' : 'guideTourNext()'}">${escapeHtml(nextLabel)}</button>` : ''}</div>`;
     card.querySelectorAll('[data-extra]').forEach(b => b.addEventListener('click', () => {
         const x = (step.extra || [])[+b.dataset.extra];
         if(!x) return;
@@ -725,4 +727,24 @@ window.resetGuideHints = function() {
     b.textContent = '？';
     b.title = 'ヘルプ・操作ガイド';
     b.addEventListener('click', () => showGuideHelp());
+    const meta = document.querySelector('meta[name="webcad-build"]');
+    guideCheckWhatsNew(meta ? meta.getAttribute('content') : '');
 })();
+// アプリが新しくなったら（ビルドが前に開いたときと違ったら）、？ に「新」を付ける。ヘルプを開くと消える
+function guideCheckWhatsNew(build) {
+    try {
+        const seen = localStorage.getItem('cad_seen_build');
+        if(build && seen && seen !== build) localStorage.setItem('cad_whats_new', '1');
+        if(build) localStorage.setItem('cad_seen_build', build);
+    } catch { /* 覚えられなくてもよい */ }
+    guideSyncWhatsNew();
+}
+function guideWhatsNew() { try { return localStorage.getItem('cad_whats_new') === '1'; } catch { return false; } }
+function guideSyncWhatsNew() {
+    const b = document.getElementById('guide-help-btn');
+    if(!b) return;
+    let badge = b.querySelector('.nb-badge');
+    if(guideWhatsNew() && !badge) { badge = document.createElement('span'); badge.className = 'nb-badge nb-new'; badge.textContent = '新'; b.appendChild(badge); }
+    if(!guideWhatsNew() && badge) badge.remove();
+    b.setAttribute('aria-label', guideWhatsNew() ? 'ヘルプ・操作ガイド（新しくなったことがあります）' : 'ヘルプ・操作ガイド');
+}

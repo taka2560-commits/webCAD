@@ -140,7 +140,7 @@ function _editPanelFor(m) {
 function _editMirrorPanel() {
     const keep = lastParams.mirrorKeep !== false;
     showPropertyPanel('⇋ 鏡像',
-        `<label class="edit-chk"><input type="checkbox" ${keep ? 'checked' : ''} onchange="editSetParam('mirrorKeep', this.checked)"> 元の図形を残す（映した複写を作る）</label>` +
+        `<label class="edit-chk"><input type="checkbox" class="sw" role="switch" ${keep ? 'checked' : ''} onchange="editSetParam('mirrorKeep', this.checked)"> 元の図形を残す（映した複写を作る）</label>` +
         _editNote('図形を選ぶ → 鏡の線の1点目 → 2点目。文字は裏返さず、読める向きのまま映します。'));
 }
 function editDoMirror(p1, p2) {
@@ -231,7 +231,7 @@ function _editArrayPanel() {
     } else {
         h += _editRow('数（元を含む）', _editNum('edit-ar-n', 'arrN', o.n, 'min="2" step="1"')) +
             _editRow('角度（左回り）', _editNum('edit-ar-ang', 'arrAng', lastParams.arrAng === undefined ? '360' : lastParams.arrAng, 'step="any"')) +
-            `<label class="edit-chk"><input type="checkbox" ${o.rot ? 'checked' : ''} onchange="editSetParam('arrRot', this.checked)"> 図形も回す</label>` +
+            `<label class="edit-chk"><input type="checkbox" class="sw" role="switch" ${o.rot ? 'checked' : ''} onchange="editSetParam('arrRot', this.checked)"> 図形も回す</label>` +
             _editRow('中心', `<div id="edit-ar-center" style="flex:1;font-size:12px;">${cmdState.arrayCenter ? '指定済み（タップで変更）' : '<span style="color:#ffcc00;">図面でタップ</span>'}</div>`) +
             _editNote('中心を図面でタップし、角度の中に数ぶん並べます（360° なら一周に等間隔）。');
     }

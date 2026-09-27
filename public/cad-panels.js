@@ -67,7 +67,7 @@ window.updateBlockManagerContent = function() {
     let html = `
     <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1);">
         <label style="display:flex; align-items:center; gap:8px; padding:4px 8px; background:rgba(255,255,255,0.05); border-radius:6px; cursor:pointer; font-size:12px; color:#ddd; font-weight:bold;">
-            <input type="checkbox" ${window.groupSelectEnabled ? 'checked' : ''} onchange="setGroupSelectEnabled(this.checked)" style="width:16px; height:16px; cursor:pointer;">
+            <input type="checkbox" class="sw" role="switch" ${window.groupSelectEnabled ? 'checked' : ''} onchange="setGroupSelectEnabled(this.checked)">
             タップでブロック全体を選択
         </label>`;
     // 選択中のグループに対する操作
@@ -408,7 +408,7 @@ window.updateLayerManagerContent = function() {
     <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.1);">
         <div style="display:flex; flex-direction:column; gap:4px; padding:4px 8px; background:rgba(255,255,255,0.05); border-radius:6px;">
             <div style="display:flex; align-items:center; gap:8px;">
-                <input type="checkbox" id="ghost-layer-toggle" ${window.ghostLayerMode ? 'checked' : ''} onchange="toggleGhostLayerMode(this.checked)" style="cursor:pointer; width:16px; height:16px;">
+                <input type="checkbox" class="sw" role="switch" id="ghost-layer-toggle" ${window.ghostLayerMode ? 'checked' : ''} onchange="toggleGhostLayerMode(this.checked)" style="cursor:pointer; width:16px; height:16px;">
                 <label for="ghost-layer-toggle" style="cursor:pointer; font-weight:bold; color:#ddd; font-size:12px; user-select:none;">非表示画層をうっすら表示する</label>
             </div>
             <div class="lm-ghost-row" title="うっすら表示の濃さ（動かすと、うっすら表示を入にします）">
@@ -585,7 +585,7 @@ function updatePropertiesPanel() {
             <input class="prop-val" type="color" value="${getEntityColor(e)}" onchange="changeEntityPropById(${eid}, 'color', this.value)">
             ${e.color ? `<button class="prop-btn" style="font-size:10px;padding:2px 4px;" onclick="changeEntityPropById(${eid}, 'color', null)">ByLayer</button>` : `<span style="font-size:10px;color:#888;">ByLayer</span>`}
         </div></div>`;
-        html += `<div class="prop-row"><div class="prop-label">表示</div><input class="prop-val" type="checkbox" ${e.hidden?'':'checked'} onchange="changeEntityPropById(${eid}, 'hidden', !this.checked)"></div>`;
+        html += `<div class="prop-row"><div class="prop-label">表示</div><input class="sw" role="switch" type="checkbox" ${e.hidden?'':'checked'} onchange="changeEntityPropById(${eid}, 'hidden', !this.checked)"></div>`;
         if(e.type === 'POINT' || e.size !== undefined) {
             html += `<div class="prop-row"><div class="prop-label">サイズ</div><input class="prop-val" type="number" step="0.1" value="${e.size||10}" onchange="changeEntityPropById(${eid}, 'size', this.value, this)"></div>`;
         }
@@ -724,11 +724,8 @@ window.toggleAreaSelect = function() {
     const btn = document.getElementById('btn-area-select');
     if(btn) {
         btn.className = window.areaSelectEnabled ? 'status-btn active' : 'status-btn';
-        btn.textContent = window.areaSelectEnabled ? '範囲選択: ON' : '範囲選択: OFF';
-    }
-    const fsBtn = document.getElementById('fs-btn-area-select');
-    if(fsBtn) {
-        fsBtn.className = window.areaSelectEnabled ? 'fs-active' : '';
+        btn.textContent = window.areaSelectEnabled ? '範囲: ON' : '範囲: OFF'; // 初めの表示（範囲: OFF）とそろえる
+        btn.setAttribute('aria-pressed', String(!!window.areaSelectEnabled));
     }
     addCommandLog(`-> 交差選択（範囲選択）: ${window.areaSelectEnabled ? 'ON' : 'OFF'}`);
 };
@@ -737,14 +734,14 @@ window.toggleAreaSelect = function() {
 window.toggleOrtho = function() {
     orthoMode = !orthoMode;
     const btn = document.getElementById('btn-ortho');
-    if(btn) btn.className = orthoMode ? 'status-btn active' : 'status-btn';
+    if(btn) { btn.className = orthoMode ? 'status-btn active' : 'status-btn'; btn.setAttribute('aria-pressed', String(!!orthoMode)); }
     addCommandLog(`-> 直交モード: ${orthoMode?'ON':'OFF'}`);
     render();
 };
 window.toggleOsnapMain = function() {
     osnapState.main = !osnapState.main;
     const btn = document.getElementById('btn-osnap');
-    if(btn) btn.className = osnapState.main ? 'status-btn active' : 'status-btn';
+    if(btn) { btn.className = osnapState.main ? 'status-btn active' : 'status-btn'; btn.setAttribute('aria-pressed', String(!!osnapState.main)); }
     addCommandLog(`-> OSNAP: ${osnapState.main?'ON':'OFF'}`);
     render();
 };

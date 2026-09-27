@@ -222,6 +222,10 @@
     // オプション画面などに件数を表示するための要素（.cad-err-count）を更新
     function updateBadge() {
         document.querySelectorAll('.cad-err-count').forEach((el) => { el.textContent = String(log.length); });
+        // ⋯ のバッジ（エラーがあるときだけ、数を出す）
+        document.querySelectorAll('.err-badge').forEach((el) => { el.textContent = log.length > 99 ? '99+' : String(log.length); el.hidden = log.length === 0; });
+        const mb = document.getElementById('btn-top-menu');
+        if (mb) mb.setAttribute('aria-label', log.length ? `その他のメニュー（エラー ${log.length}件）` : 'その他のメニュー');
     }
 
     // ===== グローバルなエラー捕捉 =====

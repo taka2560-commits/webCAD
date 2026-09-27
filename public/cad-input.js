@@ -509,7 +509,13 @@ function setupEventListeners() {
         if((e.ctrlKey || e.metaKey) && k==='z'){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); return; }
         if((e.ctrlKey || e.metaKey) && k==='y'){ e.preventDefault(); redo(); return; }
         if(e.key === 'Escape') {
-            // スナップの設定パネル → コマンド → 選択 → パネル の順に閉じる
+            // ⋯ メニュー・エラーの画面・プロジェクト一覧 → スナップの設定パネル → コマンド → 選択 → パネル の順に閉じる
+            const menu = document.getElementById('top-menu-modal');
+            if(menu && menu.style.display === 'flex') { menu.style.display = 'none'; return; }
+            const ep = document.getElementById('cad-err-panel');
+            if(ep && ep.classList.contains('show')) { ep.classList.remove('show'); return; }
+            const pl = document.getElementById('project-list-panel');
+            if(pl && pl.style.display && pl.style.display !== 'none' && typeof window.hideProjectList === 'function') { window.hideProjectList(); return; }
             const op = document.getElementById('osnap-panel');
             if(op && op.style.display === 'block') { op.style.display = 'none'; return; }
             if(cmdState.mode !== 'IDLE') { addCommandLog('* キャンセル *'); processCommand('CANCEL'); return; }

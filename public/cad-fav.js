@@ -131,7 +131,7 @@ function _favIsActive(d) {
 function favUpdateActive() {
     const bar = document.getElementById('fav-bar');
     if(!bar || bar.style.display === 'none') return;
-    bar.querySelectorAll('.fav-btn[data-id]').forEach((b) => b.classList.toggle('active', _favIsActive(favDef(b.dataset.id))));
+    bar.querySelectorAll('.fav-btn[data-id]').forEach((b) => { const d = favDef(b.dataset.id), on = _favIsActive(d); b.classList.toggle('active', on); if(d && d.activeFn) b.setAttribute('aria-pressed', String(!!on)); });
 }
 
 // ===== 浮かぶバー =====

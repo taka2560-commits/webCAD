@@ -756,7 +756,7 @@ function processCommand(cmdText) {
             </div>
             <div class="prop-row">
                 <label>連続配置:</label>
-                <input type="checkbox" id="prop-text-cont" ${lastCont ? 'checked' : ''}>
+                <input type="checkbox" class="sw" role="switch" id="prop-text-cont" ${lastCont ? 'checked' : ''}>
             </div>
             <button class="prop-btn" onclick="startTextPlacement()">配置開始</button>
         `;

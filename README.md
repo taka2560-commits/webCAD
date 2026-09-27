@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.21（2026年9月27日リリース）**
+**現在のバージョン: v5.22（2026年9月27日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -32,6 +32,7 @@
 - **👁 画層一括管理（v5.17）** — 上のバーの 👁
   - うっすら表示の濃さのスライダー（5〜70%・端末に覚える）。画層の色を一覧の色の四角から変える。□ で画面いっぱいにすると、一覧を大きな行で何列かに並べる。
   - 👆 タッチで非表示は、タップで「消す候補」（赤く光る・もう一度で外す）にし、☑確定（または Enter）でまとめて非表示（押し間違い・なぞっただけで消えない）。
+- **✨ 仕上げ（v5.22）** — 入・切はスイッチ、⋯ にエラーの数、アプリが新しくなると ？ に「新」、ツアーの「◀ 前へ」、上・左のバーの続きの印、Esc で ⋯ メニューも閉じる。
 - **✏️ 入力欄（v5.21）** — まちがいは欄のそばに赤い枠と理由（打った字は残る）。点の欄に打つと点名の候補。見出しにいつも単位。検索の欄に ×。
 - **⏳ 処理中・保存・オフライン（v5.20）** — 読み込み・PDF・TS への送信のあいだは「回る印＋何をしているか」。💾 に未保存の黄色い点。電波が無いときは「📴 オフライン」。
 - **💬 お知らせと確認画面（v5.19）** — 確認はアプリの中の画面（大きなボタン・危ない操作は赤・Esc で閉じる）。ファイルを開くときは「置き換える／今の図面に追加／やめる」。削除のあとは「↩ 元に戻す」つきのお知らせ。お知らせに ✓ ⚠ ✕ の種類。
@@ -201,7 +202,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（561件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（569件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -258,6 +259,11 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-09-27: バージョン5.22（仕上げ）** ✨
+  * 入・切の設定のチェックボックスをスイッチの見た目に（input.sw・role=switch。つまみは背景の丸で描く）。入・切のボタンに aria-pressed。範囲の言葉を「範囲: ON／OFF」に。
+  * ⋯ にエラーの数のバッジ（cad-errors.js の updateBadge）。？ に「新」（guideCheckWhatsNew。ビルドが変わったら。ヘルプの上に「新しくなったこと」）。ツアーの「前へ」（guideTourPrev）。Esc で ⋯ メニュー・エラーの画面・プロジェクト一覧も閉じる。上・左のバーの続きの印（cad-form.js の scrollCue・mask-image）。
+  * ⋯ メニューの開く動きを menuIn に（popIn の translateX(-50%) で横に跳ねていた）。toggleToolbar・.cg-btn・#btn-exit-fullscreen・#fs-btn-area-select への参照を片付けた。
 
 * **2026-09-27: バージョン5.21（入力欄）** ✏️
   * cad-form.js（新規）: parseNumInput（全角・範囲）、fieldError・fieldOk・fieldNum（欄の下に理由・aria-invalid・aria-describedby・直し始めたら消す）、点名の候補（pointSuggestHtml・pointSuggestUpdate）、検索の ×（searchClearBtn）。

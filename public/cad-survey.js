@@ -818,7 +818,7 @@ window.centerOnGnss = function() {
 window.toggleGnssFollow = function() {
     _gnss.follow = !_gnss.follow;
     const b = document.getElementById('gnss-follow-btn');
-    if(b) b.classList.toggle('on', _gnss.follow);
+    if(b) { b.classList.toggle('on', _gnss.follow); b.setAttribute('aria-pressed', String(!!_gnss.follow)); }
     if(_gnss.follow) window.centerOnGnss();
 };
 window.addPointAtGnss = function() {

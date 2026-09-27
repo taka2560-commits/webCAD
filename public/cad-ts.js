@@ -75,7 +75,7 @@ function _tsRender() {
         h += `<div class="ts-status"><span class="ts-dot"></span>つながっています&nbsp;&nbsp;<span id="ts-rx">${_tsRxText()}</span></div>` +
             '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="tsSendSima()">📤 SIMA で送る</button><button class="prop-btn btn-sub" onclick="tsSendPoints()">📤 SDR33 で送る</button></div>' +
             '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="tsDisconnect()">切断</button></div>' +
-            `<label class="edit-chk"><input type="checkbox" ${o.ack ? 'checked' : ''} onchange="tsSetAck(this.checked)"> ACK のやり取りをする（T タイプで ACK モードが「標準」のとき）</label>` +
+            `<label class="edit-chk"><input type="checkbox" class="sw" role="switch" ${o.ack ? 'checked' : ''} onchange="tsSetAck(this.checked)"> ACK のやり取りをする（T タイプで ACK モードが「標準」のとき）</label>` +
             _cogoNote('受信: 機械で「現場管理 → 現場データ送信」。T タイプは「APA-SIMA（座標）」、S タイプは「SD」を選びます。届いた点はその場で図面に重ねて表示します。<br>送信: 機械を「既知点 → 外部入力」で待ち受けにしてから 📤（SIMA は T タイプの「APA-SIMA（座標）」、SDR33 は S タイプの「SD」）。範囲選択した測点、無ければすべてを送ります。');
     }
     h += '<div id="ts-result" class="cogo-result"></div>';
