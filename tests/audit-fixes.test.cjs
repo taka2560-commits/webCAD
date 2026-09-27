@@ -50,13 +50,14 @@ describe('不具合チェックの修正（2026-09-24）', () => {
         assert.equal(app.eval('entities.length'), 1, 'コマンド中に消えた');
         app.eval(`__touch('touchend', []);`);
     });
-    it('#1 通常画面の待機中の長押しでは消え、↩ で戻せることを知らせる', async () => {
+    it('#1 通常画面の待機中の長押しでは消え、お知らせの「元に戻す」で戻せる', async () => {
         app.run(`entities.push({ type:'TEXT', layer:0, color:null, x:0, y:0, text:'境界', height:10, halign:'left', valign:'bottom' }); _drawFrame(false);
             const s = wcsToScreen(3, 3); __touch('touchstart', [[s.x, s.y]]);`);
         await wait(700);
         assert.equal(app.eval('entities.length'), 0);
-        assert.match(app.eval(`document.getElementById('cad-toast').textContent`), /↩ で元に戻せます/);
-        app.eval(`__touch('touchend', []); undo();`);
+        assert.match(app.eval(`document.querySelector('#cad-snack .sn-msg').textContent`), /文字 "境界" を削除しました/);
+        assert.match(app.eval(`document.querySelector('#cad-snack .sn-act').textContent`), /元に戻す/);
+        app.eval(`__touch('touchend', []); document.querySelector('#cad-snack .sn-act').click();`);
         assert.equal(app.eval('entities.length'), 1);
     });
     it('#1 タッチが中断（touchcancel）されたら長押し削除しない', async () => {

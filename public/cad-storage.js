@@ -357,12 +357,12 @@ async function _projectNameTaken(name) {
 async function _askProjectName(message, suggestion) {
     let def = suggestion;
     for (let i = 0; i < 20; i++) {
-        const raw = prompt(message, def);
+        const raw = await cadPrompt({ title: 'プロジェクトを保存', message, value: def, ok: '保存', validate: (v) => String(v).trim() ? '' : '名前を入れてください' });
         if (raw === null || raw === undefined) return null;
         const name = String(raw).trim();
         if (!name) return null;
         if (!(await _projectNameTaken(name))) return name;
-        if (confirm(`「${name}」はすでに保存されています。上書きしますか？\n\n[OK] 上書きする\n[キャンセル] 別の名前にする`)) return name;
+        if (await cadConfirm({ title: '同じ名前のプロジェクト', message: `「${name}」はすでに保存されています。上書きしますか？\n（上書きすると、前の「${name}」は消えます）`, ok: '上書きする', cancel: '別の名前にする', danger: true })) return name;
         let k = 2;
         while (k < 1000 && await _projectNameTaken(`${name}_${k}`)) k++;
         def = `${name}_${k}`;
@@ -443,7 +443,7 @@ window.loadProjectFromList = async function(name) {
     const warn = _hasUnsavedProjectChanges()
         ? '\n\n⚠ 現在の図面には名前を付けて保存していない変更があります。読み込むと失われます（必要なら先に「保存」してください）。'
         : '';
-    if (!confirm(`プロジェクト「${name}」を読み込みますか？${warn}`)) return;
+    if (!(await cadConfirm({ title: 'プロジェクトを開く', message: `プロジェクト「${name}」を読み込みますか？${warn}`, ok: '読み込む', danger: !!warn }))) return;
 
     try {
         const data = await _dbGet(STORE_PROJECTS, name);
@@ -452,22 +452,22 @@ window.loadProjectFromList = async function(name) {
             _projectSavedSeq = _changeSeq;
             if (typeof setDrawingName === 'function' && data.drawingName) setDrawingName(data.drawingName);
             document.title = `${name} - WebCAD`;
-            addCommandLog(`-> プロジェクト「${name}」を復元しました (${entities.length}図形)`);
+            notify(`-> プロジェクト「${name}」を開きました (${entities.length}図形)`, { kind: 'success', ms: 2500 });
             window.hideProjectList();
         } else {
-            addCommandLog('エラー: プロジェクトデータが見つかりません');
+            notify('エラー: プロジェクトのデータが見つかりません', { kind: 'error', ms: 4000 });
         }
     } catch (err) {
         console.error('プロジェクト読込エラー:', err);
-        addCommandLog('エラー: プロジェクトの読み込みに失敗しました');
+        notify('エラー: プロジェクトを開けませんでした', { kind: 'error', ms: 4000 });
     }
 };
 
 window.deleteProjectFromList = async function(name) {
-    if (!confirm(`プロジェクト「${name}」を削除しますか？\nこの操作は元に戻せません。`)) return;
+    if (!(await cadConfirm({ title: 'プロジェクトを削除', message: `プロジェクト「${name}」を削除しますか？\nこの操作は元に戻せません。`, ok: '削除する', danger: true }))) return;
     try {
         await _dbDelete(STORE_PROJECTS, name);
-        addCommandLog(`-> プロジェクト「${name}」を削除しました`);
+        notify(`-> プロジェクト「${name}」を削除しました`, { kind: 'success', ms: 2500 });
         if (_currentProjectName === name) {
             _currentProjectName = null;
             document.title = 'WebCAD';
@@ -491,7 +491,7 @@ async function checkAutoRestore() {
             const dt = new Date(data.savedAt);
             const dateStr = `${dt.getMonth()+1}/${dt.getDate()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
             const label = data.projectName ? `「${data.projectName}」` : (data.drawingName ? `「${data.drawingName}」` : '');
-            if (silent || confirm(`前回の作業データ${label}があります（${dateStr}、${data.entityCount || data.entities.length}図形）。\n\n復元しますか？\n（復元しない場合、次に編集した時点で上書きされます）`)) {
+            if (silent || await cadConfirm({ title: '前回の作業', message: `前回の作業データ${label}があります（${dateStr}、${data.entityCount || data.entities.length}図形）。\n\n復元しますか？\n（復元しない場合、次に編集した時点で上書きされます）`, ok: '復元する', cancel: '復元しない' })) {
                 applyProjectData(data);
                 if (data.projectName) window.setCurrentProjectName(data.projectName);
                 if (typeof setDrawingName === 'function' && data.drawingName) setDrawingName(data.drawingName);

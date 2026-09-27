@@ -223,7 +223,8 @@ async function ulLoadPdfFile(file) {
         const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
         let pageNo = 1;
         if(doc.numPages > 1) {
-            const a = window.prompt(`何ページ目を下絵にしますか？（1〜${doc.numPages}）`, '1');
+            const a = await cadPrompt({ title: 'PDF のページ', message: `何ページ目を下絵にしますか？（1〜${doc.numPages}）`, value: '1', inputmode: 'numeric', ok: 'このページ',
+                validate: (v) => { const n = parseInt(cogoHalfWidth(v), 10); return (n >= 1 && n <= doc.numPages) ? '' : `1〜${doc.numPages} の数を入れてください`; } });
             if(a === null) return false;
             pageNo = Math.min(doc.numPages, Math.max(1, parseInt(cogoHalfWidth(a), 10) || 1));
         }
@@ -308,7 +309,7 @@ async function ulTileCacheCount() {
     } catch { return null; }
 }
 window.ulClearTiles = async function() {
-    if(!confirm('端末に保存した地図を消しますか？（電波がある所では、見るとまた保存されます）')) return;
+    if(!(await cadConfirm({ title: '保存した地図を消す', message: '端末に保存した地図を消しますか？（電波がある所では、見るとまた保存されます）', ok: '消す', danger: true }))) return;
     try { if(typeof window.caches !== 'undefined') await window.caches.delete(UL_TILE_CACHE); } catch { /* 消せなくても続行 */ }
     _ul.tiles.clear();
     showToast('保存した地図を消しました', 2500);
@@ -327,12 +328,15 @@ window.ulSetImageOpacity = function(v) { if(!_ul.img) return; _ul.img.opacity = 
 window.ulToggleImage = function() { if(!_ul.img) return; _ul.img.on = !_ul.img.on; ulSaveImage(); _ulRender(); render(); };
 window.ulFitImage = function() { if(!_ul.img) return; _ul.img.T = ulFitTransform(_ul.img.w, _ul.img.h); ulSaveImage(); render(); };
 window.ulRemoveImage = function() {
-    if(!_ul.img || !confirm('下絵を消しますか？（図面は消えません）')) return;
+    if(!_ul.img) return;
+    cadConfirm({ title: '下絵を消す', message: '下絵を消しますか？（図面は消えません。下絵は ↩ では戻せません）', ok: '消す', danger: true }, (ok) => { if(ok) _ulRemoveImageNow(); });
+};
+function _ulRemoveImageNow() {
     _ul.img = null;
     ulSaveImage();
     addCommandLog('-> 下絵を消しました');
     _ulRender(); render();
-};
+}
 let _ulSaveTimer = null;
 function _ulDeferSave() { clearTimeout(_ulSaveTimer); _ulSaveTimer = setTimeout(ulSaveImage, 500); }
 window.ulStartAlign = function() {

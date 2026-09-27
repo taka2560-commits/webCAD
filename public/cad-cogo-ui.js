@@ -489,7 +489,13 @@ window.cogoAddPoint = function() {
     if(!c.point) { showToast('点を計算できません。入力を確かめてください', 3000); return; }
     const key = _cogo.tab === 'int' ? 'intName' : 'ptName';
     const name = String(_cogo.vals[key] || '').trim() || _cogoSuggestName();
-    if(collectSurveyPoints().some((p) => p.name === name) && !confirm(`点名「${name}」はすでにあります。同じ名前で追加しますか？`)) return;
+    if(collectSurveyPoints().some((p) => p.name === name)) {
+        cadConfirm({ title: '点を追加', message: `点名「${name}」はすでにあります。同じ名前で追加しますか？`, ok: '同じ名前で追加' }, (ok) => { if(ok) _cogoAddPointNamed(c, key, name); });
+        return;
+    }
+    _cogoAddPointNamed(c, key, name);
+};
+function _cogoAddPointNamed(c, key, name) {
     cogoAddSurveyPoint(c.point.X, c.point.Y, name);
     addCommandLog(`-> 点「${name}」を追加 X ${cogoFix(c.point.X, 3)} Y ${cogoFix(c.point.Y, 3)}`);
     showToast(`点「${name}」を追加しました`, 2500);
@@ -497,7 +503,7 @@ window.cogoAddPoint = function() {
     _cogo.vals[key] = cogoNextName(name);
     _cogoRender();
     render();
-};
+}
 
 // ===== 重ね表示（点の欄の印・補助線・計算した点） =====
 function _cogoOverlayOn() {

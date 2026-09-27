@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.18.1（2026年9月27日リリース）**
+**現在のバージョン: v5.19（2026年9月27日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -32,6 +32,7 @@
 - **👁 画層一括管理（v5.17）** — 上のバーの 👁
   - うっすら表示の濃さのスライダー（5〜70%・端末に覚える）。画層の色を一覧の色の四角から変える。□ で画面いっぱいにすると、一覧を大きな行で何列かに並べる。
   - 👆 タッチで非表示は、タップで「消す候補」（赤く光る・もう一度で外す）にし、☑確定（または Enter）でまとめて非表示（押し間違い・なぞっただけで消えない）。
+- **💬 お知らせと確認画面（v5.19）** — 確認はアプリの中の画面（大きなボタン・危ない操作は赤・Esc で閉じる）。ファイルを開くときは「置き換える／今の図面に追加／やめる」。削除のあとは「↩ 元に戻す」つきのお知らせ。お知らせに ✓ ⚠ ✕ の種類。
 - **🎨 デザイン色（v5.18）** — オプションの「表示・操作」の「デザイン色」
   - 標準（今までの色）と、UI 配色チートシートの暗い配色5つ（GOLD STANDARD・ELECTRIC BLUE・MINT TERMINAL・ULTRAVIOLET・LIME SYSTEM）から選ぶ。見本を押すとすぐ変わり、端末に覚える（起動のときから色がちらつかない。スマホのアドレスバーの色も合わせる）。
   - 変わるのはバー・パネル・⋯ メニュー・トーストの地（BASE）、ボタン（MAIN）、使っている道具・入のボタン・選んでいる切り替えボタン・パネルの題（ACCENT）。役割の色（緑・赤・黄・水色・座標系の青）と図面の色・図面の背景色は変えない。
@@ -198,7 +199,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（537件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（545件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -255,6 +256,11 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-09-27: バージョン5.19（お知らせと確認画面）** 💬
+  * cad-dialog.js: アプリの確認画面（cadConfirm・cadPrompt・cadChoose。Promise と、答えで呼ぶ cb）。ブラウザの confirm・prompt・alert をすべて置き換えた（cad-errors.js のコピーの予備だけ残す）。読み込みは「置き換える／今の図面に追加／やめる」。テストは window.__cadNativeDialogs で今までどおり window.confirm・prompt で答える。
+  * cad-notify.js: showToast に種類（success・warn・error）と role、「元に戻す」つきのスナックバー（showUndoSnack。↩ の履歴が進んでいたら戻さない）、コマンド欄が畳まれているときはお知らせにも出す notify。トーストが画面の半分の幅で折り返していたのも直した。
+  * キーボードで動かしたときのフォーカスの枠（:focus-visible）。
 
 * **2026-09-27: バージョン5.18.1（見つけた不具合の修正）** 🔧
   * 同じ名前で保存すると上書きしていた（_askProjectName で上書きを聞き、やめたら「名前_2」）。置き換えで開いたファイルが読めないと図面が空になっていた（cad-import-target.js の _restoreAfterFailedImport で元の図面・プロジェクト名に戻す）。

@@ -282,7 +282,7 @@ function applyRectPreset(){
 // オフセット: 距離を確定して対象選択へ
 function applyOffsetPreset(){
     const el=document.getElementById('prop-offset-d'); const v0=el?parseFloat(el.value):NaN;
-    if(!(v0>0)){ addCommandLog('-> 有効な距離を入力してください'); return; }
+    if(!(v0>0)){ notify('-> 0 より大きい距離を入れてください', { kind: 'warn', ms: 2500 }); return; }
     const v=fromDisplayUnit(v0, 'len'); // 入力は表示の単位
     cmdState.offsetDist=Math.abs(v); lastParams.offset=String(v); saveLastParams();
     cmdState.mode='WAITING_OFFSET_SELECT'; setPrompt('オフセット対象:');
@@ -444,15 +444,7 @@ function escapeHtml(s) {
 }
 // 色の値として使ってよいものだけを通す（取り込んだファイルの値を HTML の属性・style に入れるため）
 function safeColor(c) { return (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c)) ? c : '#ffffff'; }
-// 画面上部に一時的なメッセージを出す（コマンドラインが畳まれているスマホ向け）
-function showToast(msg, ms) {
-    let t = document.getElementById('cad-toast');
-    if(!t) { t = document.createElement('div'); t.id = 'cad-toast'; document.body.appendChild(t); }
-    t.textContent = msg;
-    t.classList.add('show');
-    clearTimeout(t._timer);
-    t._timer = setTimeout(() => t.classList.remove('show'), ms || 3000);
-}
+// 画面上部の一時的なメッセージ（showToast）・「元に戻す」つきのお知らせは cad-notify.js
 function clearSelection() {
     cmdState.highlightIdx = -1;
     cmdState.selectedIndices = [];
@@ -788,7 +780,7 @@ function startTextPlacement() {
     const hInput = document.getElementById('prop-text-h');
     const contInput = document.getElementById('prop-text-cont');
     
-    if(!txtInput.value) { alert("文字を入力してください"); return; }
+    if(!txtInput.value) { showToast('文字を入れてください', { kind: 'warn', ms: 2500 }); txtInput.focus(); return; }
     
     cmdState.textStr = txtInput.value;
     const hv = parseFloat(hInput.value);
@@ -828,7 +820,12 @@ function closeDrawing() {
     const msg = unsaved
         ? '保存していない変更があります。\n図面を閉じると、図形がすべて消えます（↩ で戻せるのは、アプリを閉じるまでです）。\n\n閉じますか？'
         : '図面を閉じます（図形がすべて消えます）。よろしいですか？';
-    if(!confirm(msg)) { addCommandLog('-> 図面を閉じるのをやめました'); return; }
+    cadConfirm({ title: '図面を閉じる', message: msg, ok: '閉じる', danger: unsaved }, (ok) => {
+        if(!ok) { addCommandLog('-> 図面を閉じるのをやめました'); return; }
+        _closeDrawingNow();
+    });
+}
+function _closeDrawingNow() {
     saveUndo();
     entities.length = 0;
     layers.splice(0, layers.length, {name:'0', color:'#00ffff', visible:true});
@@ -994,5 +991,5 @@ function saveUndo() {
     // 自動保存トリガー
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
-function undo() { if(typeof guideNotify === 'function') guideNotify('undo'); if(!undoStack.length){addCommandLog('元に戻す操作がありません');return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
-function redo() { if(!redoStack.length){addCommandLog('やり直す操作がありません');return;} _bumpGeomEpoch(); undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
+function undo() { if(typeof guideNotify === 'function') guideNotify('undo'); if(!undoStack.length){notify('元に戻す操作がありません', 1800);return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
+function redo() { if(!redoStack.length){notify('やり直す操作がありません', 1800);return;} _bumpGeomEpoch(); undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }

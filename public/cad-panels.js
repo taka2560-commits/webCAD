@@ -320,6 +320,7 @@ window.setAllLayersVisibility = function(visible) {
     updateLayerPanel();
     render();
     addCommandLog(`-> すべての画層を${visible ? '表示' : '非表示'}にしました`);
+    if(typeof showUndoSnack === 'function') showUndoSnack(`すべての画層を${visible ? '表示' : '非表示'}にしました`);
 };
 
 // 全画層の表示状態反転
@@ -346,6 +347,7 @@ window.invertLayersVisibility = function() {
     updateLayerPanel();
     render();
     addCommandLog('-> 画層の表示状態を反転しました');
+    if(typeof showUndoSnack === 'function') showUndoSnack('画層の表示・非表示を反転しました');
 };
 
 // 画層管理フローティングパネルの表示

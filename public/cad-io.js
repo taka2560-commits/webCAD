@@ -17,14 +17,14 @@ function loadDxfFile(file) {
             const head = String.fromCharCode(...bytes.slice(0, 6));
             if (head.startsWith('AC10')) {
                 const msg = '※ 拡張子は.dxfですが、中身はAutoCAD DWGファイルです。\nWebブラウザでのDWG直接読み込みは簡易的なため、図形が崩れる可能性があります。\n\n正確に開くには、AutoCAD等のソフトで「ASCII形式のDXF」として保存し直してください。';
-                alert(msg);
+                showToast(msg, { kind: 'warn', ms: 7000 });
                 addCommandLog(`※ DWGファイルとしてロードを試みます。`);
                 loadDwgFile(file);
                 return;
             }
             if (head.startsWith('AutoCA')) { // 'AutoCAD Binary DXF'
                 _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
-                alert('エラー: バイナリ形式のDXFファイルです。\nASCII形式のDXFで保存し直してください。');
+                showToast('バイナリ形式の DXF ファイルは開けません。\nASCII 形式の DXF で保存し直してください。', { kind: 'error', ms: 6000 });
                 addCommandLog(`エラー: バイナリ形式のDXFファイルは未対応です。`);
                 return;
             }
@@ -645,7 +645,7 @@ function hexToAci(hex) {
 function reportImportFailure(kind, fileName, err) {
     const msg = (err && err.message) ? err.message : String(err);
     const restored = _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
-    if(typeof showToast === 'function') showToast(`${kind}の読み込みに失敗しました\n${msg}${restored ? '\n（今までの図面はそのままです）' : ''}`, 6000);
+    if(typeof showToast === 'function') showToast(`${kind}の読み込みに失敗しました\n${msg}${restored ? '\n（今までの図面はそのままです）' : ''}`, { kind: 'error', ms: 6000 });
     if(window.cadErrors) window.cadErrors.record('import', `${kind}読込失敗: ${fileName} - ${msg}`, err && err.stack, { silent: true });
 }
 
@@ -790,9 +790,9 @@ function exportDxf() {
         if(skipped > 0) addCommandLog(`  注意: 書き出しに未対応の図形 ${skipped}個 を省略しました`);
         const blob = new Blob([d.toDxfString()], {type:'application/dxf'});
         downloadBlob(blob, exportFileName('dxf'));
-        addCommandLog('-> DXFエクスポート完了');
+        notify('-> DXF を書き出しました', { kind: 'success', ms: 2500 });
     } catch(err) {
-        addCommandLog(`エラー: DXFエクスポートに失敗 - ${err.message}`);
+        notify(`エラー: DXF を書き出せませんでした - ${err.message}`, { kind: 'error', ms: 5000 });
         console.error('DXFエクスポートエラー:', err);
     }
 }
@@ -1113,8 +1113,9 @@ function convertDwgDatabaseToApp(db) {
 // ===== DWGエクスポート =====
 async function exportDwg() {
     addCommandLog('注意: DWG形式では書き出せません。DXF形式で保存します（AutoCAD・Jw_cad などで開けます）');
-    if(typeof showToast === 'function') showToast('DWG では書き出せないため、DXF で保存しました\n（AutoCAD・Jw_cad などで開けます）', 5000);
     exportDxf();
+    // DXF の書き出しの知らせのあとに出す（こちらを読んでほしいので）
+    if(typeof showToast === 'function') showToast('DWG では書き出せないため、DXF で保存しました\n（AutoCAD・Jw_cad などで開けます）', 5000);
 }
 
 // エクスポート時のファイル名（図面名があればそれを使う）
@@ -1154,13 +1155,11 @@ function setupFileIO() {
         const file = e.target.files[0];
         if(!file) return;
         const ext = file.name.split('.').pop().toLowerCase();
-        if(ext === 'dxf' || ext === 'dwg') {
-            _prepareImportTarget(); // 置き換え/追加の確認（Undo 1回分を保存）
-            if(ext === 'dxf') loadDxfFile(file); else loadDwgFile(file);
-        }
-        else if(ext === 'sim' && typeof loadSimaFile === 'function') { _prepareImportTarget(); loadSimaFile(file); }
-        else if((ext === 'csv' || ext === 'txt') && typeof loadCoordCsvFile === 'function') { _prepareImportTarget(); loadCoordCsvFile(file); }
-        else if(ext === 'sdr' && typeof loadSdrFile === 'function') { _prepareImportTarget(); loadSdrFile(file); } // トータルステーションの現場データ（SDR33・SDR2x）
+        // 置き換え／追加／やめる を決めてから読む（Undo 1回分を保存。やめたら読まない）
+        if(ext === 'dxf' || ext === 'dwg') _prepareImportTarget(() => { if(ext === 'dxf') loadDxfFile(file); else loadDwgFile(file); });
+        else if(ext === 'sim' && typeof loadSimaFile === 'function') _prepareImportTarget(() => loadSimaFile(file));
+        else if((ext === 'csv' || ext === 'txt') && typeof loadCoordCsvFile === 'function') _prepareImportTarget(() => loadCoordCsvFile(file));
+        else if(ext === 'sdr' && typeof loadSdrFile === 'function') _prepareImportTarget(() => loadSdrFile(file)); // トータルステーションの現場データ（SDR33・SDR2x）
         else {
             addCommandLog(`未対応の形式です: .${ext}`);
             if(typeof showToast === 'function') showToast(`未対応の形式です（.${ext}）\nDXF・DWG・SIMA（.sim）・座標CSV・SDR（.sdr）を開けます`, 4000);

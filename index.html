@@ -347,8 +347,45 @@
         .menu-item-btn.danger { color: var(--warn); border-color: rgba(255,107,107,0.3); }
 
         /* トースト通知（読み込み結果などの一時メッセージ） */
-        #cad-toast { position:fixed; left:50%; top:64px; transform:translateX(-50%); background:rgba(var(--float-rgb),0.94); color:#e0e0e0; border:1px solid rgba(var(--brand-rgb),0.4); border-radius:12px; padding:10px 16px; font-size:13px; font-weight:600; z-index:1000003; opacity:0; pointer-events:none; transition:opacity .25s; max-width:90vw; text-align:center; white-space:pre-line; box-shadow:0 6px 20px rgba(0,0,0,0.5); }
+        #cad-toast { position:fixed; left:0; right:0; margin:0 auto; width:fit-content; box-sizing:border-box; top:64px; /* 真ん中に（left:50% だと使える幅が画面の半分になり、文が細く折り返していた） */ background:rgba(var(--float-rgb),0.94); color:#e0e0e0; border:1px solid rgba(var(--brand-rgb),0.4); border-radius:12px; padding:10px 16px; font-size:13px; font-weight:600; z-index:1000003; opacity:0; pointer-events:none; transition:opacity .25s; max-width:90vw; text-align:center; white-space:pre-line; box-shadow:0 6px 20px rgba(0,0,0,0.5); }
         #cad-toast.show { opacity:1; }
+        /* お知らせの種類（cad-notify.js）。印は ::before なので、お知らせの文（textContent）には入らない */
+        #cad-toast[data-kind="success"] { border-color:rgba(0,255,136,0.55); }
+        #cad-toast[data-kind="success"]::before { content:'✓ '; color:#00ff88; }
+        #cad-toast[data-kind="warn"] { border-color:rgba(255,204,0,0.6); }
+        #cad-toast[data-kind="warn"]::before { content:'⚠ '; color:#ffcc00; }
+        #cad-toast[data-kind="error"] { border-color:rgba(255,107,107,0.7); }
+        #cad-toast[data-kind="error"]::before { content:'✕ '; color:#ff6b6b; }
+        /* 「元に戻す」つきのお知らせ（画面の下。エラーの帯・ガイドのヒントより上。ボタンだけ押せる） */
+        #cad-snack { position:fixed; left:0; right:0; margin:0 auto; width:fit-content; box-sizing:border-box; bottom:calc(64px + 46px * var(--btn-k, 1) + env(safe-area-inset-bottom, 0px)); z-index:1000003;
+            display:flex; align-items:center; gap:8px; max-width:min(92vw, 520px); padding:6px 6px 6px 14px; border-radius:12px;
+            background:rgba(var(--float-rgb),0.96); border:1px solid rgba(var(--brand-rgb),0.45); color:#e0e0e0; font:600 13px 'Segoe UI',sans-serif;
+            box-shadow:0 6px 20px rgba(0,0,0,0.5); opacity:0; pointer-events:none; transition:opacity .2s; }
+        #cad-snack.show { opacity:1; }
+        #cad-snack .sn-msg { flex:1; min-width:0; }
+        #cad-snack button { pointer-events:auto; flex-shrink:0; height:38px; border-radius:8px; cursor:pointer; font:700 13px 'Segoe UI',sans-serif; }
+        #cad-snack:not(.show) button { pointer-events:none; }
+        #cad-snack .sn-act { padding:0 14px; background:rgba(var(--brand-rgb),0.14); border:1px solid rgba(var(--brand-rgb),0.55); color:var(--brand); }
+        #cad-snack .sn-x { width:38px; padding:0; background:none; border:1px solid var(--border-1); color:#aaa; }
+        /* 確認画面（cad-dialog.js。ブラウザの confirm・prompt の代わり） */
+        #cad-dialog { position:fixed; inset:0; z-index:1000010; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,0.55); }
+        #cad-dialog.show { display:flex; }
+        #cad-dialog .cd-card { width:min(100%, 420px); max-height:calc(100dvh - 32px); overflow:auto; display:flex; flex-direction:column; gap:10px; padding:16px;
+            border-radius:var(--r-card); background:rgb(var(--float-rgb)); border:1px solid var(--border-color); color:var(--text-color); box-shadow:0 12px 32px rgba(0,0,0,0.6); }
+        #cad-dialog .cd-title { font-weight:700; font-size:15px; color:var(--brand); }
+        #cad-dialog .cd-msg { font-size:13.5px; line-height:1.6; white-space:pre-line; }
+        #cad-dialog .cd-input { width:100%; box-sizing:border-box; min-height:44px; padding:8px 10px; border-radius:var(--r-sub); border:1px solid var(--border-1);
+            background:#111; color:#fff; font-size:16px; }
+        #cad-dialog .cd-input[aria-invalid="true"] { border-color:#ff6b6b; }
+        #cad-dialog .cd-err { min-height:1em; margin-top:4px; color:#ff6b6b; font-size:12px; }
+        #cad-dialog .cd-err:empty { display:none; }
+        #cad-dialog .cd-btns { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:4px; }
+        #cad-dialog .cd-btn { min-height:44px; min-width:88px; padding:0 16px; border-radius:var(--r-sub); font:700 14px 'Segoe UI',sans-serif; cursor:pointer; }
+        #cad-dialog .cd-sub { background:var(--btn-fill); color:#e0e0e0; border:1px solid var(--border-1); }
+        #cad-dialog .cd-primary { background:#00ff88; color:#000; border:none; }
+        #cad-dialog .cd-danger { background:#ff6b6b; color:#1e2228; border:none; }
+        /* キーボードで動かしたときの今いる場所（マウス・指で押したときは出ない） */
+        button:focus-visible, [role="button"]:focus-visible, #cad-dialog .cd-input:focus-visible { outline:2px solid var(--highlight-color); outline-offset:2px; }
         /* 現在地（GNSS）バー: 座標系の役割色（青） */
         /* 左ツールバー（44pxレール）を隠さないよう、その右側に置く。狭い画面では座標とボタンを2行にする */
         #gnss-bar { display:none; position:fixed; top:60px; left:64px; right:8px; z-index:36; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:6px; padding:5px 6px 5px 10px; border-radius:var(--r-card); border:1px solid rgba(82,139,255,0.5); }
@@ -1161,6 +1198,8 @@
     <script src="cad-io.js"></script>
     <script src="cad-import-target.js"></script>
     <script src="cad-core.js"></script>
+    <script src="cad-notify.js"></script>
+    <script src="cad-dialog.js"></script>
     <script src="cad-prefs.js"></script>
     <script src="cad-view.js"></script>
     <script src="cad-geom.js"></script>

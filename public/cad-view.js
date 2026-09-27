@@ -67,11 +67,13 @@ function resetUCS() {
 
 // ===== UCS保存・読込処理 =====
 function saveUCS() {
-    const name = prompt("現在のUCSに名前を付けて保存します:", `UCS_${savedUCSList.length + 1}`);
-    if(!name) return;
-    savedUCSList.push({ name: name, x: ucs.originX, y: ucs.originY, angle: ucs.angle });
-    updateUCSDropdowns();
-    addCommandLog(`-> UCS保存: ${name}`);
+    cadPrompt({ title: 'UCS を保存', message: '今の UCS に名前を付けて保存します', value: `UCS_${savedUCSList.length + 1}`, ok: '保存' }, (raw) => {
+        const name = raw === null ? '' : String(raw).trim();
+        if(!name) return;
+        savedUCSList.push({ name: name, x: ucs.originX, y: ucs.originY, angle: ucs.angle });
+        updateUCSDropdowns();
+        addCommandLog(`-> UCS保存: ${name}`);
+    });
 }
 
 function deleteUCS() {
@@ -82,18 +84,20 @@ function deleteUCS() {
     const idxStr = (fsSel && fsSel.value !== '') ? fsSel.value : (ucsSel && ucsSel.value !== '' ? ucsSel.value : '');
     
     if(idxStr === '') {
-        alert("ドロップダウンから消去するUCSを選択してください。");
+        showToast('消す UCS を、上の一覧から選んでください', { kind: 'warn', ms: 3000 });
         return;
     }
     const idx = parseInt(idxStr);
-    if(savedUCSList[idx]) {
-        if(confirm(`保存されたUCS「${savedUCSList[idx].name}」を消去しますか？`)) {
-            savedUCSList.splice(idx, 1);
-            updateUCSDropdowns();
-            resetUCS(); // 消去した場合は元のWCSにリセット
-            addCommandLog('-> UCS消去完了');
-        }
-    }
+    const u = savedUCSList[idx];
+    if(!u) return;
+    cadConfirm({ title: 'UCS を消す', message: `保存した UCS「${u.name}」を消しますか？`, ok: '消す', danger: true }, (ok) => {
+        const i = savedUCSList.indexOf(u);
+        if(!ok || i < 0) return;
+        savedUCSList.splice(i, 1);
+        updateUCSDropdowns();
+        resetUCS(); // 消去した場合は元のWCSにリセット
+        addCommandLog('-> UCS消去完了');
+    });
 }
 function loadUCS(indexStr) {
     if(indexStr === '') return;

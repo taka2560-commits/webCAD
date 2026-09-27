@@ -83,9 +83,11 @@ window.stakeToggleDone = function() {
     const t = _stakeTarget();
     if(!t) return;
     if(_stakeIsDone(t)) {
-        if(!confirm(`${t.name || 'この杭'} の記録を消して、済みを取り消しますか？`)) return;
-        _stakeSetRec(t, null);
-        _stakeRender(); renderOverlay();
+        cadConfirm({ title: '済みを取り消す', message: `${t.name || 'この杭'} の記録を消して、済みを取り消しますか？`, ok: '取り消す', danger: true }, (ok) => {
+            if(!ok) return;
+            _stakeSetRec(t, null);
+            _stakeRender(); renderOverlay();
+        });
         return;
     }
     const rec = { time: new Date().toISOString() };

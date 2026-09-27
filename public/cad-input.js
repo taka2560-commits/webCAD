@@ -284,7 +284,7 @@ function setupEventListeners() {
                             entities.splice(idx, 1);
                             const name = hitEnt.type === 'TEXT' ? `文字 "${hitEnt.text}"` : `寸法 (${hitEnt.subType || '不明'})`;
                             addCommandLog(`-> 長押しにより ${name} を削除しました`);
-                            if(typeof showToast === 'function') showToast(`🗑 ${name} を削除しました（↩ で元に戻せます）`, 3500);
+                            if(typeof showUndoSnack === 'function') showUndoSnack(`🗑 ${name} を削除しました`);
                             if(typeof guideNotify === 'function') guideNotify('longPressDelete');
                             cmdState.highlightIdx = -1;
                             if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
@@ -504,6 +504,7 @@ function setupEventListeners() {
     window.addEventListener('keydown',(e)=>{
         const t = e.target;
         if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return; // 入力欄の中（文字の取り消しなど）
+        if(typeof cadDialogOpen === 'function' && cadDialogOpen()) return; // 確認画面を出しているあいだ（Esc は確認画面を閉じる）
         const k = (e.key || '').toLowerCase();
         if((e.ctrlKey || e.metaKey) && k==='z'){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); return; }
         if((e.ctrlKey || e.metaKey) && k==='y'){ e.preventDefault(); redo(); return; }

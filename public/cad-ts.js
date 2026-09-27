@@ -403,7 +403,7 @@ window.tsSendPoints = async function() {
     const selected = pts.length > 0;
     if(!selected) pts = sdrPointsFromDrawing();
     if(!pts.length) { showToast('送れる測点がありません（点・属性付きブロック）', 3000); return; }
-    if(!confirm(`${selected ? '選んだ' : 'すべての'}測点 ${pts.length}点を SDR33 で機械へ送ります。\n機械を「既知点 → 外部入力 → S タイプ → SD」で待ち受けにしてから OK を押してください。`)) return;
+    if(!(await cadConfirm({ title: 'TS へ送る（SDR33）', message: `${selected ? '選んだ' : 'すべての'}測点 ${pts.length}点を SDR33 で機械へ送ります。\n機械を「既知点 → 外部入力 → S タイプ → SD」で待ち受けにしてから「送る」を押してください。`, ok: '送る' }))) return;
     const r = buildSdr33Records(pts, { job: _baseName().replace(/[^\x20-\x7e]/g, '').slice(0, 16) || 'WEBCAD' });
     _ts.sending = true;
     try {
@@ -432,7 +432,7 @@ window.tsSendSima = async function() {
 // SIMA の行を機械へ送る（確かめてから）。what: 「選んだ」「変換後の」など。戻り値: 送れたら true
 async function tsSendSimaLines(lines, pointCount, what) {
     if(!_ts.port || !_ts.port.writable || _ts.sending) return false;
-    if(!confirm(`${what || ''}測点 ${pointCount}点を SIMA（APA-SIMA の座標）で機械へ送ります。\n機械を「既知点 → 外部入力 → APA-SIMA（座標）」で待ち受けにしてから OK を押してください。`)) return false;
+    if(!(await cadConfirm({ title: 'TS へ送る（SIMA）', message: `${what || ''}測点 ${pointCount}点を SIMA（APA-SIMA の座標）で機械へ送ります。\n機械を「既知点 → 外部入力 → APA-SIMA（座標）」で待ち受けにしてから「送る」を押してください。`, ok: '送る' }))) return false;
     _ts.sending = true;
     try {
         await _tsSendLines(lines);

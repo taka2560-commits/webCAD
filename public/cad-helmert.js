@@ -599,7 +599,14 @@ window.helmImport = function() {
     if(!_helm.src || !sol || !sol.ok) return false;
     const idx = _helmRangeIndices();
     if(!idx.length) { showToast('取り込む範囲に点がありません', 3000); return false; }
-    if(_helm.applied && !confirm(`画層「${_helm.applied}」に取り込み済みです。もう一度、別の画層に取り込みますか？`)) return false;
+    if(_helm.applied) {
+        let done = false;
+        cadConfirm({ title: 'もう一度取り込む', message: `画層「${_helm.applied}」に取り込み済みです。もう一度、別の画層に取り込みますか？`, ok: '取り込む' }, (ok) => { if(ok) done = _helmImportNow(sol, idx); });
+        return done;
+    }
+    return _helmImportNow(sol, idx);
+};
+function _helmImportNow(sol, idx) {
     const layer = _helmLayerName(), lots = _helmRangeLots();
     saveUndo();
     const r = addSurveyData(idx.map(_helmOut), lots, { layer, color: HELM_LAYER_COLOR });
@@ -610,7 +617,7 @@ window.helmImport = function() {
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
     _cogoUpdateResult();
     return true;
-};
+}
 // 変換後の SIMA の行（範囲の中の点。withLots なら区画も。点番号・点名・標高はそのまま）
 function helmSimaLines(withLots) {
     const idx = _helmRangeIndices(), lots = withLots ? _helmRangeLots() : [];

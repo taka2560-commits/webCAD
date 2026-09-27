@@ -198,7 +198,7 @@ window.photoView = async function(key) {
 };
 window.photoRemovePhoto = async function(key) {
     const p = _phPinById(_ph.editing);
-    if(!p || !confirm('この写真をピンから外して消しますか？')) return;
+    if(!p || !(await cadConfirm({ title: '写真を消す', message: 'この写真をピンから外して消しますか？（写真は ↩ では戻せません）', ok: '消す', danger: true }))) return;
     p.photos = p.photos.filter((k) => k !== key);
     await photoDelete(key);
     const u = _ph.urls.get(key); if(u) URL.revokeObjectURL(u);
@@ -209,12 +209,14 @@ window.photoRemovePhoto = async function(key) {
 };
 window.photoDeletePin = function() {
     const p = _phPinById(_ph.editing);
-    if(!p || !confirm('このピンを消しますか？（↩ で戻せます。写真は端末に残ります）')) return;
+    if(!p) return;
+    // ↩ で戻せるので確かめずに消し、「元に戻す」を出す（写真は端末に残る）
     saveUndo();
     const i = entities.indexOf(p);
     if(i >= 0) entities.splice(i, 1);
     _ph.editing = null;
     addCommandLog('-> ピンを消しました');
+    if(typeof showUndoSnack === 'function') showUndoSnack('ピンを消しました（写真は端末に残ります）');
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
     render();
     _phRenderList();

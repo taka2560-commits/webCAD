@@ -184,6 +184,7 @@ function _handlePointInputCore(wcs, fromMouse) {
             const targets = expandGroupTargets(idx);
             saveUndo(); targets.sort((a,b)=>b-a).forEach(i => entities.splice(i,1));
             addCommandLog(targets.length > 1 ? `-> グループ ${targets.length}個を削除` : '-> エンティティ削除');
+            if(typeof showUndoSnack === 'function') showUndoSnack(targets.length > 1 ? `🗑 ${targets.length}個を削除しました` : '🗑 削除しました');
             cmdState.highlightIdx=-1; cmdState.selectedIndices=[]; render();
         }
         else addCommandLog('エンティティが見つかりません');
@@ -770,6 +771,7 @@ function processCommand(cmdText) {
             saveUndo();
             si.sort((a,b) => b-a).forEach(i => entities.splice(i, 1));
             addCommandLog(`-> ${si.length}個のオブジェクトを削除`);
+            if(typeof showUndoSnack === 'function') showUndoSnack(`🗑 ${si.length}個を削除しました`);
             cmdState.selectedIndices = []; cmdState.highlightIdx = -1;
             setActiveTool('ERASE'); resetCommand(); return;
         }
