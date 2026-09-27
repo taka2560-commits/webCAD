@@ -187,7 +187,7 @@ async function loadSimaFile(file) {
             return null;
         }
         const r = addSurveyData(data.points, data.lots);
-        setDrawingName(file.name);
+        if(typeof _importMode === 'undefined' || _importMode !== 'append') setDrawingName(file.name); // 今の図面に追加したときは、図面の名前を変えない
         zoomExtents();
         render();
         let msg = `SIMA読み込み: 測点 ${r.pointCount}点` + (r.lotCount ? `・区画 ${r.lotCount}` : '');
@@ -467,15 +467,37 @@ window.showCoordListPanel = function() {
         </div>
         <div id="coord-list-note" style="font-size:10px;color:#888;margin-bottom:6px;">X＝北、Y＝東（図面の座標・単位 ${unit}）${ucsActive ? '<br><span style="color:#ffcc00;">※UCS設定中ですが、一覧と出力は図面の座標（WCS）です</span>' : ''}</div>
         <div id="coord-list-rows" style="max-height:48vh;overflow:auto;border:1px solid var(--border-2);border-radius:var(--r-sub);"></div>
-        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+        <div class="ts-sec" style="margin-top:8px;">入力</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="prop-btn" style="flex:1;margin-top:0;" onclick="coordListImportSima()" title="SIMA（.sim）の測点・区画を図面に入れる">📥 SIMA を読み込む</button>
+            <button class="prop-btn btn-sub" style="flex:1;margin-top:0;" onclick="closePropertyPanel(); toggleCommand('POINT')" title="図面をタップした所に測点を置く（左のツールバーの「点」と同じ）">⊙ 点を置く</button>
+        </div>
+        <div class="ts-sec" style="margin-top:8px;">出力</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="prop-btn btn-sub" style="flex:1;" onclick="exportCoordCsv()">📄 CSV出力</button>
             <button class="prop-btn btn-sub" style="flex:1;" onclick="exportSima()">📄 SIMA出力</button>
             <button class="prop-btn btn-sub" style="flex:1;" onclick="exportSdr33()" title="ソキアのトータルステーション用（既知点・杭打ち点）">📄 SDR33出力</button>
         </div>
-        <div style="font-size:10px;color:#666;margin-top:6px;">SIMA・座標CSV・SDR は「開く」から読み込めます</div>`;
+        <div style="font-size:10px;color:#666;margin-top:6px;">SIMA を読み込むと、測点・区画が図面に入り、この一覧にも出ます（今の図面があれば、置き換えるか追加するかを選べます）。座標CSV・SDR は上のバーの「📁 開く」から読み込めます</div>`;
     showPropertyPanel('📍 座標一覧', html);
     window.updateCoordListContent();
 };
+// 座標一覧から SIMA を読み込む（ファイルを選ぶ → 今の図面があれば「置き換える／今の図面に追加／やめる」→ 図面に入れて、一覧も新しくする）
+window.coordListImportSima = function() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.sim,.SIM,.txt';
+    inp.onchange = () => { const f = inp.files && inp.files[0]; if(f) coordListLoadSima(f); };
+    inp.click();
+};
+function coordListLoadSima(file) {
+    return new Promise((resolve) => {
+        _prepareImportTarget(async () => {
+            const r = await loadSimaFile(file);
+            if(document.getElementById('coord-list-rows')) window.updateCoordListContent();
+            resolve(r);
+        }, () => resolve(null)); // やめた
+    });
+}
 const COORD_LIST_MAX_ROWS = 300;
 window.updateCoordListContent = function() {
     const box = document.getElementById('coord-list-rows');

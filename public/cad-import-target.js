@@ -9,7 +9,8 @@ let _importMode = 'fresh';
 let _importUndo = null, _importProject = null; // 置き換えで消す前の図面（↩ 1回分）とプロジェクトの名前。読めなかったら戻す
 // next(mode): 取り込み先が決まったら呼ぶ（「やめる」なら呼ばない）。戻り値: その場で決まったときの取り込み先（やめたら null）。
 // 以前はブラウザの確認で「キャンセル＝今の図面に追加」になっていて、開くのをやめられなかった
-function _prepareImportTarget(next) {
+// onCancel: 「やめる」を選んだときに呼ぶ
+function _prepareImportTarget(next, onCancel) {
     if(typeof guideBeforeFileOpen === 'function') guideBeforeFileOpen();
     saveUndo();
     _importUndo = null; _importProject = null;
@@ -21,7 +22,7 @@ function _prepareImportTarget(next) {
     ] }, (v) => {
         if(v === 'replace') result = _clearForReplace();
         else if(v === 'append') result = (_importMode = 'append');
-        else { undoStack.pop(); result = null; addCommandLog('-> ファイルを開くのをやめました'); } // 積んだ ↩ 1回分も戻す
+        else { undoStack.pop(); result = null; addCommandLog('-> ファイルを開くのをやめました'); if(onCancel) onCancel(); } // 積んだ ↩ 1回分も戻す
         if(result && next) next(result);
     });
     return result;
