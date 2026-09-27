@@ -992,6 +992,7 @@ function _applyUndoSnapshot(s) {
     initLayers();
     if(typeof window.updateLayerPanel === 'function') window.updateLayerPanel();
     updatePropertiesPanel();
+    if(typeof window.updateCoordListContent === 'function' && document.getElementById('coord-list-rows')) window.updateCoordListContent(); // 開いている座標一覧も
 }
 function saveUndo() {
     ensureEntityIds(); // 履歴にもIDを残し、元に戻した後も選択が同じ図形を指すようにする

@@ -2,8 +2,9 @@
 // cad-point.js - 図面をタップした所に測点を置き、座標一覧に入れる（左のツールバーの「点」・コマンド POINT / PO）
 //
 // ・初めに「点 作図設定」で最初の点名（次の番号の案が入る）と標高（空欄なら無し）を決め、「この点名で置き始める」
-// ・そのあとは、マウスのクリック・コマンド欄の「X,Y」ではその場に置く。タッチは、タップで位置を決めて（印と点名が出る）☑確定 で置く
-//   （画面を動かそうとなぞって指を離しただけで点が置かれないように）。点名は P1 → P2 → … と自動で次の番号にする（同じ点名があれば飛ばす）。
+// ・そのあとは、タップ（1本指でなぞるとルーペで狙える。指を離した所）・クリック・コマンド欄の「X,Y」で、その場に置く。
+//   （v5.23 はタッチを「位置を決めて ☑確定」にしていたが、確定の前に終了・座標一覧を開くと点が入らず「一覧に載らない」ことがあった。
+//    画面を動かすのは2本指なので、線分と同じくすぐ置き、まちがいは「↩ 元に戻す」で消す）。点名は P1 → P2 → … と自動で次の番号にする（同じ点名があれば飛ばす）。
 //   スナップも効く。置いた点は測量計算の「点の追加」と同じ作り（点・点名の文字。画層「測点」）なので、座標一覧・SIMA の書き出しに入る
 // ・押し間違いで置いたときは、画面の下の「↩ 元に戻す」か ↩ で消せる。終わるときは「終了」・Esc・もう一度「点」
 
@@ -46,42 +47,13 @@ window.applyPointPreset = function() {
     _pt.z = (z === null) ? null : fromDisplayUnit(z, 'len');
     hidePropertyPanel();
     cmdState.mode = 'WAITING_POINT_PLACE';
-    cmdState.previewWcs = null;
-    if(typeof showActionbarControls === 'function') showActionbarControls({}); // ☑確定・終了
+    if(typeof showActionbarControls === 'function') showActionbarControls({ hideConfirm: true }); // 「終了」だけ
     _ptPrompt();
     addCommandLog(`-> [点] 点を置く位置をタップ（点名 ${_pt.next} から）`);
 };
-function _ptPrompt() {
-    setPrompt(cmdState.previewWcs ? `この位置でよければ ☑確定（点名 ${_pt.next}）。別の所をタップすると動かせます` : `点を置く位置をタップ（次の点名 ${_pt.next}）→ 終わるときは「終了」`);
-}
-// 点の位置の入力（cad-command.js の _handlePointInputCore から）。fromMouse: マウスのクリック・コマンド欄の座標ならその場に置く
-function pointInput(wcs, fromMouse) {
-    if(fromMouse) { cmdState.previewWcs = null; pointPlaceAt(wcs); return; }
-    cmdState.previewWcs = { x: wcs.x, y: wcs.y };
-    _ptPrompt();
-    render();
-}
-// ☑確定（タッチで決めた位置に置く）
-function pointConfirm() {
-    const w = cmdState.previewWcs;
-    if(!w) { showToast('先に、点を置く位置をタップしてください', { kind: 'warn', ms: 2500 }); return; }
-    cmdState.previewWcs = null;
-    pointPlaceAt(w);
-}
-// 置く前の位置の印（十字と丸と点名。描画の重ね表示から呼ぶ）
-function drawPointPreview(c) {
-    const w = cmdState.previewWcs;
-    if(cmdState.mode !== 'WAITING_POINT_PLACE' || !w) return;
-    const p = wcsToScreen(w.x, w.y);
-    c.save();
-    c.strokeStyle = '#00ff88'; c.fillStyle = '#00ff88'; c.lineWidth = 2;
-    c.beginPath(); c.arc(p.x, p.y, 7, 0, Math.PI * 2); c.stroke();
-    c.beginPath(); c.moveTo(p.x - 12, p.y); c.lineTo(p.x + 12, p.y); c.moveTo(p.x, p.y - 12); c.lineTo(p.x, p.y + 12); c.stroke();
-    c.font = 'bold 13px sans-serif'; c.textBaseline = 'bottom';
-    if(typeof outdoorTextHalo === 'function') outdoorTextHalo(c, _pt.next, p.x + 10, p.y - 8, 13);
-    c.fillText(_pt.next, p.x + 10, p.y - 8);
-    c.restore();
-}
+function _ptPrompt() { setPrompt(`点を置く位置をタップ（次の点名 ${_pt.next}）→ 終わるときは「終了」`); }
+// 点の位置の入力（cad-command.js の _handlePointInputCore から）。タップ（指を離した所）・クリック・コマンド欄の「X,Y」で、その場に置く
+function pointInput(wcs) { pointPlaceAt(wcs); }
 
 // 図面にまだ点名が無いときの点名の文字の高さ: 今の画面で約14px になる高さを、きりのよい値（1・2・5 の10のべき）に丸める
 function _ptLabelHeight() {

@@ -52,19 +52,15 @@ describe('点のコマンド', () => {
         assert.deepEqual(app.errors(), []);
     });
 
-    it('タッチは、タップで位置を決めて（まだ置かない・印と点名）、☑確定 で置く', () => {
+    it('タッチも、指を離した所にすぐ置く（確定を待たないので、座標一覧を開いてもすぐ載っている）。下のバーは「終了」だけ', () => {
         start('A1');
+        assert.equal(app.eval(`document.querySelector('#fs-dim-actionbar button[onclick="dimConfirmPoint()"]').style.display`), 'none');
         app.eval('handlePointInput({ x: 5, y: 5 }, false)');
-        assert.deepEqual(points(), [], 'なぞって離しただけでは置かない');
-        assert.match(app.eval(`document.getElementById('command-prompt').textContent`), /☑確定（点名 A1）/);
-        app.eval(`window.__t = []; ctx.fillText = (t) => window.__t.push(String(t)); _drawFrame(false); delete ctx.fillText;`);
-        assert.ok(app.val('window.__t').includes('A1'), '置く前の印に点名');
-        app.eval('handlePointInput({ x: 6, y: 7 }, false)'); // 別の所をタップすると動く
-        app.eval('dimConfirmPoint()');
-        assert.deepEqual(points(), [['A1', 6, 7, null]]);
-        app.eval('dimConfirmPoint()'); // 位置を決めずに確定
-        assert.match(app.eval(`document.getElementById('cad-toast').textContent`), /先に、点を置く位置をタップ/);
-        assert.equal(points().length, 1);
+        assert.deepEqual(points(), [['A1', 5, 5, null]]);
+        app.eval('showCoordListPanel()');
+        assert.match(app.eval(`document.getElementById('coord-list-rows').textContent`), /A1/);
+        app.eval('handlePointInput({ x: 6, y: 7 }, false)');
+        assert.match(app.eval(`document.getElementById('coord-list-rows').textContent`), /A1[\s\S]*A2/, '開いている一覧もすぐ新しくなる');
     });
 
     it('同じ点名が図面にあれば飛ばす。設定のまちがいは欄のそばに。標高も入る。コマンド欄の PO と「X,Y」でも置ける', () => {

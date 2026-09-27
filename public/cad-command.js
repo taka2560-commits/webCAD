@@ -41,7 +41,7 @@ function handlePointInput(wcs, fromMouse = false) {
 }
 function _handlePointInputCore(wcs, fromMouse) {
     const m = cmdState.mode;
-    if(m === 'WAITING_POINT_PLACE') { pointInput(wcs, fromMouse); return; } // 点（cad-point.js）
+    if(m === 'WAITING_POINT_PLACE') { pointInput(wcs); return; } // 点（cad-point.js）
     if(m==='WAITING_LAYOFF_TOUCH') {
         // タップした図形の画層を「消す候補」にする（もう一度で外す）。消すのは ☑確定 のとき（cad-panels.js）
         layoffPickAt(mouse.screenX, mouse.screenY);
@@ -865,7 +865,6 @@ window.plineCloseFromBar = function() {
     else if(typeof showToast === 'function') showToast('閉じるには3点以上が必要です');
 };
 window.dimConfirmPoint = function() {
-    if(cmdState.mode === 'WAITING_POINT_PLACE') { pointConfirm(); return; } // 点: タップで決めた位置に置く（cad-point.js）
     if(cmdState.mode === 'WAITING_LAYOFF_TOUCH') { layoffConfirm(); return; } // タッチ非表示: 消す候補の画層を非表示に（cad-panels.js）
     if(typeof editConfirm === 'function' && editConfirm()) return; // 結合・配列の確定（cad-edit.js）
     if(cmdState.mode === 'WAITING_PLINE_NEXT') { finishPline(false); return; } // ポリラインの完了

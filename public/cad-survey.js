@@ -482,6 +482,23 @@ window.showCoordListPanel = function() {
     showPropertyPanel('📍 座標一覧', html);
     window.updateCoordListContent();
 };
+// 座標一覧から点を消す（点と、同じまとまり（gid）の点名の文字・属性付きブロックの部品をいっしょに）。↩・「元に戻す」で戻せる
+window.coordListDeletePoint = function(p) {
+    const e0 = (p.id !== null && p.id !== undefined) ? entities.find((e) => e && e.id === p.id) : entities[p.idx];
+    if(!e0) { showToast('その点は見つかりません（もう消されている可能性があります）', { kind: 'warn', ms: 3000 }); window.updateCoordListContent(); return; }
+    const gid = p.gid || e0.gid || null;
+    saveUndo();
+    const before = entities.length;
+    for(let i = entities.length - 1; i >= 0; i--) { const e = entities[i]; if(e === e0 || (gid && e && e.gid === gid)) entities.splice(i, 1); }
+    cmdState.selectedIndices = []; cmdState.highlightIdx = -1;
+    _bumpGeomEpoch();
+    if(typeof updatePropertiesPanel === 'function') updatePropertiesPanel();
+    const label = p.name || p.num || '(名称なし)';
+    addCommandLog(`-> 座標一覧から点「${label}」を消しました（図形 ${before - entities.length}個）`);
+    if(typeof showUndoSnack === 'function') showUndoSnack(`点「${label}」を消しました`);
+    window.updateCoordListContent();
+    render();
+};
 // 座標一覧から SIMA を読み込む（ファイルを選ぶ → 今の図面があれば「置き換える／今の図面に追加／やめる」→ 図面に入れて、一覧も新しくする）
 window.coordListImportSima = function() {
     const inp = document.createElement('input');
@@ -520,7 +537,7 @@ window.updateCoordListContent = function() {
         const s = wcsToSurvey(p.x, p.y);
         const row = document.createElement('div');
         row.className = 'coord-row';
-        row.style.cssText = 'display:flex;gap:6px;align-items:baseline;padding:7px 8px;border-bottom:1px solid var(--border-1);cursor:pointer;font-size:12px;';
+        row.style.cssText = 'display:flex;gap:6px;align-items:center;padding:5px 6px 5px 8px;border-bottom:1px solid var(--border-1);cursor:pointer;font-size:12px;';
         row.addEventListener('click', () => window.zoomToSurveyPoint(k));
         const nm = document.createElement('div');
         nm.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e0e0e0;font-weight:600;';
@@ -528,7 +545,13 @@ window.updateCoordListContent = function() {
         const xy = document.createElement('div');
         xy.style.cssText = 'font-family:Consolas,monospace;color:#00ff88;font-size:11px;text-align:right;white-space:nowrap;';
         xy.textContent = `X ${formatSurveyNumber(s.X)}  Y ${formatSurveyNumber(s.Y)}` + (p.z !== null ? `  H ${formatSurveyNumber(p.z)}` : '');
-        row.appendChild(nm); row.appendChild(xy);
+        // 🗑 この点を消す（点と点名の文字をいっしょに。「↩ 元に戻す」で戻せる）
+        const del = document.createElement('button');
+        del.type = 'button'; del.className = 'coord-del'; del.textContent = '🗑';
+        const label = p.name || p.num || '(名称なし)';
+        del.title = `点「${label}」を消す`; del.setAttribute('aria-label', del.title);
+        del.addEventListener('click', (ev) => { ev.stopPropagation(); window.coordListDeletePoint(p); });
+        row.appendChild(nm); row.appendChild(xy); row.appendChild(del);
         frag.appendChild(row);
     });
     if(list.length > COORD_LIST_MAX_ROWS) {

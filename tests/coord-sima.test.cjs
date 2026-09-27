@@ -63,4 +63,23 @@ describe('座標一覧の入力', () => {
         app.eval(`applyPointPreset(); handlePointInput({ x: 5, y: 5 }, true); resetCommand(); showCoordListPanel();`);
         assert.match(listText(), /P1/);
     });
+    it('一覧の 🗑 で点を消す（点と点名の文字をいっしょに）。「元に戻す」で戻り、一覧も戻る', async () => {
+        app.eval('showCoordListPanel()');
+        await load();
+        const n0 = app.eval('entities.length');
+        const dels = app.val(`[...document.querySelectorAll('#coord-list-rows .coord-del')].map(b => b.getAttribute('aria-label'))`);
+        assert.deepEqual(dels, ['点「KP1」を消す', '点「KP2」を消す']);
+        const view0 = app.val('[view.x, view.y, view.scale]');
+        app.eval(`document.querySelectorAll('#coord-list-rows .coord-del')[0].click()`);
+        assert.deepEqual(app.val('collectSurveyPoints().map(p => p.name)'), ['KP2']);
+        assert.equal(app.eval(`entities.some(e => e.type === 'TEXT' && e.text === 'KP1')`), false, '点名の文字も消す');
+        assert.equal(app.eval('entities.length'), n0 - 2);
+        assert.doesNotMatch(listText(), /KP1/);
+        assert.deepEqual(app.val('[view.x, view.y, view.scale]'), view0, '🗑 では行を押したときの移動をしない');
+        assert.match(app.eval(`document.querySelector('#cad-snack .sn-msg').textContent`), /点「KP1」を消しました/);
+        app.eval(`document.querySelector('#cad-snack .sn-act').click()`);
+        assert.deepEqual(app.val('collectSurveyPoints().map(p => p.name)').sort(), ['KP1', 'KP2']);
+        assert.match(listText(), /KP1/, '元に戻すと一覧も戻る');
+        assert.deepEqual(app.errors(), []);
+    });
 });

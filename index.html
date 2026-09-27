@@ -293,6 +293,8 @@
         .pt-chip { min-height:32px; padding:0 10px; border-radius:16px; border:1px solid rgba(var(--brand-rgb),0.45); background:rgba(var(--brand-rgb),0.10); color:var(--brand); font:600 12px 'Segoe UI',sans-serif; cursor:pointer; }
         /* 検索の欄の ×（押すと文字を消す） */
         .gh-search-row { display:flex; gap:6px; align-items:center; }
+        /* 座標一覧の行の 🗑（点を消す。削除は赤） */
+        .coord-del { flex-shrink:0; width:34px; height:30px; padding:0; border-radius:var(--r-sub); border:1px solid rgba(255,107,107,0.45); background:rgba(255,107,107,0.08); color:#ff6b6b; font-size:14px; cursor:pointer; }
         .gh-search-row .gh-search { flex:1; min-width:0; }
         .search-x { flex-shrink:0; width:36px; height:36px; border-radius:var(--r-sub); border:1px solid var(--border-1); background:var(--btn-fill); color:#ddd; font-size:18px; line-height:1; cursor:pointer; }
         .gh-found { font-size:11.5px; color:var(--brand); display:none; }
