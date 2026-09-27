@@ -700,6 +700,61 @@
         body.outdoor-mode .cogo-note, body.outdoor-mode .gh-body, body.outdoor-mode .gh-where { color: #f0f0f0; }
         /* パネルの中の薄い灰色の説明（style で色を決めているもの）も明るくする */
         body.outdoor-mode [style*="color:#888"], body.outdoor-mode [style*="color:#999"], body.outdoor-mode [style*="color:#aaa"], body.outdoor-mode [style*="color:#777"] { color: #e6e6e6 !important; }
+
+        /* ===== UIの動き（試用。オプション「UIの動き」で body.motion-ui。動かす処理は cad-motion.js） =====
+           参考: モーションリファレンス（プレスフィードバック・バウンスプレス・タップリップル・ピルインジケーター・フェード＋スライド・
+           スイッチ状態スプリング・長押し進行・エラーシェイク・読込から成功）。道具として速く感じるよう、時間は参考の半分ほど。
+           端末の「動きを減らす」が入のときは、どれも動かさない */
+        @media (prefers-reduced-motion: no-preference) {
+            /* 押したとき: 少し沈んで内側に影（縮めすぎるとボタンが逃げて見えるので 95%）。離すと一度だけ弾んで戻る */
+            body.motion-ui :where(.top-btn, .tool-btn, .cg-btn, .status-btn, .sel-btn, .fav-btn, .fsd-btn, .subview-btn, .win-btn, .menu-item-btn, .gnss-btn, .prop-btn),
+            body.motion-ui #fs-controls button, body.motion-ui #fs-zoom-panel button, body.motion-ui #fs-dim-actionbar > button, body.motion-ui #command-pill, body.motion-ui #property-panel-help {
+                transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms cubic-bezier(0.33, 1, 0.68, 1),
+                    background-color 160ms cubic-bezier(0.33, 1, 0.68, 1), border-color 160ms cubic-bezier(0.33, 1, 0.68, 1), color 160ms cubic-bezier(0.33, 1, 0.68, 1);
+            }
+            body.motion-ui :where(.top-btn, .tool-btn, .cg-btn, .status-btn, .sel-btn, .fav-btn, .fsd-btn, .subview-btn, .win-btn, .menu-item-btn, .gnss-btn, .prop-btn):active,
+            body.motion-ui #fs-controls button:active, body.motion-ui #fs-zoom-panel button:active, body.motion-ui #fs-dim-actionbar > button:active, body.motion-ui #command-pill:active, body.motion-ui #property-panel-help:active {
+                transform: scale(0.95); box-shadow: inset 0 2px 7px rgba(0,0,0,0.5); transition-duration: 80ms;
+            }
+            body.motion-ui .prop-btn:active { transform: scale(0.97); } /* 大きなボタンは控えめに */
+            /* 押した位置から広がる波紋（ボタンと同じ形の枠の中。ボタンの中身・押せる範囲は変えない） */
+            .mo-ripple-host { position: fixed; z-index: 1000004; overflow: hidden; pointer-events: none; }
+            .mo-ripple { position: absolute; border-radius: 50%; background: currentColor; opacity: 0; animation: mo-ripple 450ms cubic-bezier(0.33, 1, 0.68, 1); }
+            @keyframes mo-ripple { from { transform: scale(0); opacity: 0.3; } to { transform: scale(1); opacity: 0; } }
+            /* 入にしたとき（ORTHO・OSNAP・範囲、使っている道具、座標読取モードの ⊕・XY）: 一度だけ小さく弾む */
+            body.motion-ui :where(.status-btn.active, .tool-btn.active), body.motion-ui #fs-controls button.fs-active { animation: mo-pop 300ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+            @keyframes mo-pop { 0% { scale: 1; } 40% { scale: 1.08; } 100% { scale: 1; } }
+            /* 切り替えボタンの列で、選んだ印が前の場所から滑って移る（cad-motion.js が重ねる） */
+            .mo-pill { position: fixed; z-index: 1000004; pointer-events: none; box-sizing: border-box; border: 1px solid var(--green); border-radius: 6px; background: rgba(0,255,136,0.16); box-shadow: 0 0 10px rgba(0,255,136,0.25); }
+            /* 出るとき: 少し下から上がりながら出る（パネル・別窓は cad-motion.js。描き直すたびには動かさない） */
+            @keyframes mo-rise { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0 0; } }
+            body.motion-ui #sel-actionbar, body.motion-ui #fs-dim-actionbar { animation: mo-rise 220ms cubic-bezier(0.33, 1, 0.68, 1); }
+            body.motion-ui #osnap-panel, body.motion-ui #fav-bar { animation: mo-rise 200ms cubic-bezier(0.33, 1, 0.68, 1); }
+            body.motion-ui #property-panel { animation: none; }
+            /* お知らせ（トースト）: 上から滑り込んで止まる */
+            body.motion-ui #cad-toast { translate: 0 -12px; transition: opacity 200ms cubic-bezier(0.33, 1, 0.68, 1), translate 320ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+            body.motion-ui #cad-toast.show { translate: 0 0; }
+            /* 窓が消える・形が変わるときの写し（縁と背景だけ） */
+            .mo-shape { position: fixed; pointer-events: none; box-sizing: border-box; background: rgba(28,32,38,0.92); border: 1px solid var(--border-color); border-radius: var(--r-card); box-shadow: 0 12px 32px rgba(0,0,0,0.4); }
+            /* 長押し（お気に入りの登録）: 押しているあいだ輪が進み、満了で ✓。途中で離すと消える */
+            .mo-hold { position: fixed; z-index: 1000004; pointer-events: none; }
+            .mo-hold svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+            .mo-hold circle { fill: none; stroke: #ffcc00; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; animation: mo-hold var(--mo-hold-ms, 450ms) linear forwards; }
+            .mo-hold b { position: absolute; right: -4px; top: -4px; width: 18px; height: 18px; border-radius: 9px; background: #00ff88; color: #04140c; font: 700 12px/18px 'Segoe UI', sans-serif; text-align: center; scale: 0; }
+            .mo-hold.done circle { stroke: #00ff88; stroke-dashoffset: 0; animation: none; }
+            .mo-hold.done b { animation: mo-pop-in 280ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+            .mo-hold.done { animation: mo-fade-out 200ms ease 300ms forwards; }
+            @keyframes mo-hold { to { stroke-dashoffset: 0; } }
+            @keyframes mo-pop-in { from { scale: 0; } to { scale: 1; } }
+            @keyframes mo-fade-out { to { opacity: 0; } }
+            /* まちがい（知らないコマンドなど）: 左右に揺れて、元の位置に戻る */
+            .mo-shake { animation: mo-shake 360ms cubic-bezier(0.33, 1, 0.68, 1); }
+            @keyframes mo-shake { 0%, 100% { translate: 0 0; } 18% { translate: -7px 0; } 36% { translate: 6px 0; } 54% { translate: -4px 0; } 72% { translate: 2px 0; } }
+            /* 保存できたとき: ボタンの上に ✓ が出て消える */
+            .mo-success { position: relative; }
+            .mo-success::after { content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; border-radius: inherit; background: #00ff88; color: #04140c; font-size: 15px; font-weight: 800; pointer-events: none; animation: mo-success 900ms cubic-bezier(0.33, 1, 0.68, 1) forwards; }
+            @keyframes mo-success { 0% { opacity: 0; scale: 0.6; } 18% { opacity: 1; scale: 1.06; } 30% { scale: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+        }
     </style>
 </head>
 <body>
@@ -1077,6 +1132,7 @@
     <script src="cad-subview.js"></script>
     <script src="cad-helmert.js"></script>
     <script src="cad-fav.js"></script>
+    <script src="cad-motion.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-guide-tours.js"></script>

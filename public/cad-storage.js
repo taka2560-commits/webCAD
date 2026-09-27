@@ -320,6 +320,7 @@ window.saveProject = async function(nameOverride) {
         _requestPersistentStorage();
         addCommandLog(`-> プロジェクト「${name}」を保存しました (${entities.length}図形)`);
         if (typeof showToast === 'function') showToast(`「${name}」を保存しました`, 2500);
+        if (typeof motionSuccess === 'function') motionSuccess(document.getElementById('btn-save')); // UIの動き（試用）: 保存のボタンに ✓
         _updateAutoSaveStatus('手動保存');
         // タイトル更新
         document.title = `${name} - WebCAD`;

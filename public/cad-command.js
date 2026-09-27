@@ -858,7 +858,10 @@ function processCommand(cmdText) {
     else if(typeof processPhotoCommand === 'function' && processPhotoCommand(cmd)) { /* 写真・メモ（PHOTO）処理済み */ }
     else if(typeof processFavCommand === 'function' && processFavCommand(cmd)) { /* お気に入りの登録（FAV）処理済み */ }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
-    else { addCommandLog(`不明なコマンドです "${cmdText}"`); resetCommand(); }
+    else {
+        addCommandLog(`不明なコマンドです "${cmdText}"`); resetCommand();
+        if(typeof motionShake === 'function') motionShake(document.getElementById('command-line-area')); // UIの動き（試用）: コマンド欄を揺らす
+    }
 }
 
 

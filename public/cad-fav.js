@@ -81,6 +81,7 @@ const FAV_CATALOG = [
     { id: 'COORDUNIT', label: '座標単位', icon: 'm', color: '#528bff', cat: 'view', run: () => toggleDisplayUnit('coord'), iconFn: () => displayUnit('coord') },
     // 屋外モードの入・切（入のあいだはボタンを光らせる: activeFn）
     { id: 'OUTDOOR', label: '屋外', icon: '☀', color: '#ffcc00', cat: 'view', run: () => toggleOutdoorMode(), activeFn: () => isOutdoor() },
+    { id: 'MOTION', label: '動き', icon: '✨', color: '#00ffff', cat: 'view', run: () => toggleMotionUI(), activeFn: () => displayPref('motion') === true },
 ];
 // ボタンに出す印（いまの状態で変わるものは iconFn）
 function favIcon(d) {
@@ -257,18 +258,20 @@ let _favPress = null, _favSuppress = null;
 function _favLongPress(el, id) {
     el.addEventListener('pointerdown', (e) => {
         if(e.button !== undefined && e.button !== 0) return;
-        if(_favPress) clearTimeout(_favPress.timer);
+        if(_favPress) { clearTimeout(_favPress.timer); if(_favPress.ring) _favPress.ring.cancel(); }
         const p = { el, x: e.clientX, y: e.clientY };
+        p.ring = (typeof motionHoldStart === 'function') ? motionHoldStart(el, FAV_LONG_MS) : null; // UIの動き（試用）: 長押しの進み具合の輪
         p.timer = setTimeout(() => {
             if(_favPress !== p) return;
             _favPress = null;
+            if(p.ring) p.ring.done();
             _favSuppress = el; // 指を離したときのクリック（コマンドを始める）は止める
             setTimeout(() => { if(_favSuppress === el) _favSuppress = null; }, 1500);
             _favAddFromPress(id);
         }, FAV_LONG_MS);
         _favPress = p;
     });
-    const cancel = () => { if(_favPress && _favPress.el === el) { clearTimeout(_favPress.timer); _favPress = null; } };
+    const cancel = () => { if(_favPress && _favPress.el === el) { clearTimeout(_favPress.timer); if(_favPress.ring) _favPress.ring.cancel(); _favPress = null; } };
     el.addEventListener('pointermove', (e) => { if(_favPress && _favPress.el === el && Math.hypot(e.clientX - _favPress.x, e.clientY - _favPress.y) > 10) cancel(); });
     ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => el.addEventListener(t, cancel));
     el.addEventListener('contextmenu', (e) => { if(_favSuppress === el || (_favPress && _favPress.el === el)) e.preventDefault(); }); // スマホの長押しのメニューを出さない
@@ -291,6 +294,7 @@ function processFavCommand(cmd) {
     if(cmd === 'UNIT' || cmd === 'LENUNIT') { toggleDisplayUnit('len'); return true; }
     if(cmd === 'CUNIT' || cmd === 'COORDUNIT') { toggleDisplayUnit('coord'); return true; }
     if(cmd === 'OUTDOOR' || cmd === 'SUN') { toggleOutdoorMode(); return true; } // 屋外モードの入・切
+    if(cmd === 'MOTION' || cmd === 'UIMOTION') { toggleMotionUI(); return true; } // UIの動き（試用）の入・切
     return false;
 }
 

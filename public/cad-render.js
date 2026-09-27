@@ -638,12 +638,14 @@ function drawRubberBand() {
 function drawSnapMarker() {
     updateSnapCycleButton();
     drawSnapGuides();
-    if(!snapActive()) { snapIndicator.textContent=''; return; }
+    if(!snapActive()) { snapIndicator.textContent=''; if(typeof motionSnapReset === 'function') motionSnapReset(); return; }
     snapIndicator.textContent=snapResult.type;
     const s=wcsToScreen(snapResult.wcsX,snapResult.wcsY);
+    const k=(typeof motionSnapScale === 'function') ? motionSnapScale() : 1; // UIの動き（試用）: 吸い付いた直後は印を大きめに
     ctx.save(); ctx.strokeStyle='#00ff00'; ctx.lineWidth=lineWidthPx(2, 1.5); // 屋外モードでは1.5倍
-    drawSnapShape(snapResult.type, s.x, s.y, 6);
+    drawSnapShape(snapResult.type, s.x, s.y, 6 * k);
     ctx.restore();
+    if(typeof motionSnapPulse === 'function') motionSnapPulse(ctx, s.x, s.y); // UIの動き（試用）: 吸い付いた点に輪を1回広げる
 }
 
 function drawCrosshair() {

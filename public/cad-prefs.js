@@ -22,6 +22,7 @@ const DISPLAY_PREF_DEFS = {
     snapRange:     { label: '吸着の範囲',     def: 'm',   options: [['s', '狭い', 0.6], ['m', '標準', 1], ['l', '広い', 1.6], ['xl', '最大', 2.4]] },
     btnSize:       { label: 'ボタンの大きさ', def: 'm',   options: [['s', '小', 0.85], ['m', '中', 1], ['l', '大', 1.25], ['xl', '特大', 1.5]] },
     outdoor:       { label: '屋外モード',     def: 'off', options: [['off', '切', false], ['on', '入', true]] },
+    motion:        { label: 'UIの動き（試用）', def: 'off', options: [['off', '切', false], ['on', '入', true]] }, // cad-motion.js
 };
 
 // 保存されている設定を読む（壊れた値・知らない値は無視して既定値を使う）
@@ -232,14 +233,17 @@ window.toggleOutdoorMode = function() {
 
 // ===== 反映 =====
 // 座標の文字の大きさは CSS 変数（--coord-scale）で、ステータスバー・全画面の座標表示に効かせる。
-// ボタンの大きさは CSS 変数（--btn-k）、屋外モードは body の outdoor-mode で画面の部品に効かせる
+// ボタンの大きさは CSS 変数（--btn-k）、屋外モードは body の outdoor-mode、UIの動き（試用）は body の motion-ui で画面の部品に効かせる
 function applyDisplayPrefs() {
     const root = document.documentElement;
     if(root && root.style) {
         root.style.setProperty('--coord-scale', String(displayPref('coordFont') || 1));
         root.style.setProperty('--btn-k', String(displayPref('btnSize') || 1));
     }
-    if(document.body) document.body.classList.toggle('outdoor-mode', isOutdoor());
+    if(document.body) {
+        document.body.classList.toggle('outdoor-mode', isOutdoor());
+        document.body.classList.toggle('motion-ui', displayPref('motion') === true);
+    }
 }
 applyDisplayPrefs(); // 最初の表示から設定どおりの大きさにする
 
@@ -300,6 +304,7 @@ function displayPrefsSectionHtml() {
             <div style="color:#888;font-size:10px;">座標の桁「標準」は、ステータスバーが整数、ルーペが小数2桁（mm のときは整数）です。寸法の桁「自動」は、m なら小数3桁まで（末尾の0は省く）、mm なら整数です（どちらも 1mm まで）</div>
             <div style="color:#888;font-size:10px;">角度の表示: 度は 45.5°、度分秒は 45°30′00″（角度寸法・回転・UCS。測量計算・杭打ちは、これまでどおり度分秒）</div>
             <div style="color:#888;font-size:10px;">ボタンの大きさ: 上・左・下のバー、選んだときのバー、☑確定のバー、お気に入り、右下の ？・コマンドのボタンを大きくします（手袋のままでも押しやすく）。屋外モード: 図形・寸法の線を太く、文字を太字にして縁取り、背景との明るさの差を広げ、パネルを不透明にします（日なたでは背景色を白にするのも効果があります）</div>
+            <div style="color:#888;font-size:10px;">UIの動き（試用）: ボタンを押したときの波紋と沈み込み、切り替えボタンの印の移動、パネル・別窓の出入りと ▁・□、スナップの輪、長押しの輪、保存の ✓ などに短い動きを付けます（押した結果は、動きを待たずにすぐ変わります。端末の「動きを減らす」が入のときは動きません${(typeof motionReducedByDevice === 'function' && motionReducedByDevice()) ? '。この端末はいま「動きを減らす」が入です' : ''}）</div>
             <button class="prop-btn btn-sub" onclick="resetDisplayPrefs()">表示・操作を初期値に戻す</button>
         </div>`;
 }

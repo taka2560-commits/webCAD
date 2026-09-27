@@ -595,6 +595,7 @@ function updateCommandPill() {
 // ===== プロパティパネル制御 =====
 function hidePropertyPanel() {
     const p = document.getElementById('property-panel');
+    if(p && typeof motionExit === 'function') motionExit(p); // UIの動き（試用）: 形の写しが縮みながら消える（パネルはすぐ閉じる）
     if(p) p.style.display = 'none';
     if(typeof favUpdateActive === 'function') favUpdateActive(); // お気に入りのバー: パネルのボタンの光り方
 }
@@ -602,16 +603,18 @@ function showPropertyPanel(title, htmlContent) {
     const p = document.getElementById('property-panel');
     if(!p) return;
     const t = document.getElementById('property-panel-title');
+    const opening = p.style.display !== 'flex';
     // ▁ たたむ・□ 画面いっぱいは、同じパネルの描き直し（タブの切り替えなど）では続ける。別のパネルにしたら元に戻す。
     // たたんだパネルは、閉じたあとに開き直したときも広げて出す（開いたのに中身が見えないことがないように）
     if(t.textContent !== title) p.classList.remove('win-min', 'win-max');
-    else if(p.style.display !== 'flex') p.classList.remove('win-min');
+    else if(opening) p.classList.remove('win-min');
     _ppSyncButtons(p);
     t.textContent = title;
     document.getElementById('property-panel-content').innerHTML = htmlContent;
     if(typeof guideUpdatePanelHelp === 'function') guideUpdatePanelHelp(title); // 見出しの「？」（その画面の使い方）
     p.style.display = 'flex';
     applyPanelPosition(p); // 前に動かした位置を覚えている場合はそこに出す
+    if(opening && typeof motionEnter === 'function') motionEnter(p); // UIの動き（試用）: 少し下から上がりながら出る（描き直しでは動かさない）
     if(typeof favUpdateActive === 'function') favUpdateActive(); // お気に入りのバー: パネルのボタンの光り方
 }
 
@@ -622,18 +625,26 @@ function showPropertyPanel(title, htmlContent) {
 function setPropertyPanelMinimized(on) {
     const p = document.getElementById('property-panel');
     if(!p) return;
-    p.classList.toggle('win-min', !!on);
-    _ppSyncButtons(p);
-    if(!on) applyPanelPosition(p); // 見出しだけで画面の下のほうへ動かしていたら、広げた分がはみ出さない位置へ
+    _ppChangeSize(p, () => {
+        p.classList.toggle('win-min', !!on);
+        _ppSyncButtons(p);
+        if(!on) applyPanelPosition(p); // 見出しだけで画面の下のほうへ動かしていたら、広げた分がはみ出さない位置へ
+    });
 }
 function setPropertyPanelMaximized(on) {
     const p = document.getElementById('property-panel');
     if(!p) return;
-    p.classList.remove('win-min'); // たたんでいたら広げる
-    p.classList.toggle('win-max', !!on);
-    if(on) document.querySelectorAll('.subview').forEach((s) => { s.style.zIndex = ''; }); // 別窓より前に出す（パネルを触ったときと同じ）
-    _ppSyncButtons(p);
-    if(!on) applyPanelPosition(p); // 元の位置へ（広げているあいだに画面の大きさが変わっていたら、はみ出さない位置に）
+    _ppChangeSize(p, () => {
+        p.classList.remove('win-min'); // たたんでいたら広げる
+        p.classList.toggle('win-max', !!on);
+        if(on) document.querySelectorAll('.subview').forEach((s) => { s.style.zIndex = ''; }); // 別窓より前に出す（パネルを触ったときと同じ）
+        _ppSyncButtons(p);
+        if(!on) applyPanelPosition(p); // 元の位置へ（広げているあいだに画面の大きさが変わっていたら、はみ出さない位置に）
+    });
+}
+// 大きさを変える（UIの動き（試用）が入なら、前の形から新しい形へつながって変わる動きを付ける）
+function _ppChangeSize(p, change) {
+    if(typeof motionMorph === 'function') motionMorph(p, change); else change();
 }
 window.togglePropertyPanelMin = function() {
     const p = document.getElementById('property-panel');
@@ -646,8 +657,8 @@ window.togglePropertyPanelMax = function() {
 // ✕: 閉じて、たたむ・画面いっぱいも元に戻す（次に開くときは、ふつうの大きさ）
 function closePropertyPanel() {
     const p = document.getElementById('property-panel');
+    hidePropertyPanel(); // 先に閉じる（UIの動き（試用）で、閉じる前の形のまま消えるように）
     if(p) { p.classList.remove('win-min', 'win-max'); _ppSyncButtons(p); }
-    hidePropertyPanel();
 }
 function _ppSyncButtons(p) {
     winSyncButtons(document.getElementById('property-panel-min'), document.getElementById('property-panel-max'), p.classList.contains('win-min'), p.classList.contains('win-max'));

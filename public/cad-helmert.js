@@ -318,7 +318,11 @@ function _helmTapSource(sx, sy) {
     const v = _helmView();
     let best = -1, bd = 22;
     s.points.forEach((p, i) => { const q = v.toScreen(p.X, p.Y), d = Math.hypot(q.x - sx, q.y - sy); if(d < bd) { bd = d; best = i; } });
-    if(best < 0) { showToast('点の近くをタップしてください（拡大すると選びやすくなります）', 2500); return; }
+    if(best < 0) {
+        showToast('点の近くをタップしてください（拡大すると選びやすくなります）', 2500);
+        if(typeof motionShake === 'function') motionShake(v.el.querySelector('.subview-hint')); // UIの動き（試用）: 別窓の案内を揺らす
+        return;
+    }
     helmSelectSource(best);
 }
 // 変換元の点 i を選び（別窓のタップ・表の 📍）、図面で相手の点を指定する（☑確定）

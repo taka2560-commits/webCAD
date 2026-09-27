@@ -33,6 +33,8 @@ function createSubView(opt) {
 
     const size = () => ({ w: body.clientWidth || cv.width || 320, h: body.clientHeight || cv.height || 240 });
     const syncButtons = () => winSyncButtons(el.querySelector('[data-act="fold"]'), el.querySelector('[data-act="max"]'), api.collapsed, api.maximized);
+    // 大きさを変える（UIの動き（試用）が入なら、前の形から新しい形へつながって変わる動きを付ける）
+    const changeSize = (fn) => { if(typeof motionMorph === 'function') motionMorph(el, fn); else fn(); };
     const api = {
         el, canvas: cv,
         isOpen: () => el.style.display !== 'none',
@@ -82,15 +84,17 @@ function createSubView(opt) {
         setCollapsed(on) {
             on = !!on;
             const was = api.collapsed;
-            el.classList.toggle('collapsed', on);
-            // スマホの幅では、たたんだ窓を画面の下に寄せる（図面とパネルを広く使える）。広げると元の位置に戻す
-            if(on && !was && window.innerWidth < 700 && api.isOpen()) {
-                el.dataset.dockFrom = el.style.top;
-                el.style.top = Math.max(60, window.innerHeight - SUBVIEW_DOCK_BOTTOM - (head.offsetHeight || 34)) + 'px';
-            } else if(!on && was && el.dataset.dockFrom !== undefined) {
-                el.style.top = el.dataset.dockFrom;
-                delete el.dataset.dockFrom;
-            }
+            changeSize(() => {
+                el.classList.toggle('collapsed', on);
+                // スマホの幅では、たたんだ窓を画面の下に寄せる（図面とパネルを広く使える）。広げると元の位置に戻す
+                if(on && !was && window.innerWidth < 700 && api.isOpen()) {
+                    el.dataset.dockFrom = el.style.top;
+                    el.style.top = Math.max(60, window.innerHeight - SUBVIEW_DOCK_BOTTOM - (head.offsetHeight || 34)) + 'px';
+                } else if(!on && was && el.dataset.dockFrom !== undefined) {
+                    el.style.top = el.dataset.dockFrom;
+                    delete el.dataset.dockFrom;
+                }
+            });
             if(!on) api.redraw();
             syncButtons();
             api.fitPanel();
@@ -102,7 +106,10 @@ function createSubView(opt) {
             if(api.collapsed) api.setCollapsed(false);
             if(on === api.maximized) return;
             const a = size();
-            el.classList.toggle('win-max', on);
+            changeSize(() => {
+                el.classList.toggle('win-max', on);
+                if(!on) applyPanelPosition(el); // 元の位置へ（広げているあいだに画面の大きさが変わっていたら、はみ出さない位置に）
+            });
             if(on) {
                 const b = size(), k = Math.min(b.w / a.w, b.h / a.h);
                 maxK = (k > 0 && isFinite(k)) ? k : 1;
@@ -111,7 +118,6 @@ function createSubView(opt) {
             v.s = Math.max(1e-6, Math.min(1e6, on ? v.s * maxK : v.s / maxK));
             if(!on) maxK = 1;
             syncButtons();
-            if(!on) applyPanelPosition(el); // 元の位置へ（広げているあいだに画面の大きさが変わっていたら、はみ出さない位置に）
             api.redraw();
             api.fitPanel();
         },
@@ -127,11 +133,16 @@ function createSubView(opt) {
                 el.style.display = 'flex';
                 el.classList.remove('collapsed'); delete el.dataset.dockFrom; // 開くときは広げて出す
                 _subviewPlace(el, opt);
+                if(typeof motionEnter === 'function') motionEnter(el); // UIの動き（試用）: 少し下から上がりながら出る
             }
             api.redraw();
             api.fitPanel();
         },
-        hide() { el.style.display = 'none'; api.fitPanel(); },
+        hide() {
+            if(api.isOpen() && typeof motionExit === 'function') motionExit(el); // UIの動き（試用）: 形の写しが縮みながら消える
+            el.style.display = 'none';
+            api.fitPanel();
+        },
         close() { api.hide(); if(opt.onClose) opt.onClose(); }, // ✕ で閉じたとき
         fitPanel() { _subviewFitPanel(el); },
     };
@@ -155,7 +166,7 @@ function createSubView(opt) {
         if(act === 'fit' && opt.onFit) opt.onFit();
         else if(act === 'fold') api.setCollapsed(!api.collapsed);
         else if(act === 'max') api.setMaximized(!api.maximized);
-        else if(act === 'close') { if(api.maximized) api.setMaximized(false); api.close(); } // 次に開くときは、ふつうの大きさ
+        else if(act === 'close') { api.close(); if(api.maximized) api.setMaximized(false); } // 閉じてから、次に開くときのためにふつうの大きさへ
     }));
     syncButtons();
     makePanelDraggable(el, head, opt.posKey);
