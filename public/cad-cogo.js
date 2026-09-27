@@ -274,12 +274,14 @@ function cogoNextName(name) {
     return s;
 }
 // 測点（点の記号＋点名）を追加する。X, Y は測量座標（m）。追加した点の図面の座標を返す
-function cogoAddSurveyPoint(X, Y, name, z) {
+// labelH: 図面にまだ点名の文字が無いときの文字の高さ（無ければ点の広がりから決める）
+function cogoAddSurveyPoint(X, Y, name, z, labelH) {
     const w = surveyToWcs(X, Y);
     saveUndo();
     // 点名の文字は、図面にある点名と同じ大きさにそろえる（無ければ点の広がりから決める）
     let h = null;
     for(let i = entities.length - 1; i >= 0; i--) { const e = entities[i]; if(e && e.type === 'TEXT' && e.ptLabel && e.height > 0) { h = e.height; break; } }
+    if(!h && labelH > 0) h = labelH;
     if(!h) h = _autoLabelHeight(entities.filter((e) => e && e.type === 'POINT').map((e) => ({ x: e.x, y: e.y })).concat([w]));
     const lp = _ensureSurveyLayer(SURVEY_LAYER_POINT, '#ffff00');
     const ll = _ensureSurveyLayer(SURVEY_LAYER_LABEL, '#ffffff');

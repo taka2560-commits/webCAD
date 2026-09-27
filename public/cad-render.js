@@ -139,6 +139,7 @@ function _drawFrame(overlayOnly) {
         // ルーペ（拡大鏡）描画
         drawLoupe();
         if(typeof drawPrefPreview === 'function') drawPrefPreview(); // 設定を変えた直後の見本（ルーペ・吸着範囲）
+        if(typeof drawPointPreview === 'function') drawPointPreview(ctx); // 点: タッチで決めた、置く前の位置
 
         // ズームスライダーの位置同期
         if(window.updateZoomSlider) window.updateZoomSlider();

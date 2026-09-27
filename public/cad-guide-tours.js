@@ -56,7 +56,7 @@ Object.assign(GUIDE_TOURS, {
         },
         onEnd: (k) => { if(k) Object.assign(_cogo, k); hidePropertyPanel(); },
         steps: [
-            { title: 'メニューを開く', text: '上のバーの右端の ⋯ を押します。', target: '#btn-top-menu', done: () => _gtMenuOpen() || _gtPanelIs(COGO_TITLE) },
+            { title: 'メニューを開く', text: '上のバーの右端の ☰ を押します。', target: '#btn-top-menu', done: () => _gtMenuOpen() || _gtPanelIs(COGO_TITLE) },
             { title: '🧮 測量計算', text: 'メニューの「🧮 測量計算」を押します。', target: { sel: '#top-menu-modal button[onclick^="showCogoPanel"]' }, done: () => _gtPanelIs(COGO_TITLE) },
             { title: '求積', text: '上の「求積」を押します（座標法で面積を出します）。', target: { sel: `.cogo-seg button[onclick="cogoSetTab('area')"]` },
                 done: () => _gtPanelIs(COGO_TITLE) && _cogo.tab === 'area', skipIf: () => _cogo.tab === 'area' },
@@ -77,7 +77,7 @@ Object.assign(GUIDE_TOURS, {
         onStart: () => { const k = { helm: helmSaveState(), tab: _cogo.tab }; helmRestoreState(null); return k; },
         onEnd: (k) => { hidePropertyPanel(); if(k) { helmRestoreState(k.helm); _cogo.tab = k.tab; } },
         steps: [
-            { title: '変換の画面', text: '別の座標（現場の仮の座標など）で測った SIMA を、図面の座標に合わせて取り込みます。\nふだんは ⋯ → 🧮 測量計算 →「変換」で開きます（練習では、ここで開きました）。',
+            { title: '変換の画面', text: '別の座標（現場の仮の座標など）で測った SIMA を、図面の座標に合わせて取り込みます。\nふだんは ☰ → 🧮 測量計算 →「変換」で開きます（練習では、ここで開きました）。',
                 onEnter: () => showCogoPanel('helm'), target: { sel: `.cogo-seg button[onclick="cogoSetTab('helm')"]` }, next: true },
             { title: 'SIMA を読み込む', text: '「📁 SIMA を読み込む」で SIMA のファイルを選びます。\n練習では「練習用の SIMA を読む」を押します。',
                 target: { sel: 'button[onclick="helmPickFile()"]' }, act: { label: '練習用の SIMA を読む', run: () => helmLoadSimaText(_gtHelmSima(), '練習用.sim') }, done: () => !!_helm.src },
@@ -109,7 +109,7 @@ Object.assign(GUIDE_TOURS, {
             ['KS', 'KB', 'KT'].forEach((s) => { if(k[s]) _cogo.slots[s] = k[s]; else delete _cogo.slots[s]; });
         },
         steps: [
-            { title: '杭打ちの画面', text: '打つ杭（測点）を順に選んで、距離と向き・角度を案内します。ふだんは ⋯ → 📍 杭打ち で開きます（練習では、ここで開きました）。\n範囲選択した測点、無ければ図面のすべての測点が、順番の杭になります。',
+            { title: '杭打ちの画面', text: '打つ杭（測点）を順に選んで、距離と向き・角度を案内します。ふだんは ☰ → 📍 杭打ち で開きます（練習では、ここで開きました）。\n範囲選択した測点、無ければ図面のすべての測点が、順番の杭になります。',
                 onEnter: () => showStakePanel(), target: { sel: '#stake-count' }, next: true },
             { title: '器械点から', text: '「器械点から」を押します（トータルステーションを据えた点と後視点から案内します）。', target: { sel: `.cogo-seg button[onclick="stakeSetMode('ts')"]` }, done: () => _stake.mode === 'ts' },
             { title: '器械点を指定', text: { touch: '器械点の欄の 📍 を押し、測点 A までなぞって ☑確定 します（欄に「A」と入れても指定できます）。', pc: '器械点の欄の 📍 を押し、測点 A をクリックします（欄に「A」と入れても指定できます）。' },
@@ -140,7 +140,7 @@ Object.assign(GUIDE_TOURS, {
         title: '写真・メモ（ピン）', sample: true, screen: 'normal',
         onEnd: () => { hidePropertyPanel(); if(typeof _ph !== 'undefined') { _ph.editing = null; _ph.viewing = null; } },
         steps: [
-            { title: 'ピンを立てる', text: '図面の場所にピンを立てて、メモと写真を付けます（境界標の状態・立会いの記録など）。ふだんは ⋯ → 📷 写真・メモ で開きます（練習では、ここで開きました）。\n「📍 ピンを立てる」を押します。',
+            { title: 'ピンを立てる', text: '図面の場所にピンを立てて、メモと写真を付けます（境界標の状態・立会いの記録など）。ふだんは ☰ → 📷 写真・メモ で開きます（練習では、ここで開きました）。\n「📍 ピンを立てる」を押します。',
                 onEnter: () => showPhotoPanel(), target: { sel: 'button[onclick="photoStartAdd()"]' }, done: () => cogoIsPicking() && _guidePickOwner() === 'photo' },
             { title: 'ピンの場所', text: { touch: '測点 C までなぞって ☑確定 します（測点に吸い付きます）。', pc: '測点 C をクリックします（測点に吸い付きます）。' },
                 target: { wcs: _gC, r: 34 }, done: () => entities.some((e) => e && e.type === 'PIN') },
@@ -159,7 +159,7 @@ Object.assign(GUIDE_TOURS, {
             try { if(k && k.opts !== null) localStorage.setItem(PRINT_OPTS_KEY, k.opts); else localStorage.removeItem(PRINT_OPTS_KEY); } catch { /* 保存できなくても続行 */ }
         },
         steps: [
-            { title: '印刷・PDF の画面', text: '用紙（A4〜A1・横縦）・縮尺・白黒／カラーを選ぶと、図面に用紙の枠（黄色の点線）が重なります。\nふだんは ⋯ → 🖨 印刷・PDF で開きます（練習では、ここで開きました）。',
+            { title: '印刷・PDF の画面', text: '用紙（A4〜A1・横縦）・縮尺・白黒／カラーを選ぶと、図面に用紙の枠（黄色の点線）が重なります。\nふだんは ☰ → 🖨 印刷・PDF で開きます（練習では、ここで開きました）。',
                 onEnter: () => showPrintPanel(), target: 'canvas', next: true },
             { title: '縮尺を選ぶ', text: '縮尺を選びます（「画面に合わせる」を押すと、今の画面が入る縮尺になります）。',
                 onEnter: () => { _gtPrintScale0 = printOpts().scale; }, target: { sel: `select[onchange="printSet('scale', this.value)"]` }, done: () => printOpts().scale !== _gtPrintScale0 },

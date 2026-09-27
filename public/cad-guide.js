@@ -93,7 +93,7 @@ const GUIDE_TOURS = {
             GUIDE_STEP.measureStart, GUIDE_STEP.measureBase, GUIDE_STEP.measureRead,
             { title: '元に戻す', text: '↩ で1つ前の状態に戻ります（記入した寸法が消えます）。', target: '#btn-undo', on: 'undo' },
             { title: '保存', text: '💾保存 で、図面を端末に保存します（練習なので実際には保存しません）。\n作業中の図面は自動でも保存されています。', target: '#btn-save', on: 'saved' },
-            { title: 'おわり', text: '基本はここまでです。ほかにも 📍座標一覧、SIMA・座標CSV の読込、🛰現在地、🎯座標読取モード、スナップの設定（OSNAP の ▼）などがあります。\n右下や ⋯ メニューの ❓ から、いつでも見られます。❓ の「機能の練習」では、測量計算・SIMA の変換・杭打ちなども練習できます。', next: 'おわる',
+            { title: 'おわり', text: '基本はここまでです。ほかにも 📍座標一覧、SIMA・座標CSV の読込、🛰現在地、🎯座標読取モード、スナップの設定（OSNAP の ▼）などがあります。\n右下や ☰ メニューの ❓ から、いつでも見られます。❓ の「機能の練習」では、測量計算・SIMA の変換・杭打ちなども練習できます。', next: 'おわる',
                 extra: [{ label: '🎯 座標読取モードも見る', action: () => startGuideTour('fullscreen') }] },
         ],
     },
@@ -490,7 +490,7 @@ window.guideWelcomeAnswer = function(a) {
     if(a === 'never') _guide.welcome = 'never';
     else { _guide.welcome = 'later'; _guide.laterCount = (_guide.laterCount || 0) + 1; }
     _guideSave();
-    if(typeof showToast === 'function') showToast('操作ガイドは右下や ⋯ メニューの ❓ からいつでも見られます', 4000);
+    if(typeof showToast === 'function') showToast('操作ガイドは右下や ☰ メニューの ❓ からいつでも見られます', 4000);
 };
 // 起動直後: はじめての人には案内、以前から使っている人には一度だけお知らせ
 function _guideStartup(tries) {
@@ -506,7 +506,7 @@ function _guideStartup(tries) {
     }
     if(w === undefined && (_guideExistingUser || entities.length > 0)) {
         _guide.welcome = 'notice'; _guideSave();
-        if(typeof showToast === 'function') showToast('操作ガイドができました。右下や ⋯ メニューの ❓ から見られます', 5000);
+        if(typeof showToast === 'function') showToast('操作ガイドができました。右下や ☰ メニューの ❓ から見られます', 5000);
         return;
     }
     _guideShowWelcome();

@@ -509,7 +509,7 @@ function setupEventListeners() {
         if((e.ctrlKey || e.metaKey) && k==='z'){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); return; }
         if((e.ctrlKey || e.metaKey) && k==='y'){ e.preventDefault(); redo(); return; }
         if(e.key === 'Escape') {
-            // ⋯ メニュー・エラーの画面・プロジェクト一覧 → スナップの設定パネル → コマンド → 選択 → パネル の順に閉じる
+            // ☰ メニュー・エラーの画面・プロジェクト一覧 → スナップの設定パネル → コマンド → 選択 → パネル の順に閉じる
             const menu = document.getElementById('top-menu-modal');
             if(menu && menu.style.display === 'flex') { menu.style.display = 'none'; return; }
             const ep = document.getElementById('cad-err-panel');

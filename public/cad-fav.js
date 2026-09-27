@@ -1,6 +1,6 @@
 // ===== Web CAD お気に入りのボタン =====
 // cad-fav.js - よく使うコマンドを登録して、画面の端に浮かぶバーのボタンから始める。
-//   登録: ⋯ メニューの「⭐ お気に入り」の画面で ☆ を押す。左のツールバー・⋯ メニューのボタンを長押ししても登録できる。
+//   登録: ☰ メニューの「⭐ お気に入り」の画面で ☆ を押す。左のツールバー・☰ メニューのボタンを長押ししても登録できる。
 //   バー: ⠿ をつまんで動かす（位置を覚える・ダブルタップで戻す）、⭐ でたたむ・広げる、＋ で登録の画面。
 //         向き（縦・横）と名前の有無を選べる。座標読取モードでは出さない。
 //   押したとき: 描く・直す・寸法のコマンドは左のツールバーと同じ（もう一度押すとやめる）。パネルの機能は、開いていれば閉じる。
@@ -23,6 +23,7 @@ const FAV_CATALOG = [
     { id: 'ELLIPSE', label: '楕円', icon: '⬭', cat: 'draw' },
     { id: 'TEXT', label: '文字', icon: 'A', cat: 'draw' },
     { id: 'HATCH', label: '塗潰', icon: '▨', cat: 'draw' },
+    { id: 'POINT', label: '点', icon: '⊙', cat: 'draw' },
     { id: 'TRIM', label: 'トリム', icon: '✂', color: '#ff6b6b', cat: 'edit' },
     { id: 'EXTEND', label: '延長', icon: '↗', color: '#33ff99', cat: 'edit' },
     { id: 'ERASE', label: '削除', icon: '✖', color: '#ff6b6b', cat: 'edit' },
@@ -210,21 +211,21 @@ function _favAddFromPress(id) {
     const d = favDef(id);
     if(!d) return;
     if(navigator.vibrate) navigator.vibrate(30);
-    if(_fav.items.includes(id)) { showToast(`⭐「${d.label}」は登録してあります（外すときは ⋯ →「⭐ お気に入り」）`, 3500); return; }
+    if(_fav.items.includes(id)) { showToast(`⭐「${d.label}」は登録してあります（外すときは ☰ →「⭐ お気に入り」）`, 3500); return; }
     if(favToggle(id)) {
         addCommandLog(`-> ⭐ お気に入りに「${d.label}」を登録しました`);
         showToast(`⭐ お気に入りに「${d.label}」を登録しました\n並べ替えは、バーの ＋ から`, 3500);
     }
 }
 
-// ===== 登録の画面（⋯ →「⭐ お気に入り」） =====
+// ===== 登録の画面（☰ →「⭐ お気に入り」） =====
 window.showFavPanel = function() {
     const n = _fav.items.length;
     let h = `<div class="prop-row cogo-row"><div class="prop-label cogo-label">バー</div>${_cogoSeg(_fav.show ? 'on' : 'off', [['on', '出す'], ['off', '隠す']], 'favSetShow')}</div>` +
         `<div class="prop-row cogo-row"><div class="prop-label cogo-label">向き</div>${_cogoSeg(_fav.dir === 'h' ? 'h' : 'v', [['v', '縦'], ['h', '横']], 'favSetDir')}</div>` +
         `<div class="prop-row cogo-row"><div class="prop-label cogo-label">名前</div>${_cogoSeg(_fav.labels ? 'on' : 'off', [['on', '出す'], ['off', 'アイコンだけ']], 'favSetLabels')}</div>`;
     h += `<div class="ts-sec">登録したボタン（${n} / ${FAV_MAX}）</div>`;
-    if(!n) h += _cogoNote('下の一覧の ☆ を押すと登録します。左のツールバー・⋯ メニューのボタンを長押ししても登録できます。登録したボタンは、画面の右の浮かぶバーに並びます。');
+    if(!n) h += _cogoNote('下の一覧の ☆ を押すと登録します。左のツールバー・☰ メニューのボタンを長押ししても登録できます。登録したボタンは、画面の右の浮かぶバーに並びます。');
     else {
         h += '<div class="fav-rows">' + _fav.items.map((id, k) => {
             const d = favDef(id);
@@ -253,7 +254,7 @@ function _favRerenderPanel() {
     if(c2) c2.scrollTop = top;
 }
 
-// ===== 長押しで登録（左のツールバー・⋯ メニューのボタン） =====
+// ===== 長押しで登録（左のツールバー・☰ メニューのボタン） =====
 let _favPress = null, _favSuppress = null;
 function _favLongPress(el, id) {
     el.addEventListener('pointerdown', (e) => {

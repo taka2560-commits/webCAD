@@ -38,7 +38,7 @@
             --float-rgb:18,22,28;                                   /* トースト・お知らせの地 */
             --shape-bg:rgba(28,32,38,0.92);                         /* UIの動き: 閉じるパネルの影 */
             --btn-fill:#2a2e35; --btn-fill-hover:#3a4049;           /* 役割の色がないボタン・切り替えボタンの地 */
-            --btn-glass:rgba(255,255,255,0.06); --btn-glass-menu:rgba(255,255,255,0.05); /* バー・⋯ メニューのボタンの地 */
+            --btn-glass:rgba(255,255,255,0.06); --btn-glass-menu:rgba(255,255,255,0.05); /* バー・☰ メニューのボタンの地 */
             --hl-rgb:82,139,255;                                    /* --highlight-color（使っている道具・入のボタン）の薄い色 */
             --brand:#00ff88; --brand-rgb:0,255,136;                 /* 選んでいる切り替えボタン・パネルの題など（確定・保存の --green とは別） */
             --coord-color:#528bff;                                  /* 座標系（WCS）の青。配色で変えない */
@@ -396,7 +396,7 @@
             border:1px solid var(--border-1); background:radial-gradient(circle at 11px 50%, #aeb4bd 0 7px, transparent 7.5px), var(--btn-fill); transition:background-color .15s, border-color .15s; }
         input[type="checkbox"].sw:checked { border-color:var(--brand); background:radial-gradient(circle at calc(100% - 11px) 50%, var(--brand) 0 7px, transparent 7.5px), rgba(var(--brand-rgb),0.25); }
         input[type="checkbox"].sw:focus-visible { outline:2px solid var(--highlight-color); outline-offset:2px; }
-        /* バッジ（⋯ のエラーの数・？ の「新」） */
+        /* バッジ（☰ のエラーの数・？ の「新」） */
         .nb-badge { position:absolute; top:-4px; right:-4px; min-width:16px; height:16px; padding:0 4px; box-sizing:border-box; border-radius:8px; background:#ff6b6b; color:#1e2228;
             font:800 10px/16px 'Segoe UI',sans-serif; text-align:center; pointer-events:none; }
         .nb-badge[hidden] { display:none; }
@@ -802,7 +802,7 @@
         #guide-hint { top: calc(24px + 44px * var(--btn-k, 1)); }
         #guide-tip { bottom: calc(26px + 38px * var(--btn-k, 1)); }
         body.guide-actionbar:not(.fullscreen-mode) #guide-tip { bottom: calc(86px + 38px * var(--btn-k, 1)); }
-        /* ⋯ メニュー・パネルの大きなボタンは、並びを崩さないように高さだけ伸ばす（中までは以前と同じ） */
+        /* ☰ メニュー・パネルの大きなボタンは、並びを崩さないように高さだけ伸ばす（中までは以前と同じ） */
         .menu-item-btn { min-height: calc(36px * max(1, var(--btn-k, 1))); font-size: calc(12px * clamp(1, var(--btn-k, 1), 1.25)); }
         .menu-btn-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } /* 文字が大きくても2列がメニューの幅からはみ出さない */
         .prop-btn { min-height: clamp(0px, calc((var(--btn-k, 1) - 1) * 168px), 50px); }
@@ -912,7 +912,7 @@
         <button id="btn-extents" class="top-btn" onclick="zoomExtents()" title="全体表示">🔍 全体</button>
         <button id="btn-coordread" class="top-btn primary" onclick="toggleFullscreen()" title="全画面表示で座標読取に特化">🎯 座標読取</button>
         <button class="top-btn" onclick="togglePropertiesPanel()" title="プロパティパネル表示切替">📋</button>
-        <button id="btn-top-menu" class="top-btn" onclick="toggleTopMenu()" title="その他のメニュー (エクスポート・UCS・設定)">⋯<span class="nb-badge err-badge" hidden></span></button>
+        <button id="btn-top-menu" class="top-btn" onclick="toggleTopMenu()" title="メニュー（書き出し・UCS・オプション・ヘルプなど）">☰ メニュー<span class="nb-badge err-badge" hidden></span></button>
     </div>
 
     <!-- トップメニューモーダル (案B: その他機能集約) -->
@@ -983,6 +983,7 @@
         <button class="tool-btn" onclick="toggleCommand('ELLIPSE')" title="楕円 (EL)"><div class="tool-icon">⬭</div><span class="tool-lbl">楕円</span><div class="tool-cmd">ELLIPSE</div></button>
         <button class="tool-btn" onclick="toggleCommand('TEXT')" title="文字 (T)"><div class="tool-icon">A</div><span class="tool-lbl">文字</span><div class="tool-cmd">TEXT</div></button>
         <button class="tool-btn" onclick="toggleCommand('HATCH')" title="ハッチング (H)"><div class="tool-icon" style="background:repeating-linear-gradient(45deg, transparent, transparent 2px, #fff 2px, #fff 3px); width:14px; height:14px; margin-bottom:1px;"></div><span class="tool-lbl">塗潰</span><div class="tool-cmd">HATCH</div></button>
+        <button class="tool-btn" onclick="toggleCommand('POINT')" title="点 (PO) - タップした所に測点を置き、座標一覧に入れる"><div class="tool-icon">⊙</div><span class="tool-lbl">点</span><div class="tool-cmd">POINT</div></button>
         
         <div class="tool-sep"></div>
         
@@ -1257,6 +1258,7 @@
     <script src="cad-survey.js"></script>
     <script src="cad-cogo.js"></script>
     <script src="cad-cogo-ui.js"></script>
+    <script src="cad-point.js"></script>
     <script src="cad-sdr.js"></script>
     <script src="cad-ts.js"></script>
     <script src="cad-stake.js"></script>
