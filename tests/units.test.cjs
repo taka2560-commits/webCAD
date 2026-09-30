@@ -210,7 +210,8 @@ describe('表示の単位（m / mm）', () => {
                   entities.push({ type:'CIRCLE', layer:0, color:null, cx:10, cy:20, radius:0.75 });
                   cmdState.highlightIdx = 0; updatePropertiesPanel();`);
         const vals = () => app.val(`[...document.querySelectorAll('#props-content input.prop-val[type=number]')].map(i => i.value)`);
-        assert.deepEqual(vals(), ['2.3', '1.5', '6.0', '4.0']); // 図面どおり: 以前と同じ（小数1桁）
+        // 図面どおり（1単位＝1m）: 小数3桁（1mm まで）。以前は小数1桁（0.1m）で、2.25m が「2.3」と出ていた（値の監査で見つけた）
+        assert.deepEqual(vals(), ['2.250', '1.500', '6.000', '4.000']);
         assert.equal(app.eval(`document.querySelector('#props-content .prop-unit-note')`), null);
         // 単位を変えると、開いているプロパティ欄もすぐ変わる
         app.eval(`setDisplayPref('coordUnit', 'mm')`);

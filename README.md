@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.25.2（2026年9月30日リリース）**
+**現在のバージョン: v5.25.3（2026年9月30日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（586件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（622件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,14 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-09-30: バージョン5.25.3（寸法値・座標値の総点検）** 📏
+  * 寸法値・座標値が出る所を、図面の単位（m・mm）× 表示の単位 × UCS × 画面の回転の組み合わせで、別の式の期待値と約2.3万件突き合わせた（tests/values-audit-*.test.cjs の5ファイル、tests/helpers/values-oracle.cjs）。食い違いは次の4つで、すべて直した。
+  * 座標寸法の「文字上書き」が画面に出ていなかった（_drawDimOrdinateCore が textOverride を見ていなかった。DXF・印刷は出ていた）。
+  * プロパティの座標・長さが m の図面で小数1桁だった（_propNum を表示の単位で 3 桁・1 桁に。入力欄は step="any"）。
+  * 記録の座標は coordPairText（「X 北  Y 東」・表示の単位・ルーペの桁）、原点・移動量は coordLogText・moveLogText・ucsVector（UCS の向き）に統一した（23か所。以前は「(x,y)」＝東・北の並びで記号なし、移動・コピーは WCS の向き）。
+  * 取り込んだ寸法の文字を importedDimText（cad-import-target.js）に集めた: 単位の桁（m は 1mm まで・mm は整数）、R・⌀・°、`<>` の置き換え、高さは DIMTXT × DIMSCALE。ファイルの単位（INSUNITS）の処理もここへ移した（cad-io.js が 1200 行を超えるため）。
+  * 現在地（GNSS）の図面への置き方（x＝東・y＝北・倍率）を、m・mm の図面と UCS で照合するテストを足した。
 
 * **2026-09-30: バージョン5.25.2（TS につながらないときの案内・ボタンがつぶれる不具合の修正）** 📡
   * つなぎ方の順番を直した: ソキアの機械の Bluetooth は待ち受け（観測の画面の4ページ目のキー）にしたときだけ電源が入るので、「待ち受け → ペアリング → 機械とつなぐ」の順に。CX の Bluetooth 設定（モード・認証・デバイス情報）と音の意味、「つながらないとき」を足した。

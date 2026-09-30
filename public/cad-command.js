@@ -54,14 +54,14 @@ function _handlePointInputCore(wcs, fromMouse) {
             cmdState.mode = 'WAITING_UCS_2P_XDIR';
             setPrompt('X軸方向の点:');
             const u = wcsToUcs(wcs.x, wcs.y);
-            addCommandLog(`-> 原点: (${dimFormatCoord(u.x)},${dimFormatCoord(u.y)})`);
+            addCommandLog(`-> 原点: ${coordPairText(u.x, u.y)}`);
             const ab = document.getElementById('fs-dim-actionbar');
             if(ab) ab.style.display = 'none';
         } else {
             cmdState.mode='WAITING_UCS_2P_ORIGIN_PREVIEW'; 
             setPrompt('基点（新しい原点）: (☑️確定)'); 
             const u=wcsToUcs(wcs.x,wcs.y); 
-            addCommandLog(`-> 仮原点: (${dimFormatCoord(u.x)},${dimFormatCoord(u.y)}) - 確定してください`); 
+            addCommandLog(`-> 仮原点: ${coordPairText(u.x, u.y)} - 確定してください`); 
             const ab = document.getElementById('fs-dim-actionbar');
             if(ab) { ab.style.display = 'flex'; const tb = document.getElementById('dim-mode-toggle'); if(tb) tb.style.display='none'; }
         }
@@ -71,7 +71,7 @@ function _handlePointInputCore(wcs, fromMouse) {
     if(m==='WAITING_UCS_2P_ORIGIN_PREVIEW') {
         cmdState.startWcs={x:wcs.x,y:wcs.y}; 
         const u=wcsToUcs(wcs.x,wcs.y); 
-        addCommandLog(`-> 仮原点: (${dimFormatCoord(u.x)},${dimFormatCoord(u.y)}) - 確定してください`); 
+        addCommandLog(`-> 仮原点: ${coordPairText(u.x, u.y)} - 確定してください`); 
         render(); 
         return;
     }
@@ -99,8 +99,8 @@ function _handlePointInputCore(wcs, fromMouse) {
         render();
         return;
     }
-    if(m==='WAITING_LINE_P1') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_LINE_P2'; setPrompt('次の点:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 1点目: (${formatCoordValue(u.x,'loupe')},${formatCoordValue(u.y,'loupe')})`); render(); return; }
-    if(m==='WAITING_LINE_P2') { saveUndo(); entities.push({type:'LINE',layer:currentLayerIndex,color:null,x1:cmdState.startWcs.x,y1:cmdState.startWcs.y,x2:wcs.x,y2:wcs.y}); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 線分作成 終点: (${formatCoordValue(u.x,'loupe')},${formatCoordValue(u.y,'loupe')})`); cmdState.startWcs={x:wcs.x,y:wcs.y}; render(); return; }
+    if(m==='WAITING_LINE_P1') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_LINE_P2'; setPrompt('次の点:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 1点目: ${coordPairText(u.x, u.y)}`); render(); return; }
+    if(m==='WAITING_LINE_P2') { saveUndo(); entities.push({type:'LINE',layer:currentLayerIndex,color:null,x1:cmdState.startWcs.x,y1:cmdState.startWcs.y,x2:wcs.x,y2:wcs.y}); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 線分作成 終点: ${coordPairText(u.x, u.y)}`); cmdState.startWcs={x:wcs.x,y:wcs.y}; render(); return; }
     if(m==='WAITING_CIRCLE_CENTER') {
         const isAuto = lastParams.circleMode === 'auto';
         cmdState.startWcs = {x: wcs.x, y: wcs.y};
@@ -111,12 +111,12 @@ function _handlePointInputCore(wcs, fromMouse) {
             const rVal = parseFloat(lastParams.radius) || 50;
             cmdState.previewRadius = rVal;
             setPrompt(`円 (半径${lengthText(rVal)}): 位置OKなら「確定」をタップ`);
-            addCommandLog(`-> 中心: (${formatCoordValue(u.x,'loupe')},${formatCoordValue(u.y,'loupe')}) → 「確定」で配置`);
+            addCommandLog(`-> 中心: ${coordPairText(u.x, u.y)} → 「確定」で配置`);
         } else {
             cmdState.mode = 'WAITING_CIRCLE_RADIUS';
             cmdState.previewRadius = 50;
             setPrompt('半径を指定し「確定」をタップ:');
-            addCommandLog(`-> 中心: (${formatCoordValue(u.x,'loupe')},${formatCoordValue(u.y,'loupe')}) → 半径を決めて確定`);
+            addCommandLog(`-> 中心: ${coordPairText(u.x, u.y)} → 半径を決めて確定`);
         }
         hidePropertyPanel();
         showActionbarControls({ showMode: true });
@@ -136,7 +136,7 @@ function _handlePointInputCore(wcs, fromMouse) {
     }
     if(m==='WAITING_RECT_P1') {
         if(cmdState.presetW>0 && cmdState.presetH>0){ saveUndo(); entities.push({type:'RECTANG',layer:currentLayerIndex,color:null,x1:wcs.x,y1:wcs.y,x2:wcs.x+cmdState.presetW,y2:wcs.y+cmdState.presetH}); addCommandLog(`-> 長方形作成 ${lengthText(cmdState.presetW)}×${lengthText(cmdState.presetH)}`); resetCommand(); return; }
-        cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_RECT_P2'; setPrompt('対角:'); hidePropertyPanel(); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 1点目: (${formatCoordValue(u.x,'loupe')},${formatCoordValue(u.y,'loupe')})`); render(); return;
+        cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_RECT_P2'; setPrompt('対角:'); hidePropertyPanel(); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 1点目: ${coordPairText(u.x, u.y)}`); render(); return;
     }
     if(m==='WAITING_RECT_P2') { saveUndo(); entities.push({type:'RECTANG',layer:currentLayerIndex,color:null,x1:cmdState.startWcs.x,y1:cmdState.startWcs.y,x2:wcs.x,y2:wcs.y}); addCommandLog('-> 長方形作成'); resetCommand(); return; }
     if(m==='WAITING_ARC_P1') { cmdState.points=[{x:wcs.x,y:wcs.y}]; cmdState.mode='WAITING_ARC_P2'; setPrompt('2点目:'); render(); return; }
@@ -150,10 +150,10 @@ function _handlePointInputCore(wcs, fromMouse) {
         saveUndo(); entities.push({type:'ARC',layer:currentLayerIndex,color:null,cx:cc.x,cy:cc.y,radius:r,startAngle:sa,endAngle:ea,counterclockwise:ccw});
         addCommandLog('-> 円弧作成'); resetCommand(); return;
     }
-    if(m==='WAITING_PLINE_NEXT') { cmdState.points.push({x:wcs.x,y:wcs.y}); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 点追加: (${formatCoordValue(u.x,'loupe')},${formatCoordValue(u.y,'loupe')}) [Enter:確定/C:閉合]`); render(); return; }
+    if(m==='WAITING_PLINE_NEXT') { cmdState.points.push({x:wcs.x,y:wcs.y}); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 点追加: ${coordPairText(u.x, u.y)} [Enter:確定/C:閉合]`); render(); return; }
 
-    if(m==='WAITING_ELLIPSE_CENTER') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_ELLIPSE_X'; setPrompt('X方向の端点:'); addCommandLog(`-> 中心: (${coordLogText(wcs)})`); render(); return; }
-    if(m==='WAITING_ELLIPSE_X') { cmdState.points=[{x:wcs.x,y:wcs.y}]; cmdState.mode='WAITING_ELLIPSE_Y'; setPrompt('Y方向の端点 (または距離):'); addCommandLog(`-> X端点: (${coordLogText(wcs)})`); render(); return; }
+    if(m==='WAITING_ELLIPSE_CENTER') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_ELLIPSE_X'; setPrompt('X方向の端点:'); addCommandLog(`-> 中心: ${coordLogText(wcs)}`); render(); return; }
+    if(m==='WAITING_ELLIPSE_X') { cmdState.points=[{x:wcs.x,y:wcs.y}]; cmdState.mode='WAITING_ELLIPSE_Y'; setPrompt('Y方向の端点 (または距離):'); addCommandLog(`-> X端点: ${coordLogText(wcs)}`); render(); return; }
     if(m==='WAITING_ELLIPSE_Y') {
         const cx=cmdState.startWcs.x, cy=cmdState.startWcs.y, ex=cmdState.points[0].x, ey=cmdState.points[0].y;
         const rx=dist(cx,cy,ex,ey), rot=Math.atan2(ey-cy, ex-cx), ry=dist(cx,cy,wcs.x,wcs.y);
@@ -163,7 +163,7 @@ function _handlePointInputCore(wcs, fromMouse) {
     if(m==='WAITING_TEXT_PLACE') {
         cmdState.previewWcs = {x: wcs.x, y: wcs.y};
         const u = wcsToUcs(wcs.x, wcs.y);
-        addCommandLog(`-> 配置位置: (${formatCoordValue(u.x,'loupe')},${formatCoordValue(u.y,'loupe')}) → 「確定」で配置`);
+        addCommandLog(`-> 配置位置: ${coordPairText(u.x, u.y)} → 「確定」で配置`);
         showActionbarControls({ showMode: false });
         render(); 
         return; 
@@ -237,20 +237,20 @@ function _handlePointInputCore(wcs, fromMouse) {
         }
         cmdState.rotateBase = {x:wcs.x, y:wcs.y};
         cmdState.mode = 'WAITING_ROTATE_REF1'; setPrompt('回転: 参照角度の始点となる参照点を選択');
-        addCommandLog(`-> 基点: (${coordLogText(wcs)})。参照始点を指定`);
+        addCommandLog(`-> 基点: ${coordLogText(wcs)}。参照始点を指定`);
         render(); return;
     }
     if(m==='WAITING_ROTATE_REF1') {
         cmdState.rotateRef1 = {x:wcs.x, y:wcs.y};
         cmdState.mode = 'WAITING_ROTATE_REF2'; setPrompt('回転: 参照角度の終点となる参照点を選択');
-        addCommandLog(`-> 参照始点: (${coordLogText(wcs)})。参照終点を指定`);
+        addCommandLog(`-> 参照始点: ${coordLogText(wcs)}。参照終点を指定`);
         render(); return;
     }
     if(m==='WAITING_ROTATE_REF2') {
         cmdState.rotateRef2 = {x:wcs.x, y:wcs.y};
         cmdState.refAngle = Math.atan2(wcs.y - cmdState.rotateRef1.y, wcs.x - cmdState.rotateRef1.x);
         cmdState.mode = 'WAITING_ROTATE_DEST'; setPrompt('回転: 新しい角度の方向を指定（始点から目的点）');
-        addCommandLog(`-> 参照終点: (${coordLogText(wcs)})。新しい角度の基準点を指定`);
+        addCommandLog(`-> 参照終点: ${coordLogText(wcs)}。新しい角度の基準点を指定`);
         render(); return;
     }
     if(m==='WAITING_ROTATE_DEST') {
@@ -919,7 +919,7 @@ window.dimConfirmPoint = function() {
         cmdState.mode = 'WAITING_UCS_2P_XDIR';
         setPrompt('X軸方向の点:');
         const u = wcsToUcs(pt.x, pt.y);
-        addCommandLog(`-> 原点: (${dimFormatCoord(u.x)},${dimFormatCoord(u.y)})`);
+        addCommandLog(`-> 原点: ${coordPairText(u.x, u.y)}`);
         const ab = document.getElementById('fs-dim-actionbar');
         if(ab) ab.style.display = 'none';
         render();

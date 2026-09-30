@@ -145,10 +145,21 @@ function formatCoordValue(v, where) {
     if(d === null || d === undefined) d = (where === 'loupe' && displayUnit('coord') !== 'mm') ? 2 : 0;
     return toDisplayUnit(v, 'coord').toFixed(d);
 }
-// 図面の点を、コマンドの記録の「東,北」（UCS の x,y。以前の記録と同じ並び）の文字にする
+// 点の座標を書く記録の文字: 「X 北  Y 東」（画面の座標表示・座標寸法・基点測定と同じ順・同じラベル）。
+// ux・uy は UCS の x（東）・y（北）。以前の記録は「(東,北)」とラベル無しで書き、同じ点が、記録では (29510,2)、
+// 基点測定では X2 Y29510 と、食い違って読めた
+function coordPairText(ux, uy) {
+    return 'X ' + formatCoordValue(uy, 'loupe') + '  Y ' + formatCoordValue(ux, 'loupe');
+}
+// 図面の点（WCS）を UCS で見た座標の文字（記録用）
 function coordLogText(wcs) {
     const u = wcsToUcs(wcs.x, wcs.y);
-    return formatCoordValue(u.x, 'loupe') + ',' + formatCoordValue(u.y, 'loupe');
+    return coordPairText(u.x, u.y);
+}
+// 動かした量（図面の座標の向きの量 dx・dy）を、UCS の向きで見た X（北）・Y（東）の量の文字にする（移動・複写の記録用）
+function moveLogText(dx, dy) {
+    const v = ucsVector(dx, dy);
+    return 'X ' + lengthText(v.y) + '  Y ' + lengthText(v.x);
 }
 // ステータスバーに座標を出す（測量の並び: X＝北＝UCSのy、Y＝東＝UCSのx）。
 // X と Y を別の枠に入れ、幅が足りないときは CSS で2段（X が上）に折り返す

@@ -45,6 +45,11 @@ function wcsToUcs(wx,wy) {
     return { x: dx*c - dy*s, y: dx*s + dy*c };
 }
 function screenToUcs(sx,sy) { const w=screenToWcs(sx,sy); return wcsToUcs(w.x,w.y); }
+// 量（ベクトル）を UCS の向きで見る（平行移動は含めない）。動かした量・寸法の向きなど
+function ucsVector(dx, dy) {
+    const c = Math.cos(-ucs.angle), s = Math.sin(-ucs.angle);
+    return { x: dx*c - dy*s, y: dx*s + dy*c };
+}
 
 // ===== UCS管理 =====
 function setUCS(wx, wy, angle) {
@@ -52,7 +57,7 @@ function setUCS(wx, wy, angle) {
     if(ucsStatusDisplay) { ucsStatusDisplay.textContent = 'UCS'; ucsStatusDisplay.style.color = 'var(--ucs-color)'; }
     if(ucsLabel) { ucsLabel.textContent = 'UCS'; ucsLabel.style.color = 'var(--ucs-color)'; }
     const degStr = ucs.angle !== 0 ? ` ∠${angleText(ucs.angle * 180 / Math.PI)}` : '';
-    addCommandLog(`-> 原点設定: WCS(${formatCoordValue(wx, 'loupe')},${formatCoordValue(wy, 'loupe')})${degStr}`);
+    addCommandLog(`-> 原点設定: ${coordPairText(wx, wy)}（WCS）${degStr}`);
     resetCommand();
     render();
 }

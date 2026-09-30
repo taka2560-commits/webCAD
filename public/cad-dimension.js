@@ -201,8 +201,13 @@ function _drawDimOrdinateCore(point, leaderCoord, color, textOverride, e) {
 
     // 現場で読みやすいように色分け（屋外モードでは太字＋縁取り、背景との明るさの差を広げる）
     const yX = -Math.round(14 * dk);
-    outdoorTextHalo(ctx, txtX, 0, yX, tpx); ctx.fillStyle = outdoorColor('#00ff88'); ctx.fillText(txtX, 0, yX); // 上段 (X)
-    outdoorTextHalo(ctx, txtY, 0, 0, tpx); ctx.fillStyle = outdoorColor('#00ffff'); ctx.fillText(txtY, 0, 0);   // 下段 (Y)
+    if(textOverride) {
+        // 文字を書き換えた座標寸法は、その文字を1行で出す（DXF・印刷に書き出す文字と同じ。以前は書き換えても画面には出なかった）
+        outdoorTextHalo(ctx, textOverride, 0, 0, tpx); ctx.fillStyle = outdoorColor('#00ffff'); ctx.fillText(textOverride, 0, 0);
+    } else {
+        outdoorTextHalo(ctx, txtX, 0, yX, tpx); ctx.fillStyle = outdoorColor('#00ff88'); ctx.fillText(txtX, 0, yX); // 上段 (X)
+        outdoorTextHalo(ctx, txtY, 0, 0, tpx); ctx.fillStyle = outdoorColor('#00ffff'); ctx.fillText(txtY, 0, 0);   // 下段 (Y)
+    }
     ctx.restore();
 
     _addHitText(e, {x: sl.x + textSide * 40 * dk, y: sl.y - 10});
@@ -591,7 +596,7 @@ function handleDimPointInput(mode, wcs) {
     if(mode === 'WAITING_DIMLIN_P1') {
         cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMLIN_P2'; setPrompt('2点目: (☑️確定)');
         const u = wcsToUcs(wcs.x,wcs.y);
-        addCommandLog(`-> 1点目: (${dimFormatCoord(u.x)},${dimFormatCoord(u.y)})`); if(typeof render==='function') render(); return;
+        addCommandLog(`-> 1点目: ${coordPairText(u.x, u.y)}`); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMLIN_P2') {
         cmdState.points.push({x:wcs.x, y:wcs.y}); cmdState.mode = 'WAITING_DIMLIN_POS'; setPrompt('寸法線位置 (☑️確定):');
@@ -671,7 +676,7 @@ function handleDimPointInput(mode, wcs) {
     if(mode === 'WAITING_DIMORD_P1') {
         cmdState.points = [{x:wcs.x, y:wcs.y}]; cmdState.mode = 'WAITING_DIMORD_LEADER'; setPrompt('引出先を指定 (クリックした位置に表示されます): (☑️確定)');
         const u = wcsToUcs(wcs.x, wcs.y);
-        addCommandLog(`-> 測定点: (${dimFormatCoord(u.x)},${dimFormatCoord(u.y)}) - 引出先を指定`); if(typeof render==='function') render(); return;
+        addCommandLog(`-> 測定点: ${coordPairText(u.x, u.y)} - 引出先を指定`); if(typeof render==='function') render(); return;
     }
     if(mode === 'WAITING_DIMORD_LEADER') {
         const p = cmdState.points[0];
@@ -764,7 +769,7 @@ function handleDimPointInput(mode, wcs) {
         if(targets.length > 0) {
             saveUndo();
             targets.forEach(i => { if(entities[i]) moveEntity(entities[i], dx, dy); });
-            addCommandLog(`-> ${targets.length}個を移動 (${lengthText(dx)},${lengthText(dy)})`);
+            addCommandLog(`-> ${targets.length}個を移動 ${moveLogText(dx, dy)}`);
         } else { addCommandLog('移動対象がありません'); }
         // 連続移動モード
         cmdState.selectedIndices = []; cmdState.moveTarget = undefined;
@@ -806,7 +811,7 @@ function handleDimPointInput(mode, wcs) {
                 copies.push(copy);
             });
             copies.forEach(c => entities.push(c));
-            addCommandLog(`-> ${copies.length}個をコピー (${lengthText(dx)},${lengthText(dy)})`);
+            addCommandLog(`-> ${copies.length}個をコピー ${moveLogText(dx, dy)}`);
         } else { addCommandLog('コピー対象がありません'); }
         cmdState.selectedIndices = []; cmdState.moveTarget = undefined;
         cmdState.mode = 'WAITING_COPY_SELECT'; cmdState.highlightIdx = -1; setPrompt('コピー対象 (右クリックで終了):');
@@ -1026,7 +1031,7 @@ function _measureStartFrom(pt) {
     cmdState.mode = 'WAITING_DIMMEAS_TO';
     const u = wcsToUcs(pt.x, pt.y);
     setPrompt('測る点をなぞる → 📐記入 / 📍基点で基点を移動');
-    addCommandLog(`-> 基点: X${dimFormatCoord(u.y)} Y${dimFormatCoord(u.x)} — 測る点をなぞってください`);
+    addCommandLog(`-> 基点: ${coordPairText(u.x, u.y)} — 測る点をなぞってください`);
     _showMeasureBar('TO');
     if(typeof render === 'function') render();
 }

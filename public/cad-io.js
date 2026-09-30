@@ -117,27 +117,7 @@ function registerExtraDxfHandlers(parser) {
 
 // 取り込み先の準備（置き換え / 追加）と、読めなかったときに元の図面へ戻す処理は cad-import-target.js
 
-// ===== ファイルの単位（$INSUNITS: 4＝mm、6＝m）に「図面の1単位」を合わせる =====
-function fileUnitFromInsunits(code) { const n = Number(code); return n === 4 ? 'mm' : n === 6 ? 'm' : null; }
-// 新しく開いた・置き換えたときは自動で合わせる（座標・寸法の値の桁、測定、SIMA の位置が合う）。
-// 今の図面に追加したときは変えずに知らせる。単位が書かれていなければ、いまの単位のまま記録に残す。
-// 戻り値: 画面に知らせる文（同じ・単位なしなら ''）。what は 'DXF' / 'DWG'
-function applyFileUnit(code, what) {
-    const mode = _importMode;
-    _importMode = 'fresh'; // 次に開くときは、また取り込み先を決め直す
-    if(typeof getSurveyUnit !== 'function') return '';
-    const fileUnit = fileUnitFromInsunits(code), cur = getSurveyUnit();
-    if(!fileUnit) {
-        addCommandLog(`-> この${what}には単位が書かれていません（図面の1単位は 1${cur} のまま）。違うときはオプションの測量の欄で変えてください`);
-        return '';
-    }
-    if(fileUnit === cur) return '';
-    if(mode !== 'append' && typeof window.setSurveyUnit === 'function') {
-        window.setSurveyUnit(fileUnit);
-        return `この${what}の単位は ${fileUnit} なので、オプションの「図面の1単位」を 1${fileUnit} にしました`;
-    }
-    return `この${what}の単位は ${fileUnit} です（オプションの「図面の1単位」は 1${cur}）。今の図面に追加したので変えていません。測定・SIMA の値を合わせるには、オプションで 1${fileUnit} にしてください`;
-}
+// ファイルの単位（INSUNITS）に図面の1単位を合わせる処理と、取り込んだ寸法の値の文字は cad-import-target.js
 
 // ===== 画層・色ヘルパー =====
 function rgbIntToHex(n) {
@@ -169,6 +149,8 @@ function dxfLayerIndex(name) {
 function importDxfData(dxf, opts) {
     opts = opts || {};
     if(!opts.skipUndo) saveUndo();
+    const hd = (dxf && dxf.header) || {};
+    _beginImport(hd.$INSUNITS, hd.$DIMTXT, hd.$DIMSCALE); // 寸法の値の桁・文字の高さ（ファイルの単位・寸法の設定）
     _dxfLayersAdded = false;
     const hideArcs = shouldHideImportedArcs();
     let importCount = 0;
@@ -294,12 +276,8 @@ function expandDimension(e, blocks) {
     if(ents.length === 0) {
         const pt = e.middleOfText || e.anchorPoint;
         if(pt) {
-            let txt = (e.text !== undefined && e.text !== null) ? String(e.text) : '';
-            const measured = (e.actualMeasurement !== undefined) ? String(Math.round(e.actualMeasurement * 100) / 100) : '';
-            if(txt === '' || txt === '<>') txt = measured;
-            else if(txt.includes('<>')) txt = txt.replace('<>', measured);
-            txt = _decodeCadText(txt);
-            if(txt) ents.push({ type: 'TEXT', layer: dxfLayerIndex(e.layer), color: dxfEntityColorHex(e), x: pt.x, y: pt.y, text: txt, height: 2.5, halign: 'center', valign: 'middle', gid, blockName: '寸法' });
+            const txt = importedDimText(_dimKindDxf(e.dimensionType), e.actualMeasurement, e.text);
+            if(txt) ents.push({ type: 'TEXT', layer: dxfLayerIndex(e.layer), color: dxfEntityColorHex(e), x: pt.x, y: pt.y, text: txt, height: _importDimTxt.h, halign: 'center', valign: 'middle', gid, blockName: '寸法' });
         }
     }
     return ents;
@@ -902,6 +880,8 @@ async function loadDwgFile(file) {
 // ===== LibreDwg DwgDatabase からアプリ用エンティティへの変換 =====
 function convertDwgDatabaseToApp(db) {
     const result = { entities: [], warnings: [] };
+    const dh = db.header || {};
+    _beginImport(dh.INSUNITS, dh.DIMTXT, dh.DIMSCALE); // 寸法の値の桁・文字の高さ（ファイルの単位・寸法の設定）
     const hideArcs = shouldHideImportedArcs();
 
     // 画層テーブル: 既存の layers に無いものだけ追加し、以降は「名前→index」で解決する
@@ -1047,12 +1027,12 @@ function convertDwgDatabaseToApp(db) {
                 } else noteSkip('MTEXT');
             } else if (ent.type && ent.type.includes('DIMENSION')) {
                 const pt = ent.textPoint || ent.definitionPoint || ent.insertionPoint;
-                let dimText = ent.text;
-                if (!dimText && ent.measurement !== undefined) dimText = parseFloat(ent.measurement).toFixed(0);
-                else if (dimText && dimText.includes('<>')) dimText = dimText.replace('<>', parseFloat(ent.measurement || 0).toFixed(0));
-                if (dimText) dimText = _decodeCadText(dimText);
+                // 測定値の文字（種類ごと: 長さ・半径 R・直径 ⌀・角度 °・座標）。ブロックを拡大縮小して置くときは、長さも同じだけ倍にする
+                const dkind = _dimKindDwg(ent.subclassMarker);
+                const dmeas = (typeof ent.measurement === 'number' && dkind !== 'angular') ? ent.measurement * sAbs : ent.measurement;
+                const dimText = importedDimText(dkind, dmeas, ent.text);
                 if (pt && dimText) {
-                    push(Object.assign({ type: 'TEXT', x: tx(pt.x, pt.y), y: ty(pt.x, pt.y), text: dimText, height: (ent.textHeight || ent.height || 2.5) * sAbs, halign: 'center', valign: 'middle' }, base), gid || newGroupId('d'), blockName || '寸法');
+                    push(Object.assign({ type: 'TEXT', x: tx(pt.x, pt.y), y: ty(pt.x, pt.y), text: dimText, height: (ent.textHeight || ent.height || _importDimTxt.h) * sAbs, halign: 'center', valign: 'middle' }, base), gid || newGroupId('d'), blockName || '寸法');
                 } else noteSkip('DIMENSION');
             } else if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE2D' || ent.type === 'POLYLINE_2D') {
                 if (ent.vertices && ent.vertices.length > 0) {
