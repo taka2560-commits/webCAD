@@ -22,6 +22,7 @@ const _ts = {
     buf: '', rxBytes: 0, rxLines: 0, uiTimer: null,
     raw: [], rawCur: '', rawTimer: null, rawOpen: false, // 受信した生データ（[{ t: 日時, s: 見える形の文字列 }]）と、組み立て中の行
     howtoOpen: false, // 「つなぎ方」を開いているか
+    fail: null, lastPort: null, // つなげなかったときの段階と理由（{ stage, reason }）、直前に選んだポート（もう一度つなぐ用）
     sima: '', simaBuf: [], simaTimer: null, simaSawEtx: false, // 受信した SIMA（読んだ文字列・ためているバイト）
     ackWait: null, sendNote: '', // 送信中に待っている機械の ACK、送信の進み具合
     writeChain: Promise.resolve(), // 書き込みの順番待ち（同時に書くとポートがふさがっていて失敗するため）
@@ -43,6 +44,52 @@ function _tsOpts() {
 function _tsSaveOpts(o) { try { localStorage.setItem(TS_OPTS_KEY, JSON.stringify(o)); } catch { /* 保存できなくても続行 */ } }
 function tsSerialAvailable() { return typeof navigator !== 'undefined' && !!navigator.serial && typeof navigator.serial.requestPort === 'function'; }
 
+// ===== つながらないときの案内 =====
+// このブラウザで機械とつなげない理由（ブラウザの種類・版から）。ua は確かめたい文字列（省くと今のブラウザ）
+function tsBrowserNote(ua) {
+    const s = String(ua === undefined ? ((typeof navigator !== 'undefined' && navigator.userAgent) || '') : ua);
+    const m = /(?:Chrome|CriOS)\/(\d+)/.exec(s), ver = m ? parseInt(m[1], 10) : 0;
+    const file = 'ファイル（SIMA・SDR）で受け渡してください。';
+    if(/iPhone|iPad|iPod/.test(s)) return 'iPhone・iPad では、機械と直接つなげません（どのブラウザでも同じです）。' + file;
+    if(/Android/.test(s)) {
+        if(/; wv\)|Line\/|FBAN|FBAV|Instagram|YJApp/.test(s)) return 'ほかのアプリの中で開いた画面では、機械とつなげません。メニューの「Chrome で開く」（ブラウザで開く）を選んで、Chrome で開いてください。';
+        if(/SamsungBrowser|Firefox|EdgA|OPR\//.test(s) || !ver) return 'このブラウザでは機械とつなげません。Android は Chrome（137 以降）で開いてください。';
+        if(ver < 137) return `Chrome が古いため、機械とつなげません（いまの版は ${ver}。137 以降が要ります）。Play ストアで Chrome を更新してください。`;
+        return 'この端末の Chrome では機械とつなげませんでした。Chrome を最新にしても変わらないときは、' + file;
+    }
+    if(/Firefox/.test(s) || (/Safari/.test(s) && !/Chrome|Chromium|Edg\//.test(s))) return 'このブラウザでは機械とつなげません。PC は Chrome か Edge（117 以降）で開いてください。';
+    if(ver && ver < 117) return `ブラウザが古いため、機械とつなげません（いまの版は ${ver}。117 以降が要ります）。`;
+    return 'このブラウザでは機械と直接つなげません。PC の Chrome・Edge（117 以降）、Android の Chrome（137 以降）で使えます。iPhone・iPad は、ファイル（SIMA・SDR）で受け渡します。';
+}
+// つなぐ途中のどこで止まったかと、その段階で確かめること
+const TS_FAIL = {
+    choose: { title: '機械を選びませんでした', items: [
+        '一覧に機械が出ないときは、端末の Bluetooth の設定で、機械とペアリングしてあるか確かめます（最初の1回）。',
+        'ペアリングのあいだも、機械を待ち受けにしておきます（観測の画面の4ページ目の Bluetooth キー。「ピッ」と鳴り、マークが点滅）。待ち受けでないと、機械の Bluetooth は電源が切れていて、端末から見つかりません。',
+        'ペアリングできないときは、機械の Bluetooth 設定の「認証」を「アリ」にしてパスキーを決め（工場出荷時は 0123）、端末で同じ数字を入れます。',
+        'Android では、Chrome に「付近のデバイス」の許可が要ります。' ] },
+    open: { title: '機械につなげませんでした', items: [
+        '機械が待ち受け（Bluetooth のマークが点滅）になっているか確かめます。しばらく何も来ないと「ピピッ」と鳴って切れるので、観測の画面の4ページ目の Bluetooth キーをもう一度押します。',
+        'ほかの端末・アプリ（データコレクターなど）が、機械とつないだままになっていないか確かめます。ケーブルのときは、同じ COM ポートをほかのアプリが使っていないか確かめます。',
+        '機械の近く（約10m 以内・見通しのよい所）で試します。だめなら、端末の Bluetooth を入れ直します。' ] },
+    lost: { title: '機械との接続が切れました', items: [
+        '機械の Bluetooth は、しばらく通信が無いと自動で切れます。機械を待ち受けにして（観測の画面の4ページ目の Bluetooth キー）、もう一度つなぎます。',
+        '離れすぎたとき・間に金属やコンクリートがあるときも切れます。' ] },
+};
+function _tsFail(stage, reason) {
+    _ts.fail = { stage, reason: reason || '' };
+    addCommandLog(`-> TS: ${TS_FAIL[stage].title}` + (reason ? `（${reason}）` : ''));
+    showToast(TS_FAIL[stage].title + '\nパネルの「確かめること」を見てください', stage === 'choose' ? 3500 : { kind: 'error', ms: 4500 });
+    if(_tsPanelOpen()) _tsRender();
+}
+function _tsFailHtml() {
+    const f = _ts.fail, d = f && TS_FAIL[f.stage];
+    if(!d) return '';
+    return `<div class="cogo-warn ts-fail" role="status"><b>⚠ ${d.title}</b>${f.reason ? `（${escapeHtml(f.reason)}）` : ''}<div>確かめること:</div><ul>` +
+        d.items.map((t) => `<li>${t}</li>`).join('') + '</ul></div>' +
+        (_ts.lastPort && f.stage !== 'choose' ? '<button class="prop-btn btn-sub" onclick="tsRetry()">🔁 同じ機械にもう一度つなぐ</button>' : '');
+}
+
 // ===== パネル =====
 window.showTsPanel = function() { _tsRender(); render(); };
 function _tsSel(id, label, list, cur) {
@@ -63,13 +110,15 @@ function _tsRender() {
         _cogoNote('SIMA（.sim）は測点・区画をそのまま受け渡します。「開く」では SDR（SDR33・SDR2x）の現場データも開け、器械点・後視・観測から座標を計算して測点にします。書き出したファイルは、機械で既知点・杭打ち点として読み込めます。') +
         '<div class="ts-sec">通信（USB ケーブル・Bluetooth）</div>';
     if(!tsSerialAvailable()) {
-        h += _cogoNote('このブラウザでは機械と直接つなげません。PC の Chrome・Edge（117 以降）、Android の Chrome（137 以降）で使えます。iPhone・iPad は、ファイル（SIMA・SDR）で受け渡します。');
+        h += _cogoNote(tsBrowserNote());
     } else if(!_ts.port) {
         h += _tsSel('ts-baud', 'ボーレート', TS_BAUDS.map((b) => [b, b + ' bps']), o.baudRate) +
             _tsSeg('dataBits', 'データ長', [[8, '8 ビット'], [7, '7 ビット']], o.dataBits) +
             _tsSeg('parity', 'パリティ', [['none', 'なし'], ['even', '偶数'], ['odd', '奇数']], o.parity) +
             _tsSeg('stopBits', 'ストップビット', [[1, '1 ビット'], [2, '2 ビット']], o.stopBits) +
+            _cogoNote('Bluetooth でつなぐときは、先に機械を待ち受けにします（観測の画面の4ページ目の Bluetooth キー。マークが点滅）。ボーレートなどはケーブルのときだけ使います。') +
             '<button class="prop-btn" onclick="tsConnect()">🔌 機械とつなぐ</button>' +
+            _tsFailHtml() +
             _tsHowTo();
     } else {
         h += `<div class="ts-status"><span class="ts-dot"></span>つながっています&nbsp;&nbsp;<span id="ts-rx">${_tsRxText()}</span></div>` +
@@ -89,15 +138,16 @@ function _tsRender() {
     showPropertyPanel(TS_TITLE, h);
     _tsUpdateResult();
 }
-// つなぎ方（ソキア iM-100。取扱説明書の9章「外部機器との接続」、FIELD-TERRACE の接続設定、カタログより）
+// つなぎ方（ソキア CX・iM-100。取扱説明書の「外部機器との接続」、FIELD-TERRACE の接続設定、カタログより）
+// 機械の Bluetooth は、待ち受けにしたときだけ電源が入る（CX の説明書 10.2）。ペアリングも待ち受けのあいだにする
 function _tsHowTo() {
-    return `<details class="ts-howto" ${_ts.howtoOpen ? 'open' : ''} ontoggle="tsHowtoToggle(this.open)"><summary>📖 つなぎ方（ソキア iM-100）</summary>` +
+    return `<details class="ts-howto" ${_ts.howtoOpen ? 'open' : ''} ontoggle="tsHowtoToggle(this.open)"><summary>📖 つなぎ方（ソキア CX・iM）</summary>` +
         '<div class="ts-howto-body">' +
         '<b>Bluetooth</b>（Android の Chrome・PC の Chrome／Edge）<ol>' +
-        '<li>機械: 〔設定〕→「通信条件」→「通信設定」で、通信モードを「Bluetooth」にする。通信タイプは、SIMA で受け渡すときは「T タイプ」（CR/LF「アリ」・ACK モード「不要」）、SDR や測るたびの出力のときは「S タイプ」（チェックサム・Xon/Xoff「ナシ」）。</li>' +
-        '<li>端末の Bluetooth の設定で、機械とペアリングしておく（最初の1回）。機械の Bluetooth アドレス（12桁）は、通信設定の「Bluetooth」に出ます。</li>' +
-        '<li>機械: 観測画面の4ページ目の Bluetooth のキーで待ち受けにする（マークが点滅し、短い音）。</li>' +
-        '<li>ここで「🔌 機械とつなぐ」→ 機械を選ぶ（長い音でつながります）。ボーレートなどの設定は使いません。</li></ol>' +
+        '<li>機械の設定（最初の1回）: 〔設定〕→「通信条件」で、通信モードを「Bluetooth」にする。CX の「Bluetooth 設定」は、モード「スレーブ」・認証「ナシ」（iM はいつもスレーブ）。ACK/NAK は「ナシ」。SIMA で受け渡すときは「T タイプ」の項目（CR/LF「アリ」・ACK モード「不要」）、SDR や測るたびの出力のときは「S タイプ」の項目（チェックサム・Xon/Xoff「ナシ」）を合わせる。</li>' +
+        '<li>機械を待ち受けにする: 観測の画面の4ページ目の Bluetooth のキーを押す（「ピッ」と鳴り、マークが点滅）。待ち受けにしないと、機械の Bluetooth は電源が切れていて、端末から見つかりません。しばらく何も来ないと「ピピッ」と鳴って切れるので、もう一度押します。</li>' +
+        '<li>端末の Bluetooth の設定で、機械とペアリングする（最初の1回。機械が待ち受けのあいだに）。機械の名前（Bluetooth ID）とアドレス（12桁）は、CX は「Bluetooth 設定」→「デバイス情報」、iM は通信設定の「Bluetooth」に出ます。ペアリングできないときは、機械の「認証」を「アリ」にしてパスキー（工場出荷時 0123）を入れます。</li>' +
+        '<li>ここで「🔌 機械とつなぐ」→ 一覧から機械を選ぶ（「ピー」と鳴ればつながっています）。ボーレートなどの設定は使いません。</li></ol>' +
         '<b>ケーブル（RS-232C）</b>（PC）<ol>' +
         '<li>機械の電源を切り、ケーブル DOC210（D-sub 9ピン）でつなぐ。PC にシリアルの端子が無ければ USB 変換アダプタを使う。外部電源と一緒に使うときは Y ケーブル（EDC211・EDC212）。</li>' +
         '<li>機械: 通信モードを「RS232C」にし、上のボーレートなどを機械と同じにする（機械の初期値は 9600 bps・8 ビット・なし・1 ビット）。</li>' +
@@ -105,7 +155,12 @@ function _tsHowTo() {
         '<b>SIMA の受け渡し</b>（つないだあと。通信タイプは「T タイプ」）<ol>' +
         '<li>機械へ送る: 機械で「既知点 → 外部入力 → APA-SIMA（座標）」を選んで待ち受け → ここで「📤 SIMA で送る」。送り終わっても機械が待ち続けるときは〔ESC〕で終えます。</li>' +
         '<li>機械から受ける: 機械で「現場管理 → 現場データ送信 → T タイプ → 現場を選ぶ → APA-SIMA（座標）」→ 届いたら「✅ 図面に取り込む」。</li></ol>' +
-        _cogoNote('Bluetooth が届くのは約10m。金属・コンクリートは電波を通さず、雨・霧・人の体でも短くなるので、見通しのよい高い所で使います。通信中に機械の通信設定を変えると切れます。Android では切れたことが分からない場合があるので、そのときは「切断」→「機械とつなぐ」でつなぎ直します。') +
+        '<b>つながらないとき</b><ol>' +
+        '<li>端末の Bluetooth の設定にも機械が出ない: 機械が待ち受けになっていません（手順2）。通信モードが「Bluetooth」かも確かめます。</li>' +
+        '<li>「機械とつなぐ」の一覧に機械が出ない: 端末の Bluetooth の設定でペアリングします（手順3）。Android は Chrome に「付近のデバイス」の許可が要ります。</li>' +
+        '<li>選んだあと「つなげませんでした」と出る: 機械の待ち受けが切れていないか（マークが点滅しているか）、ほかの端末がつないだままでないかを確かめます。</li>' +
+        '<li>つながるが何も届かない: 機械で「現場データ送信」をしたか、T タイプ／S タイプと形式が合っているかを確かめます。届いた中身は「🔍 受信した生データ」で見られます。</li></ol>' +
+        _cogoNote('Bluetooth が届くのは約10m。金属・コンクリートは電波を通さず、雨・霧・人の体でも短くなるので、見通しのよい高い所で使います。通信中に機械の通信設定を変えると切れます。機械の Bluetooth は、しばらく通信が無いと自動で切れます。切れたら、機械を待ち受けにして「機械とつなぐ」でつなぎ直します。') +
         '</div></details>';
 }
 window.tsHowtoToggle = function(open) { _ts.howtoOpen = !!open; };
@@ -170,49 +225,69 @@ window.tsImport = function() {
 window.tsDiscard = function() { _ts.pending = null; _ts.parser = null; _ts.sima = ''; _tsUpdateResult(); renderOverlay(); };
 
 // ===== 通信 =====
+// 機械を選んでつなぐ。つなげなかったときは、どの段階で止まったか（選ぶ・開く）と確かめることをパネルに出す
 window.tsConnect = async function() {
-    if(!tsSerialAvailable()) return;
-    const o = _tsOpts();
+    if(!tsSerialAvailable()) return false;
     let port;
     try { port = await navigator.serial.requestPort(); }
-    catch(e) { if(e && e.name !== 'NotFoundError') showToast('機械を選べませんでした: ' + e.message, 4000); return; } // NotFoundError は選ぶのをやめたとき
+    catch(e) { _tsFail('choose', e && e.name !== 'NotFoundError' ? e.message : ''); return false; } // NotFoundError は選ぶのをやめた・一覧に機械が無かったとき
+    return _tsOpenPort(port);
+};
+// 直前に選んだ機械に、選び直さずにもう一度つなぐ（機械の待ち受けが切れていた・接続が切れたあと）
+window.tsRetry = async function() {
+    if(_ts.port || !_ts.lastPort) return false;
+    return _tsOpenPort(_ts.lastPort);
+};
+async function _tsOpenPort(port) {
+    const o = _tsOpts();
+    _ts.lastPort = port;
     busyStart('機械とつないでいます…');
     try { await port.open({ baudRate: o.baudRate, dataBits: o.dataBits, parity: o.parity, stopBits: o.stopBits, flowControl: 'none', bufferSize: 4096 }); }
-    catch(e) { showToast('ポートを開けませんでした（ほかのアプリが使っていないか確かめてください）: ' + e.message, { kind: 'error', ms: 5000 }); return; }
+    catch(e) { _tsFail('open', e && e.message); return false; }
     finally { busyEnd(); }
-    _ts.port = port; _ts.xoff = false; _ts.buf = ''; _ts.rxBytes = 0; _ts.rxLines = 0;
-    if(port.addEventListener) port.addEventListener('disconnect', _tsOnLost);
+    _ts.port = port; _ts.fail = null; _ts.xoff = false; _ts.buf = ''; _ts.rxBytes = 0; _ts.rxLines = 0;
+    if(port.addEventListener && !port._tsWatched) { port.addEventListener('disconnect', _tsOnLost); port._tsWatched = true; }
     addCommandLog('-> TS とつながりました');
     showToast('機械とつながりました', 2000);
     _tsRender();
     _tsReadLoop(port);
-};
+    return true;
+}
 function _tsOnLost() {
-    if(!_ts.port) return;
+    const port = _ts.port;
+    if(!port) return;
     _ts.port = null; _ts.reading = false;
-    addCommandLog('-> TS との接続が切れました');
-    showToast('機械との接続が切れました', 3000);
-    if(_tsPanelOpen()) _tsRender();
+    // 読み取りを止めてからポートを閉じる（閉じておかないと、同じ機械にもう一度つなげない）。すでに閉じていてもよい
+    const reader = _ts.reader;
+    Promise.resolve().then(() => reader && reader.cancel()).catch(() => {}).then(() => port.close && port.close()).catch(() => {});
+    _tsFail('lost');
 }
 window.tsDisconnect = async function() {
     const port = _ts.port;
     _ts.reading = false;
     try { if(_ts.reader) await _ts.reader.cancel(); } catch { /* 読み取りが終わっていてもよい */ }
     try { if(port) await port.close(); } catch { /* 閉じられなくてもよい */ }
-    _ts.port = null;
+    _ts.port = null; _ts.fail = null;
     addCommandLog('-> TS との接続を切りました');
     if(_tsPanelOpen()) _tsRender();
 };
 async function _tsReadLoop(port) {
     _ts.reading = true;
-    while(_ts.port === port && _ts.reading && port.readable) {
-        const reader = port.readable.getReader();
+    let emptyEnds = 0; // 何も届かないまま読み取りが終わった回数（続けて2回なら、読み口が閉じたまま＝切れた）
+    while(_ts.port === port && _ts.reading && port.readable && emptyEnds < 2) {
+        // 前の読み取りがまだ読み口をつかんでいるときは、離すまで少し待つ（切れた直後に、同じ機械にもう一度つないだとき）
+        for(let i = 0; i < 50 && port.readable && port.readable.locked; i++) await new Promise((r) => setTimeout(r, 10));
+        if(_ts.port !== port || !_ts.reading || !port.readable) break;
+        let reader;
+        try { reader = port.readable.getReader(); }
+        catch(e) { addCommandLog('-> TS 受信エラー: ' + (e && e.message)); break; }
         _ts.reader = reader;
+        let got = false, ended = false;
         try {
             for(;;) {
                 const { value, done } = await reader.read();
-                if(done) break;
-                if(value) tsReceiveBytes(value);
+                if(done) { ended = true; break; }
+                if(value) { got = true; tsReceiveBytes(value); }
             }
         } catch(e) {
             addCommandLog('-> TS 受信エラー: ' + (e && e.message)); // 電源が切れた・ケーブルが抜けた など
@@ -220,7 +295,11 @@ async function _tsReadLoop(port) {
             try { reader.releaseLock(); } catch { /* すでに解放済み */ }
             _ts.reader = null;
         }
+        emptyEnds = (ended && !got) ? emptyEnds + 1 : 0;
     }
+    // つないだまま読み取りが終わった（機械の電源が切れた・Bluetooth が切れた）。
+    // Android の Bluetooth では切断の知らせ（disconnect）が来ないことがあるので、ここでも切れたことにする
+    if(_ts.port === port && _ts.reading) _tsOnLost();
 }
 // ===== 受信した生データ（形式の確認用） =====
 // 届いたバイトを、制御文字も見える形（<CR> <LF> <STX> <ETX> <ACK>、ほかは <1F> のような16進）で残す。

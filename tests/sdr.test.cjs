@@ -362,12 +362,114 @@ describe('TS連携: ファイルと通信', () => {
         await disconnect();
     });
 
-    it('つなぎ方（iM-100）: つなぐ前のパネルに手順を出し、開いた状態を覚える。ヘルプにも', () => {
+    // ---- つながらないときの案内（どこで止まったか・確かめること・やり直し） ----
+    const panelText = () => app.eval(`document.getElementById('property-panel-content').textContent`);
+    const serial = (value) => Object.defineProperty(app.window.navigator, 'serial', { value, configurable: true });
+    const notFound = () => { const e = new Error('No port selected by the user.'); e.name = 'NotFoundError'; return e; };
+
+    it('つながらない: 一覧から選ばなかった（機械が一覧に出ない）ときは、ペアリングと待ち受けを案内する', async () => {
+        serial({ requestPort: async () => { throw notFound(); } });
+        try {
+            app.eval('_ts.port = null; _ts.fail = null; _ts.lastPort = null; showTsPanel()');
+            assert.equal(await app.eval('tsConnect()'), false);
+            assert.equal(app.eval('_ts.fail.stage'), 'choose');
+            const t = panelText();
+            assert.match(t, /機械を選びませんでした/); assert.match(t, /確かめること/);
+            assert.match(t, /ペアリング/); assert.match(t, /待ち受け/); assert.match(t, /4ページ目/); assert.match(t, /認証/); assert.match(t, /付近のデバイス/);
+            assert.equal(app.eval(`document.querySelectorAll('#property-panel-content button[onclick="tsRetry()"]').length`), 0, '選んでいないので、やり直しのボタンは出さない');
+            assert.match(app.eval(`document.getElementById('command-log').textContent`), /TS: 機械を選びませんでした/);
+        } finally { delete app.window.navigator.serial; app.eval('_ts.fail = null'); }
+    });
+
+    it('つながらない: 選んだあと開けなかったときは、待ち受けが切れていないかを案内し、同じ機械にやり直せる', async () => {
+        const m = mockPort();
+        let opens = 0, requests = 0, ok = false;
+        m.port.open = async () => { opens++; if (!ok) throw new Error('Failed to open serial port.'); };
+        serial({ requestPort: async () => { requests++; return m.port; } });
+        try {
+            app.eval('_ts.port = null; _ts.fail = null; _ts.lastPort = null; showTsPanel()');
+            assert.equal(await app.eval('tsConnect()'), false);
+            assert.equal(app.eval('_ts.fail.stage'), 'open');
+            const t = panelText();
+            assert.match(t, /機械につなげませんでした（Failed to open serial port\.）/);
+            assert.match(t, /待ち受け（Bluetooth のマークが点滅）/); assert.match(t, /ピピッ/); assert.match(t, /ほかの端末/);
+            assert.match(t, /同じ機械にもう一度つなぐ/);
+            assert.equal(app.eval(`document.querySelector('#property-panel-content .ts-status')`), null, 'つながった表示にはしない');
+            // 機械を待ち受けにし直して、選び直さずにもう一度
+            ok = true;
+            assert.equal(await app.eval('tsRetry()'), true);
+            assert.equal(requests, 1, '機械の一覧は出し直さない');
+            assert.equal(opens, 2);
+            assert.match(app.eval(`document.querySelector('#property-panel-content .ts-status').textContent`), /つながっています/);
+            assert.equal(app.eval('_ts.fail'), null);
+        } finally { await disconnect(); }
+    });
+
+    it('つながらない: つないだあと切れたら知らせ、確かめることとやり直しを出す（切断の知らせが来ない端末でも）', async () => {
+        // 1) 読み取りが終わる（Android の Bluetooth: 切断の知らせが来ない）
+        let ctrl;
+        const port = { readable: new ReadableStream({ start(c) { ctrl = c; } }), writable: new WritableStream({ write() {} }),
+            open: async () => {}, close: async () => {}, addEventListener: () => {} };
+        serial({ requestPort: async () => port });
+        try {
+            app.eval('_ts.port = null; _ts.fail = null; showTsPanel()');
+            assert.equal(await app.eval('tsConnect()'), true);
+            ctrl.close(); // 機械の Bluetooth が切れた
+            await new Promise((r) => setTimeout(r, 30));
+            assert.equal(app.eval('_ts.port'), null);
+            assert.equal(app.eval('_ts.fail.stage'), 'lost');
+            const t = panelText();
+            assert.match(t, /機械との接続が切れました/); assert.match(t, /自動で切れます/); assert.match(t, /同じ機械にもう一度つなぐ/);
+        } finally { await disconnect(); }
+        // 2) 切断の知らせ（disconnect）が来る
+        const m = mockPort();
+        let onLost = null;
+        m.port.addEventListener = (type, fn) => { if (type === 'disconnect') onLost = fn; };
+        serial({ requestPort: async () => m.port });
+        try {
+            app.eval('_ts.fail = null; showTsPanel()');
+            await app.eval('tsConnect()');
+            assert.equal(typeof onLost, 'function');
+            onLost();
+            assert.equal(app.eval('_ts.port'), null);
+            assert.equal(app.eval('_ts.fail.stage'), 'lost');
+        } finally { await disconnect(); }
+        // 3) 自分で「切断」したときは、切れた案内は出さない
+        const m2 = mockPort();
+        serial({ requestPort: async () => m2.port });
+        try {
+            app.eval('showTsPanel()');
+            assert.equal(await app.eval('tsConnect()'), true);
+            await app.eval('tsDisconnect()');
+            await new Promise((r) => setTimeout(r, 30));
+            assert.equal(app.eval('_ts.fail'), null);
+            assert.doesNotMatch(panelText(), /機械との接続が切れました/);
+        } finally { await disconnect(); }
+    });
+
+    it('つなげないブラウザでは、その理由を出す（iPhone・古い Chrome・アプリの中の画面・ほかのブラウザ）', () => {
+        const note = (ua) => { app.window.__ua = ua; return app.eval('tsBrowserNote(window.__ua)'); };
+        assert.match(note('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/140.0.0.0 Mobile/15E148 Safari/604.1'), /iPhone・iPad では、機械と直接つなげません/);
+        assert.match(note('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'), /Chrome が古い.*いまの版は 120.*137 以降/);
+        assert.match(note('Mozilla/5.0 (Linux; Android 14; SO-51D; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/140.0.0.0 Mobile Safari/537.36 Line/15.0.0'), /ほかのアプリの中で開いた画面/);
+        assert.match(note('Mozilla/5.0 (Linux; Android 14; SM-S911) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/27.0 Chrome/125.0.0.0 Mobile Safari/537.36'), /Android は Chrome（137 以降）で開いてください/);
+        assert.match(note('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0'), /PC は Chrome か Edge/);
+        assert.match(note('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'), /いまの版は 110。117 以降/);
+        // パネル（このテストの環境は Web Serial が無い）
+        app.eval('_ts.port = null; showTsPanel()');
+        assert.match(panelText(), /このブラウザでは機械と直接つなげません/);
+    });
+
+    it('つなぎ方（CX・iM）: つなぐ前のパネルに手順を出し、開いた状態を覚える。ヘルプにも', () => {
         Object.defineProperty(app.window.navigator, 'serial', { value: { requestPort: async () => { throw new Error('x'); } }, configurable: true });
         try {
-            app.eval('_ts.port = null; tsHowtoToggle(false); showTsPanel()');
+            app.eval('_ts.port = null; _ts.fail = null; tsHowtoToggle(false); showTsPanel()');
             const text = app.eval(`document.querySelector('.ts-howto').textContent`);
-            ['つなぎ方', 'Bluetooth', 'S タイプ', 'ペアリング', '4ページ目', '待ち受け', 'DOC210', 'RS232C', '約10m'].forEach((w) => assert.ok(text.includes(w), w));
+            ['つなぎ方', 'Bluetooth', 'S タイプ', 'ペアリング', '4ページ目', '待ち受け', 'DOC210', 'RS232C', '約10m',
+                'スレーブ', '認証', '0123', 'ピッ', 'ピー', 'デバイス情報', 'つながらないとき', '付近のデバイス'].forEach((w) => assert.ok(text.includes(w), w));
+            // 手順の順番: 待ち受けにしてから、ペアリング
+            assert.ok(text.indexOf('機械を待ち受けにする') < text.indexOf('機械とペアリングする'), '待ち受けが先');
+            assert.match(panelText(), /先に機械を待ち受けにします/);
             assert.equal(app.eval(`document.querySelector('.ts-howto').open`), false);
             app.eval('tsHowtoToggle(true); showTsPanel()');
             assert.equal(app.eval(`document.querySelector('.ts-howto').open`), true);

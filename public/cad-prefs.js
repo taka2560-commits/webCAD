@@ -243,6 +243,8 @@ function applyDisplayPrefs() {
     if(root && root.style) {
         root.style.setProperty('--coord-scale', String(displayPref('coordFont') || 1));
         root.style.setProperty('--btn-k', String(displayPref('btnSize') || 1));
+        // 大・特大のときだけ、パネルのボタンの高さを伸ばす（中・小では高さを決めない。決めるとスクロールのあるパネルでつぶれる）
+        if(root.classList) root.classList.toggle('btn-big', (displayPref('btnSize') || 1) > 1);
     }
     if(window.cadTheme) window.cadTheme.apply(displayPrefKey('theme'));
     if(document.body) {

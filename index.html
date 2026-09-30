@@ -627,6 +627,10 @@
         .ts-howto-body { font-size:12px; line-height:1.6; color:#ddd; margin-top:6px; }
         .ts-howto-body ol { margin:4px 0 8px; padding-left:20px; }
         .ts-howto-body li { margin-bottom:3px; }
+        /* つなげなかったときの「確かめること」（注意の黄色） */
+        .ts-fail { border:1px solid rgba(255,204,0,0.45); border-radius:var(--r-sub); padding:8px 10px; background:rgba(255,204,0,0.06); font-size:12px; line-height:1.55; }
+        .ts-fail ul { margin:4px 0 0; padding-left:18px; color:#f0e6c0; }
+        .ts-fail li { margin-bottom:3px; }
         .ts-raw-pre { max-height:30vh; overflow:auto; margin:6px 0; padding:6px 8px; background:rgba(0,0,0,0.35); border:1px solid var(--border-2); border-radius:var(--r-sub); color:#e0e0e0; font:11px/1.5 Consolas,monospace; white-space:pre-wrap; word-break:break-all; }
         /* 杭打ち（📍）パネル: 距離・矢印は大きく（歩きながら読む） */
         .stake-nav { display:flex; gap:6px; align-items:center; }
@@ -807,7 +811,10 @@
         /* ☰ メニュー・パネルの大きなボタンは、並びを崩さないように高さだけ伸ばす（中までは以前と同じ） */
         .menu-item-btn { min-height: calc(36px * max(1, var(--btn-k, 1))); font-size: calc(12px * clamp(1, var(--btn-k, 1), 1.25)); }
         .menu-btn-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } /* 文字が大きくても2列がメニューの幅からはみ出さない */
-        .prop-btn { min-height: clamp(0px, calc((var(--btn-k, 1) - 1) * 168px), 50px); }
+        /* パネルのボタンは、大・特大のときだけ高さを伸ばす（html.btn-big は cad-prefs.js が付ける）。
+           中・小では min-height を決めない。以前は中で 0px になり、パネルの中身が長くてスクロールが出ると、
+           縦に並んだボタン（TS連携の「機械とつなぐ」など）が文字より低くつぶれていた（min-height が auto でないと縮むため） */
+        html.btn-big .prop-btn { min-height: min(50px, calc((var(--btn-k, 1) - 1) * 168px)); }
         @media screen and (max-width: 430px) {
             #status-bar { min-height: calc(34px * var(--btn-k, 1)); }
             #command-line-area:not(.collapsed) { left: calc(10px + 52px * var(--btn-k, 1)); }

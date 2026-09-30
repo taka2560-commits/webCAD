@@ -68,6 +68,23 @@ describe('屋外モード・ボタンの大きさ', () => {
         assert.equal(cssVar('--btn-k'), '1');
     });
 
+    it('パネルのボタンの高さは、大・特大のときだけ決める（中・小で 0 にすると、長いパネルでボタンがつぶれる）', () => {
+        const big = () => app.eval(`document.documentElement.classList.contains('btn-big')`);
+        assert.equal(big(), false, '中');
+        app.eval(`setDisplayPref('btnSize', 's')`); assert.equal(big(), false, '小');
+        app.eval(`setDisplayPref('btnSize', 'l')`); assert.equal(big(), true, '大');
+        app.eval(`setDisplayPref('btnSize', 'xl')`); assert.equal(big(), true, '特大');
+        app.eval(`resetDisplayPrefs()`); assert.equal(big(), false);
+        // CSS: .prop-btn の min-height は html.btn-big のときだけ。
+        // 以前は「.prop-btn { min-height: clamp(0px, …) }」で、中のとき 0px になり、スクロールのある縦並びのパネルで
+        // 「機械とつなぐ」などのボタンが文字より低く（16px に）つぶれていた
+        const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+        const rules = html.match(/^[^\n{}]*\.prop-btn\s*\{[^}]*min-height[^}]*\}/gm) || [];
+        const bare = rules.filter((r) => /^\s*\.prop-btn\s*\{/.test(r));
+        assert.deepEqual(bare, [], '.prop-btn だけの指定で min-height を決めない');
+        assert.ok(rules.some((r) => /html\.btn-big \.prop-btn/.test(r)), '大・特大のときの指定はある');
+    });
+
     it('屋外モード: 線を太く、文字を太字にして背景色で縁取る', () => {
         app.eval(`setDisplayPref('outdoor', 'on')`);
         assert.equal(outdoorClass(), true);
