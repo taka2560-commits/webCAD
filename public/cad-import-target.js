@@ -1,6 +1,6 @@
 // ===== Web CAD 取り込み先の準備 =====
 // cad-import-target.js - ファイルを開くときの「置き換え / 今の図面に追加」の確認と、開いたファイルの単位（INSUNITS）への図面の単位の合わせ、
-//   取り込んだ寸法（図形が無く、値の文字だけ置く寸法）の値の文字、
+//   取り込んだ寸法（図形が無く、値の文字だけ置く寸法）の値の文字、レイアウト（ペーパー空間）の図形の見分け（モデル空間だけ取り込む）、
 //   置き換えで開いたファイルが読めなかったときに元の図面へ戻す処理（cad-io.js から分けた。読み込みの本体は cad-io.js・cad-survey.js・cad-sdr.js）
 
 // ===== 取り込み先の準備（置き換え / 追加） =====
@@ -106,4 +106,41 @@ function applyFileUnit(code, what) {
         return `この${what}の単位は ${fileUnit} なので、オプションの「図面の1単位」を 1${fileUnit} にしました`;
     }
     return `この${what}の単位は ${fileUnit} です（オプションの「図面の1単位」は 1${cur}）。今の図面に追加したので変えていません。測定・SIMA の値を合わせるには、オプションで 1${fileUnit} にしてください`;
+}
+
+// ===== レイアウト（ペーパー空間）は取り込まない。モデル空間の図形だけを図面にする =====
+// レイアウトの図形（図枠・表題欄・ビューポートなど）は、モデル空間と座標の意味が違う（用紙の mm）ので、混ぜると測量の座標とずれた所に重なる
+const PAPER_SPACE_RE = /^\*paper_space/i;
+const PAPER_SPACE_LABEL = 'レイアウト（ペーパー空間）';
+// DXF: 67（inPaperSpace）が付いた図形に加え、持ち主（330）が *Paper_Space のブロックレコードの図形も除く（67 を書かないソフトがある）。
+// 除いた図形を持ち主とする図形（レイアウトに置いたブロック参照の属性）も除く
+function dxfPaperSpaceTester(dxf) {
+    const owners = new Set();
+    Object.values((dxf && dxf.blocks) || {}).forEach(b => {
+        if(b && PAPER_SPACE_RE.test(b.name || '') && b.ownerHandle !== undefined) owners.add(String(b.ownerHandle).toUpperCase());
+    });
+    return (e) => {
+        if(!e) return false;
+        const owned = e.ownerHandle !== undefined && owners.has(String(e.ownerHandle).toUpperCase());
+        if(!(e.inPaperSpace || e.paperSpace || owned)) return false;
+        if(typeof e.handle === 'string') owners.add(e.handle.toUpperCase()); // 読み込みが振った番号（数）は使わない
+        return true;
+    };
+}
+// DWG: 読込エンジン（libredwg-web）は、モデル空間とすべてのレイアウトの図形をまとめて entities に入れて返す。
+// *PAPER_SPACE… のブロックレコードに属する図形（と、そのブロック参照の属性）を除く
+function dwgPaperSpaceTester(db) {
+    const objs = new Set(), owners = new Set();
+    const brs = (db && db.tables && db.tables.BLOCK_RECORD && db.tables.BLOCK_RECORD.entries) || [];
+    brs.forEach(b => {
+        if(!b || !PAPER_SPACE_RE.test(b.name || '')) return;
+        if(b.handle !== undefined) owners.add(String(b.handle).toUpperCase());
+        (b.entities || []).forEach(en => { objs.add(en); ((en && en.attribs) || []).forEach(a => objs.add(a)); });
+    });
+    return (e) => !!e && (!!e.isInPaperSpace || objs.has(e)
+        || (e.ownerBlockRecordSoftId !== undefined && owners.has(String(e.ownerBlockRecordSoftId).toUpperCase())));
+}
+// 取り込んだ図形が無く、レイアウトの図形だけがあったときの知らせ
+function paperOnlyNote(n) {
+    return `モデル空間に図形がありません。\n${PAPER_SPACE_LABEL}の図形（${n}個）は取り込みません`;
 }

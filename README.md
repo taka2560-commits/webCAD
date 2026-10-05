@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.25.3（2026年9月30日リリース）**
+**現在のバージョン: v5.25.4（2026年10月5日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（622件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（627件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-05: バージョン5.25.4（DWG・DXF はモデル空間だけを取り込む）** 📐
+  * libredwg-web は *MODEL_SPACE と *PAPER_SPACE… のブロックレコードの図形をまとめて db.entities に入れるため、レイアウトの図形も取り込んでいた。dwgPaperSpaceTester（cad-import-target.js）で、レイアウトのブロックレコードに属する図形・その INSERT の属性・ownerBlockRecordSoftId がレイアウトのもの・isInPaperSpace を除く。
+  * DXF は 67（inPaperSpace）に加え、330（持ち主）が *Paper_Space のブロックレコードの図形と、それを持ち主とする属性を除く（dxfPaperSpaceTester）。除いた数は skipStats（未対応）と分けて paperSkipped に数え、レイアウトだけのファイルは paperOnlyNote で知らせる。tests/import-paper-space.test.cjs。
 
 * **2026-09-30: バージョン5.25.3（寸法値・座標値の総点検）** 📏
   * 寸法値・座標値が出る所を、図面の単位（m・mm）× 表示の単位 × UCS × 画面の回転の組み合わせで、別の式の期待値と約2.3万件突き合わせた（tests/values-audit-*.test.cjs の5ファイル、tests/helpers/values-oracle.cjs）。食い違いは次の4つで、すべて直した。

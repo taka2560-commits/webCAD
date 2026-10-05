@@ -156,6 +156,8 @@ function importDxfData(dxf, opts) {
     let importCount = 0;
     const skipStats = {};
     const noteSkip = (t) => { skipStats[t] = (skipStats[t] || 0) + 1; };
+    const isPaper = dxfPaperSpaceTester(dxf); // レイアウト（ペーパー空間）は取り込まない
+    let paperSkipped = 0;
 
     // 画層の読み込み（色はACI番号、非表示/フリーズ状態も引き継ぐ）
     if(dxf.tables && dxf.tables.layer && dxf.tables.layer.layers) {
@@ -184,7 +186,7 @@ function importDxfData(dxf, opts) {
     // エンティティは元の順序で処理する（ATTRIB は直前の INSERT に属する属性文字のため）
     let lastInsertGid = null, lastInsertBlock = null, lastInsertPos = null;
     (dxf.entities || []).forEach(e => {
-        if(e.inPaperSpace || e.paperSpace) { noteSkip('ペーパー空間'); lastInsertGid = null; lastInsertPos = null; return; }
+        if(isPaper(e)) { paperSkipped++; lastInsertGid = null; lastInsertPos = null; return; }
         try {
             if(e.type === 'INSERT') {
                 const gid = newGroupId('b');
@@ -227,6 +229,7 @@ function importDxfData(dxf, opts) {
         const detail = Object.entries(skipStats).sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t}×${c}`).join(', ');
         addCommandLog(`  未対応・除外: ${detail}`);
     }
+    if(paperSkipped > 0) addCommandLog(`  ${PAPER_SPACE_LABEL}の図形 ${paperSkipped}個は取り込みません（モデル空間だけ）`);
 
     // === 重い画層の自動非表示 ===
     // 全エンティティ数が非常に多い場合のみ、極端に多い画層を自動非表示にする（bboxカリングがあるため閾値は高め）
@@ -254,14 +257,16 @@ function importDxfData(dxf, opts) {
     if(unitNote) addCommandLog('-> ' + unitNote);
     zoomExtents();
     render();
-    if(typeof showToast === 'function') {
+    if(typeof showToast === 'function' && importCount === 0 && paperSkipped > 0) {
+        showToast(paperOnlyNote(paperSkipped), { kind: 'warn', ms: 6000 });
+    } else if(typeof showToast === 'function') {
         let msg = `読み込み完了: ${importCount}個の図形`;
         if(skipTotal > 0) msg += `（未対応 ${skipTotal}個）`;
         if(autoHidden.length > 0) msg += `\n重い画層を自動非表示: ${autoHidden.length}件`;
         if(unitNote) msg += '\n' + unitNote;
         showToast(msg, unitNote ? 7000 : 4000);
     }
-    return { importCount, skipStats };
+    return { importCount, skipStats, paperSkipped };
 }
 
 // ===== 寸法(DIMENSION)の展開 =====
@@ -845,7 +850,7 @@ async function loadDwgFile(file) {
         if(importResult.entities.length === 0) {
             addCommandLog('注意: 対応する図形が見つかりませんでした。');
             if(typeof _restoreAfterFailedImport === 'function') _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
-            if(typeof showToast === 'function') showToast('DWG内に表示できる図形が見つかりませんでした', { kind: 'error', ms: 5000 });
+            if(typeof showToast === 'function') showToast(importResult.paperSkipped ? paperOnlyNote(importResult.paperSkipped) : 'DWG内に表示できる図形が見つかりませんでした', { kind: 'error', ms: 5000 });
             return;
         }
 
@@ -879,7 +884,7 @@ async function loadDwgFile(file) {
 
 // ===== LibreDwg DwgDatabase からアプリ用エンティティへの変換 =====
 function convertDwgDatabaseToApp(db) {
-    const result = { entities: [], warnings: [] };
+    const result = { entities: [], warnings: [], paperSkipped: 0 };
     const dh = db.header || {};
     _beginImport(dh.INSUNITS, dh.DIMTXT, dh.DIMSCALE); // 寸法の値の桁・文字の高さ（ファイルの単位・寸法の設定）
     const hideArcs = shouldHideImportedArcs();
@@ -1086,13 +1091,15 @@ function convertDwgDatabaseToApp(db) {
     }
 
     if (db.entities && Array.isArray(db.entities)) {
-        db.entities.forEach(ent => processDwgEntity(ent, 0, 0, 0, 1, 1, 0, null, null));
+        const isPaper = dwgPaperSpaceTester(db); // レイアウト（ペーパー空間）は取り込まない。モデル空間だけ
+        db.entities.forEach(ent => { if(isPaper(ent)) { result.paperSkipped++; return; } processDwgEntity(ent, 0, 0, 0, 1, 1, 0, null, null); });
         const skipTotal = Object.values(skipStats).reduce((a, b) => a + b, 0);
         addCommandLog(`  変換完了: ${importCount}個 (未対応図形スキップ: ${skipTotal}個)`);
         if (skipTotal > 0) {
             const detail = Object.entries(skipStats).sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t}×${c}`).join(', ');
             addCommandLog(`  未対応・除外: ${detail}`);
         }
+        if (result.paperSkipped > 0) addCommandLog(`  ${PAPER_SPACE_LABEL}の図形 ${result.paperSkipped}個は取り込みません（モデル空間だけ）`);
     } else {
         result.warnings.push('DwgDatabase に entities が見つかりませんでした。');
     }
