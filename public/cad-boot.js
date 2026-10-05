@@ -23,6 +23,11 @@ function resetPageScroll() {
 document.body.addEventListener('scroll', resetPageScroll);
 window.addEventListener('scroll', resetPageScroll);
 
+// iPhone・iPad の Safari は、viewport の user-scalable=no を無視する。パネルやボタンの上で2本指を広げると、
+// ページ全体が拡大されたままになり、ボタンが画面の外に出て戻しにくい。ページの拡大だけを止める
+// （gesturestart は Safari だけの出来事。図面の2本指の拡大・回転は touch の出来事で動くので変わらない）
+['gesturestart', 'gesturechange'].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));
+
 // F3, F8 キーバインド
 document.addEventListener('keydown', (e) => {
     if(e.key==='F3') { e.preventDefault(); toggleOsnapMain(); }

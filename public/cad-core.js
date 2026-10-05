@@ -519,6 +519,17 @@ function textHitDistance(e, sx, sy) {
 
 // ===== ユーティリティ =====
 function isMobile() { return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window); }
+// iPhone・iPad か。iPadOS の Safari は Mac と名乗る（UA に iPad が無い）ので、Mac でタッチ点が2つ以上なら iPad とみる。
+// ua を渡したときは、その文字列だけで決める（テスト用）
+function isAppleTouchDevice(ua) {
+    const nav = (typeof navigator !== 'undefined' && navigator) || {};
+    const s = ua === undefined ? (nav.userAgent || '') : String(ua);
+    if(/iPhone|iPad|iPod/.test(s)) return true;
+    return ua === undefined && /Macintosh/.test(s) && (nav.maxTouchPoints || 0) > 1;
+}
+// ファイルを選ぶ欄の種類の指定（accept）。iPhone・iPad は、.dxf・.dwg・.sim・.sdr のように端末が知らない拡張子を指定すると、
+// 「ファイル」でそのファイルが灰色になって選べないので、指定しない（選んだあとに拡張子で振り分け、合わなければ知らせる）
+function fileAcceptFor(accept) { return isAppleTouchDevice() ? '' : accept; }
 function addCommandLog(t) { const d=document.createElement('div'); d.textContent=t; commandLog.appendChild(d); commandLog.scrollTop=commandLog.scrollHeight; }
 function setPrompt(t) { document.getElementById('command-prompt').textContent=t; updateCommandPill(); if(typeof guideNotify === 'function') guideNotify('mode'); }
 function resetCommand() {

@@ -259,7 +259,7 @@ function _helmOut(i) {
 // ===== 読み込み =====
 window.helmPickFile = function() {
     const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = '.sim,.txt';
+    inp.type = 'file'; inp.accept = fileAcceptFor('.sim,.txt'); // iPhone・iPad は指定しない（.sim が灰色で選べなくなる）
     inp.onchange = async () => { const f = inp.files && inp.files[0]; if(f) await helmLoadFile(f); };
     inp.click();
 };

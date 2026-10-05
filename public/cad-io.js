@@ -1130,7 +1130,8 @@ function downloadBlob(blob, filename) {
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // すぐ消すと、Safari（iPhone・iPad・Mac）では保存が始まる前に中身が無くなり、保存に失敗することがある
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 // ===== ファイルコマンド（cad-core.jsから呼ばれる） =====
@@ -1147,7 +1148,8 @@ function processIOCommand(cmd) {
 // ===== ファイル入力イベント =====
 function setupFileIO() {
     const fileInput = document.getElementById('dxf-file-input');
-    fileInput.setAttribute('accept', '.dxf,.dwg,.sim,.csv,.txt,.sdr');
+    const accept = fileAcceptFor('.dxf,.dwg,.sim,.csv,.txt,.sdr'); // iPhone・iPad は指定しない（灰色で選べなくなる）
+    if(accept) fileInput.setAttribute('accept', accept); else fileInput.removeAttribute('accept');
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if(!file) return;

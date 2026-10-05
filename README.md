@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.25.4（2026年10月5日リリース）**
+**現在のバージョン: v5.25.5（2026年10月5日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（627件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（633件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-05: バージョン5.25.5（iPhone・iPad 特有の不具合の修正）** 📱
+  * isAppleTouchDevice（cad-core.js）: UA の iPhone・iPad・iPod に加え、Macintosh でタッチ点が2つ以上なら iPad（iPadOS の Safari は Mac と名乗る）。fileAcceptFor: iPhone・iPad では file input の accept を空にする（未知の拡張子 .dxf・.sim などが灰色で選べないため）。開く・座標一覧の SIMA・ヘルマートの SIMA。
+  * tsBrowserNote: 今のブラウザを見るときは isAppleTouchDevice でも iPad と判定。cad-boot.js: gesturestart・gesturechange を preventDefault（iOS は user-scalable=no を無視してページ全体を拡大する）。downloadBlob: revokeObjectURL を 60 秒後に（Safari で保存が失敗する）。tests/ios-quirks.test.cjs。
 
 * **2026-10-05: バージョン5.25.4（DWG・DXF はモデル空間だけを取り込む）** 📐
   * libredwg-web は *MODEL_SPACE と *PAPER_SPACE… のブロックレコードの図形をまとめて db.entities に入れるため、レイアウトの図形も取り込んでいた。dwgPaperSpaceTester（cad-import-target.js）で、レイアウトのブロックレコードに属する図形・その INSERT の属性・ownerBlockRecordSoftId がレイアウトのもの・isInPaperSpace を除く。

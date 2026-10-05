@@ -50,7 +50,8 @@ function tsBrowserNote(ua) {
     const s = String(ua === undefined ? ((typeof navigator !== 'undefined' && navigator.userAgent) || '') : ua);
     const m = /(?:Chrome|CriOS)\/(\d+)/.exec(s), ver = m ? parseInt(m[1], 10) : 0;
     const file = 'ファイル（SIMA・SDR）で受け渡してください。';
-    if(/iPhone|iPad|iPod/.test(s)) return 'iPhone・iPad では、機械と直接つなげません（どのブラウザでも同じです）。' + file;
+    // iPadOS の Safari は Mac と名乗るので、今のブラウザを見るときはタッチ点の数でも iPad を見分ける（以前は「PC は Chrome か Edge で」と出た）
+    if(/iPhone|iPad|iPod/.test(s) || (ua === undefined && typeof isAppleTouchDevice === 'function' && isAppleTouchDevice())) return 'iPhone・iPad では、機械と直接つなげません（どのブラウザでも同じです）。' + file;
     if(/Android/.test(s)) {
         if(/; wv\)|Line\/|FBAN|FBAV|Instagram|YJApp/.test(s)) return 'ほかのアプリの中で開いた画面では、機械とつなげません。メニューの「Chrome で開く」（ブラウザで開く）を選んで、Chrome で開いてください。';
         if(/SamsungBrowser|Firefox|EdgA|OPR\//.test(s) || !ver) return 'このブラウザでは機械とつなげません。Android は Chrome（137 以降）で開いてください。';

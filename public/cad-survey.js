@@ -502,7 +502,7 @@ window.coordListDeletePoint = function(p) {
 // 座標一覧から SIMA を読み込む（ファイルを選ぶ → 今の図面があれば「置き換える／今の図面に追加／やめる」→ 図面に入れて、一覧も新しくする）
 window.coordListImportSima = function() {
     const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = '.sim,.SIM,.txt';
+    inp.type = 'file'; inp.accept = fileAcceptFor('.sim,.SIM,.txt'); // iPhone・iPad は指定しない（.sim が灰色で選べなくなる）
     inp.onchange = () => { const f = inp.files && inp.files[0]; if(f) coordListLoadSima(f); };
     inp.click();
 };
