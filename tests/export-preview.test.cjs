@@ -115,6 +115,13 @@ describe('書き出す前の確認', () => {
         app.eval('exportSima()');
         assert.equal(title(), '');
         assert.equal(app.eval(`GUIDE_PANEL_HELP['📄 書き出す前の確認'].topic`), 'export');
+        // ？ でヘルプを見たあと「戻る」と、確認の画面に戻る
+        add([{ num: '1', name: 'K1', X: 1, Y: 2 }]);
+        app.eval(`exportSima(); guidePanelHelp();`);
+        assert.equal(title(), '❓ ヘルプ・操作ガイド');
+        app.eval('guideHelpBack()');
+        assert.equal(title(), '📄 書き出す前の確認');
+        app.eval('exportPreviewCancel()');
         assert.match(app.eval(`GUIDE_TOPICS.find(t => t.id === 'export').steps.join(' ')`), /書き出す前の確認/);
         app.eval('downloadBlob = window.__dlOrig');
     });

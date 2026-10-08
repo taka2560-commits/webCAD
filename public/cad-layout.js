@@ -347,7 +347,10 @@ function layoutTabsUpdate() {
     };
     const html = tab(-1, 'モデル') + cadLayouts.map((l, i) => tab(i, l.name)).join('');
     if(el.innerHTML !== html) el.innerHTML = html;
-    el.style.display = (layoutActive() || typeof cmdState === 'undefined' || cmdState.mode === 'IDLE') ? 'flex' : 'none';
+    // コマンドの途中・選んだときのバーが出ている間（同じ高さに重なる）は隠す
+    const sel = document.getElementById('sel-actionbar');
+    const selShown = !!sel && sel.style.display === 'flex';
+    el.style.display = (layoutActive() || ((typeof cmdState === 'undefined' || cmdState.mode === 'IDLE') && !selShown)) ? 'flex' : 'none';
 }
 
 // ===== 描く =====

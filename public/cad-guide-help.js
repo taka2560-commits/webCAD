@@ -554,7 +554,7 @@ const GUIDE_PANEL_HELP = {
     '📷 写真・メモ': { topic: 'photo', back: () => showPhotoPanel() },
     '📍 座標一覧': { topic: 'coordlist', back: () => showCoordListPanel() },
     '🔠 文字の大きさ': { topic: 'textsize', back: () => showTextSizePanel() },
-    '📄 書き出す前の確認': { topic: 'export', back: null },
+    '📄 書き出す前の確認': { topic: 'export', back: () => { if(typeof _xp !== 'undefined' && _xp) _xpRender(); else hidePropertyPanel(); } },
     'オプション': { topic: 'options', back: () => showOptionsPanel() },
     '画層一括管理': { topic: 'layers', back: () => showLayerManagerPanel() },
     'ブロック管理': { topic: 'blocks', back: () => showBlockManagerPanel() },

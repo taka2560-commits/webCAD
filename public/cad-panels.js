@@ -28,6 +28,7 @@ let _blockNameCache = [];
 
 // 指定 index 群にズーム
 function zoomToEntities(indices) {
+    if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); // モデルの図形へ寄るのはモデルの画面で（cad-layout.js）
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     indices.forEach(i => {
         const e = entities[i]; if(!e) return;
@@ -199,7 +200,7 @@ function updateSelectionBar() {
     if(!bar) return;
     const sel = cmdState.selectedIndices || [];
     const n = sel.length > 0 ? sel.length : (cmdState.highlightIdx >= 0 ? 1 : 0);
-    if(cmdState.mode !== 'IDLE' || n === 0) { bar.style.display = 'none'; return; }
+    if(cmdState.mode !== 'IDLE' || n === 0) { bar.style.display = 'none'; if(typeof layoutTabsUpdate === 'function') layoutTabsUpdate(); return; }
     const idxs = sel.length ? sel : [cmdState.highlightIdx];
     const gids = new Set(); idxs.forEach(i => { const e = entities[i]; if(e && e.gid) gids.add(e.gid); });
     const first = entities[idxs[0]];
@@ -218,6 +219,7 @@ function updateSelectionBar() {
     const tbtn = document.getElementById('sel-textsize-btn');
     if(tbtn) tbtn.style.display = idxs.some(i => entities[i] && entities[i].type === 'TEXT') ? '' : 'none';
     bar.style.display = 'flex';
+    if(typeof layoutTabsUpdate === 'function') layoutTabsUpdate(); // 選んだときのバーと重なるので、モデル｜レイアウトのタブは隠す
 }
 window.toggleGroupOfSelection = function() {
     const gbtn = document.getElementById('sel-group-btn');

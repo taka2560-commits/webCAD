@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.38（2026年10月9日リリース）**
+**現在のバージョン: v5.38.1（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（755件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（757件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -265,6 +265,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.38.1（レイアウト・書き出す前の確認の見落とし）** 🔧
+  * layoutTabsUpdate は選んだときのバー（#sel-actionbar）が出ている間タブを隠す（updateSelectionBar から呼ぶ）。startGuideTour はモデルに戻り、練習の間は layoutsClear（控えの _undoSnapshot の lay で戻る）。zoomToEntities はモデルに戻ってから。GUIDE_PANEL_HELP の「📄 書き出す前の確認」の戻るは _xpRender。
 
 * **2026-10-09: バージョン5.38（レイアウトを別の画面で見る）** 📄
   * cad-layout.js（新）: cadLayouts（[{ name, order, sheet, ents, vps }]）。dxfLayoutObjectsFromText（OBJECTS の LAYOUT: AcDbLayout の 1・71・10/20・11/21・330・331）・dxfViewportFromTags（VIEWPORT）・dxfLayoutsFromImport（今のレイアウトは ENTITIES の 67=1、ほかは *Paper_SpaceN のブロック）・dwgLayoutViewport（読込エンジンの LAYOUT と BLOCK_RECORD）・makeImportedLayout（用紙は LIMMIN/LIMMAX、小さければ広がり。枠・切った・真上でないビューポートを除く）。ビューポートは 用紙 = 中心 + k・R(t)・(モデル − c)、c = 注視点 + R(−t)・表示の中心（ezdxf の get_transformation_matrix と同じ）。

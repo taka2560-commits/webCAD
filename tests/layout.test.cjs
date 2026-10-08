@@ -232,6 +232,28 @@ describe('レイアウト（別の画面）', () => {
         assert.deepEqual(r[0].vps[0].c, { x: 98242.882, y: -479100.686 });
     });
 
+    it('選んだときのバーが出ている間はタブを隠す（同じ高さに重なる）。モデルの図形へ寄る操作はモデルで', () => {
+        const tabs = () => app.eval(`document.getElementById('space-tabs').style.display`);
+        assert.equal(tabs(), 'flex');
+        app.eval(`cmdState.selectedIndices = [0]; updateSelectionBar();`);
+        assert.equal(app.eval(`document.getElementById('sel-actionbar').style.display`), 'flex');
+        assert.equal(tabs(), 'none');
+        app.eval(`cmdState.selectedIndices = []; cmdState.highlightIdx = -1; updateSelectionBar();`);
+        assert.equal(tabs(), 'flex');
+        app.eval(`layoutShow(0); zoomToEntities([0]);`);
+        assert.equal(app.eval('layoutActive()'), false);
+    });
+
+    it('練習ツアーはモデルの画面で、練習の間はレイアウトのタブを出さない。終わるとレイアウトも戻る', () => {
+        app.eval(`layoutShow(0); startGuideTour(Object.keys(GUIDE_TOURS).find(k => GUIDE_TOURS[k].sample));`);
+        assert.equal(app.eval('layoutActive()'), false);
+        assert.equal(app.val('cadLayouts.length'), 0);
+        assert.equal(app.eval(`document.getElementById('space-tabs').style.display`), 'none');
+        app.eval('endGuideTour(false)');
+        assert.deepEqual(app.val('cadLayouts.map(l => l.name)'), ['平面図', '詳細']);
+        assert.deepEqual(app.val(`entities.map(e => e.type + ':' + e.x1)`), ['LINE:980', 'LINE:1000'], '図面も元どおり');
+    });
+
     it('塗りつぶしを表示すると、レイアウトの塗りつぶしも出す。画面の画像の名前はレイアウトの名前', async () => {
         app.eval(`cadLayouts[0].ents.push({ type: 'HATCH', layer: 0, hidden: true, hiddenBy: 'fill', target: { type: 'PLINE', closed: true, points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] } }); showHiddenEntities('fill');`);
         assert.equal(app.val(`cadLayouts[0].ents.filter(e => e.type === 'HATCH' && !e.hidden).length`), 1);
