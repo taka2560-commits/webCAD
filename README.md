@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.28（2026年10月8日リリース）**
+**現在のバージョン: v5.29（2026年10月8日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（670件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（683件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,12 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-08: バージョン5.29（DXF の書き出し: Jw_cad 向け R12・Shift-JIS・mm）** 📐
+  * cad-dxf-r12.js（新）: ☰「DXF（Jw_cad 向け）」・コマンド DXFJW・お気に入り。dxf-writer を使わず R12（AC1009）を直接書く（コードは右詰め3桁・CRLF・ハンドルとサブクラス無し・$DWGCODEPAGE ANSI_932・$INSUNITS 4）。encodeShiftJis で Shift-JIS にする。長さは mm（×1000/surveyUnitFactor）、$LTSCALE も mm。
+  * 置き換え: RECTANG・PLINE・ELLIPSE（72角形）→ POLYLINE/VERTEX/SEQEND、複数行の TEXT → 1行ずつ（1.4 倍ずつ下）、寸法 → dimExportPrims の線・円弧・SOLID の矢印・文字、HATCH の塗り → r12FillTrapezoids（偶奇の規則の横帯の台形）、模様 → printHatchLines の線を r12ClipSegment で輪に切る（形の分からない模様は書かない）。測点は POINT（Z は標高の mm）と点名の文字。
+  * 文字: ⌀→φ・m²→㎡・㎥→m3・㉑〜㊿→(21)・↔→⇔。画層・線種の名前は DXF に使えない文字と Shift-JIS に無い文字を「_」（_r12CanSjis）。STYLE は txt＋extfont2.shx。
+  * dimExportPrims(e, k, cad): DXF（cad）では座標寸法の2段の間を文字の高さの 1.4 倍に（AutoCAD 向けの *D ブロック・以前の形の書き出しも）。印刷は今までどおり。tests/dxf-r12.test.cjs。
 
 * **2026-10-08: バージョン5.28（DXF の書き出し: 測点の属性・標高・複数行の文字・寸法）** 📤
   * cad-dxf-out.js（新）: dxf-writer のブロックは外枠だけなので、中身（dxfOutBlock）を書く。ハンドルは dxf-writer の通し番号から組み立てるときに取って記録し、書き出しで再生する（書き出しの最中に取ると $HANDSEED より後になる）。所有（330）は dxf-writer に合わせる。寸法スタイル STANDARD（ハンドルは 105）と APPID WEBCAD を足す。

@@ -85,6 +85,10 @@ describe('DXF の書き出し: 測点・複数行の文字・寸法', () => {
         assert.ok(T.some(([c, v]) => c === '1001' && v === 'WEBCAD'), '拡張データ WEBCAD');
         assert.ok(T.some(([c, v], i) => c === '0' && v === 'APPID' && T.slice(i, i + 8).some(([c2, v2]) => c2 === '2' && v2 === 'WEBCAD')), 'APPID WEBCAD');
         assert.ok(T.some(([c, v], i) => c === '0' && v === 'DIMSTYLE' && T[i + 1][0] === '105' && T.slice(i, i + 8).some(([c2, v2]) => c2 === '2' && v2 === 'STANDARD')), '寸法スタイル STANDARD（ハンドルは 105）');
+        // 座標寸法のブロックの2段（X・Y）は、文字の高さの 1.4 倍あける（AutoCAD では文字が画面より大きく見え、14/16 だと重なる）
+        const ordText = (p) => { const i = T.findIndex(([c, v]) => c === '1' && v.startsWith(p)); assert.deepEqual([T[i - 3][0], T[i - 1][0]], ['20', '40']); return { y: Number(T[i - 3][1]), h: Number(T[i - 1][1]) }; };
+        const ox = ordText('X: '), oy = ordText('Y: ');
+        assert.ok(near(ox.y - oy.y, ox.h * 1.4, 1e-9), `座標寸法の2段の間 ${ox.y - oy.y}（高さ ${ox.h}）`);
         reimport(app, out);
         const after0 = app.val(`entities.filter(e => e.type === 'DIMENSION').map(e => { const c = Object.assign({}, e); delete c.id; delete c.bbox; delete c._hits; delete c.layer; return c; })`);
         assert.deepEqual(after0, before0);

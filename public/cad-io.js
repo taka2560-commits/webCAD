@@ -778,7 +778,7 @@ function exportDxf() {
         // 寸法: 画面と同じ形（寸法線・補助線・矢印・文字）で出力する。文字の高さは図面の大きさから決める
         const dimK = (typeof dimExportTextHeight === 'function' ? dimExportTextHeight() : 2.5) / DIM_TEXT_SIZE;
         const writeDim = (e) => {
-            const P = dimExportPrims(e, dimK);
+            const P = dimExportPrims(e, dimK, true);
             P.lines.forEach(l => d.drawLine(l.x1, l.y1, l.x2, l.y2));
             P.arcs.forEach(a => d.drawArc(a.cx, a.cy, a.r, a.sa * 180 / Math.PI, a.ea * 180 / Math.PI));
             P.arrows.forEach(a => {
@@ -842,7 +842,7 @@ function exportDxf() {
             else if(e.type === 'DIMENSION') {
                 d.setActiveLayer('寸法');
                 let ok = false;
-                try { ok = !!(xs && dxfOutDimension(xs, addRaw, withType, e, dimExportPrims(e, dimK), dimK)); } catch(err) { console.warn('寸法を DIMENSION で書けません:', err); }
+                try { ok = !!(xs && dxfOutDimension(xs, addRaw, withType, e, dimExportPrims(e, dimK, true), dimK)); } catch(err) { console.warn('寸法を DIMENSION で書けません:', err); }
                 if(!ok) writeDim(e);
                 drawn = false;
             }
@@ -899,6 +899,7 @@ function processIOCommand(cmd) {
         return true;
     }
     if(cmd === 'SAVEAS' || cmd === 'EXPORTDXF') { exportDxf(); return true; }
+    if(cmd === 'DXFJW' || cmd === 'EXPORTDXFJW') { exportDxfJw(); return true; } // Jw_cad 向け（R12・Shift-JIS・mm。cad-dxf-r12.js）
     if(cmd === 'EXPORTDWG') { exportDwg(); return true; }
     return false;
 }

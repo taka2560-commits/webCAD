@@ -233,7 +233,8 @@ function _dimUpright(a) {
     else if(a <= -Math.PI / 2 + 1e-9) a += Math.PI;
     return a;
 }
-function dimExportPrims(e, k) {
+// cad: DXF に書くとき（文字の高さは大文字の高さで、画面・印刷（文字の大きさ）より大きく見える）
+function dimExportPrims(e, k, cad) {
     const out = { lines: [], arcs: [], arrows: [], texts: [] };
     const th = dimSizePx(DIM_TEXT_SIZE) * k, as = dimSizePx(DIM_ARROW_SIZE) * k;
     // 線の上（画面の3px）に、線の向きの文字を置く
@@ -280,7 +281,8 @@ function dimExportPrims(e, k) {
             const cx = L.x + side * 40 * dk * k;
             if(e.textOverride) out.texts.push({ s: e.textOverride, x: cx, y: L.y + 4 * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
             else {
-                out.texts.push({ s: 'X: ' + dimFormatCoord(u.y), x: cx, y: L.y + (4 + 14 * dk) * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
+                // 2段の間: 画面・印刷は文字の大きさの 14/16。DXF は文字が大きく見えて重なるので、文字の高さの 1.4 倍
+                out.texts.push({ s: 'X: ' + dimFormatCoord(u.y), x: cx, y: L.y + 4 * k + (cad ? th * 1.4 : 14 * dk * k), h: th, ang: 0, ha: 'center', va: 'bottom' });
                 out.texts.push({ s: 'Y: ' + dimFormatCoord(u.x), x: cx, y: L.y + 4 * k, h: th, ang: 0, ha: 'center', va: 'bottom' });
             }
         } else if(e.leader) {

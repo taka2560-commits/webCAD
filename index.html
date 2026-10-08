@@ -937,7 +937,8 @@
             <div class="menu-section-title">図面と保存</div>
             <div class="menu-btn-grid">
                 <button class="menu-item-btn" data-fav="PROJECTS" onclick="showProjectList(); toggleTopMenu();">📂 保存一覧</button>
-                <button class="menu-item-btn" data-fav="EXPORTDXF" onclick="exportDxf(); toggleTopMenu();" title="AutoCAD・Jw_cad などで開けます（DWG では書き出せません）">DXF 出力</button>
+                <button class="menu-item-btn" data-fav="EXPORTDXF" onclick="exportDxf(); toggleTopMenu();" title="AutoCAD 向け（AutoCAD 2007 形式・UTF-8。寸法・測点の属性もそのまま。DWG では書き出せません）">DXF 出力</button>
+                <button class="menu-item-btn" data-fav="DXFJW" onclick="exportDxfJw(); toggleTopMenu();" title="Jw_cad・古い CAD 向け（R12 形式・Shift-JIS・mm。寸法・塗りつぶしは線・ソリッドに分けて書きます）">DXF（Jw_cad 向け）</button>
                 <button class="menu-item-btn" data-fav="PRINT" onclick="showPrintPanel(); toggleTopMenu();" title="用紙と縮尺を決めて PDF にする（図枠・表題欄・方位記号つき）">🖨 印刷・PDF</button>
                 <button class="menu-item-btn danger" onclick="closeDrawing(); toggleTopMenu();">✕ 図面を閉じる</button>
             </div>
@@ -1257,6 +1258,7 @@
     <script src="cad-dwg.js"></script>
     <script src="cad-ltype.js"></script>
     <script src="cad-dxf-out.js"></script>
+    <script src="cad-dxf-r12.js"></script>
     <script src="cad-core.js"></script>
     <script src="cad-notify.js"></script>
     <script src="cad-dialog.js"></script>

@@ -63,6 +63,7 @@ const FAV_CATALOG = [
     { id: 'SAVE', label: '保存', icon: '💾', color: '#00ff88', cat: 'view', run: () => saveProject() },
     { id: 'PROJECTS', label: '保存一覧', icon: '📂', cat: 'view', run: () => showProjectList() },
     { id: 'EXPORTDXF', label: 'DXF出力', icon: '📄', cat: 'view', run: () => exportDxf() },
+    { id: 'DXFJW', label: 'Jw用DXF', icon: '📄', cat: 'view', run: () => exportDxfJw() },
     { id: 'PRINT', label: '印刷', icon: '🖨', cat: 'view', panel: '🖨 印刷・PDF', run: () => showPrintPanel() },
     { id: 'MAP', label: '地図・下絵', icon: '🗺', cat: 'view', panel: '🗺 地図・下絵', run: () => showUnderlayPanel() },
     { id: 'ZOOM', label: '全体', icon: '🔍', cat: 'view', run: () => zoomExtents() },
