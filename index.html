@@ -937,6 +937,7 @@
             <div class="menu-section-title">図面と保存</div>
             <div class="menu-btn-grid">
                 <button class="menu-item-btn" data-fav="PROJECTS" onclick="showProjectList(); toggleTopMenu();">📂 保存一覧</button>
+                <button class="menu-item-btn" data-fav="WEBCADOUT" onclick="exportWebcadFile(); toggleTopMenu();" title="図面・測点・写真・下絵を1つのファイル（.webcad）に書き出します。別の端末の 📁開く で開くと、そのまま続きができます">📦 図面一式</button>
                 <button class="menu-item-btn" data-fav="EXPORTDXF" onclick="exportDxf(); toggleTopMenu();" title="AutoCAD 向け（AutoCAD 2007 形式・UTF-8。寸法・測点の属性もそのまま。DWG では書き出せません）">DXF 出力</button>
                 <button class="menu-item-btn" data-fav="DXFJW" onclick="exportDxfJw(); toggleTopMenu();" title="Jw_cad・古い CAD 向け（R12 形式・Shift-JIS・mm。寸法・塗りつぶしは線・ソリッドに分けて書きます）">DXF（Jw_cad 向け）</button>
                 <button class="menu-item-btn" data-fav="PRINT" onclick="showPrintPanel(); toggleTopMenu();" title="用紙と縮尺を決めて PDF にする（図枠・表題欄・方位記号つき）">🖨 印刷・PDF</button>
@@ -1242,7 +1243,11 @@
                 <span style="font-weight:bold; color:#61afef; font-size:16px;">📂 保存済みプロジェクト</span>
                 <button onclick="hideProjectList()" style="background:none; border:none; color:#ff6b6b; font-size:18px; cursor:pointer;">✖</button>
             </div>
-            <div style="font-size:10px; color:#888; margin-bottom:8px;">&#x26a0; ブラウザの「閲覧データの消去」で削除されます。重要な図面はDXFでも保存してください。</div>
+            <div style="font-size:10px; color:#888; margin-bottom:8px;">&#x26a0; ブラウザの「閲覧データの消去」で削除されます。重要な図面は「📦 図面一式」（.webcad。写真・下絵も入る）か DXF でも保存してください。</div>
+            <div style="display:flex; gap:6px; margin-bottom:8px;">
+                <button class="prop-btn" style="flex:1; margin-top:0;" onclick="hideProjectList(); exportWebcadFile();" title="今の図面を、写真・下絵と一緒に1つのファイル（.webcad）に書き出します">📦 一式を書き出す</button>
+                <button class="prop-btn btn-sub" style="flex:1; margin-top:0;" onclick="pickWebcadFile()" title="書き出した図面一式（.webcad）を開きます">📂 一式を開く</button>
+            </div>
             <div id="project-list-items" style="overflow-y:auto; flex:1; min-height:100px;"></div>
         </div>
     </div>
@@ -1289,6 +1294,7 @@
     <script src="cad-fav.js"></script>
     <script src="cad-motion.js"></script>
     <script src="cad-storage.js"></script>
+    <script src="cad-webcad.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-guide-tours.js"></script>
     <script src="cad-guide-help.js"></script>

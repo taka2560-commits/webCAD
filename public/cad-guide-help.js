@@ -233,9 +233,9 @@ const GUIDE_TOPICS = [
         open: { label: '📷 写真・メモを開く', run: () => showPhotoPanel() } },
 
     // ---- 図面・ファイル・印刷 ----
-    { id: 'open', cat: 'file', title: '図面を開く（DXF・DWG・SIMA・座標CSV・SDR）', keys: 'ひらく よみこみ ふぁいる dxf dwg しま csv sdr 開く 読み込み ファイル',
+    { id: 'open', cat: 'file', title: '図面を開く（DXF・DWG・SIMA・座標CSV・SDR・図面一式）', keys: 'ひらく よみこみ ふぁいる dxf dwg しま csv sdr webcad いっしき 開く 読み込み ファイル 図面一式',
         steps: [
-            '上のバーの 📁開く → DXF・DWG・SIMA（.sim）・座標CSV・SDR（.sdr）を選びます。',
+            '上のバーの 📁開く → DXF・DWG・SIMA（.sim）・座標CSV・SDR（.sdr）・図面一式（.webcad）を選びます。',
             '図面があるときは「置き換える」か「追加する」を選びます。',
             '文字コード（UTF-8・Shift-JIS）は自動で判定します。',
         ],
@@ -247,11 +247,13 @@ const GUIDE_TOPICS = [
     { id: 'save', cat: 'file', title: '保存とオフライン（保存一覧・図面を閉じる）', keys: 'ほぞん ほぞんいちらん おふらいん じどうほぞん とじる でんぱ 保存 保存一覧 自動保存 閉じる 電波',
         steps: [
             '💾保存 で、名前を付けて端末に保存します。作業中の図面は、自動でも保存されます（変更のあと、アプリを裏に回したときなど）。',
-            '☰ → 📂保存一覧 で、保存した図面を開く・消す。',
+            '☰ → 📂保存一覧 で、保存した図面を開く・消す。図面一式（.webcad）の書き出し・開くもここからできます。',
             '☰ → ✕ 図面を閉じる で、新しい図面にします。',
             '一度開けば、電波の無い所でも使えます（アプリとして開いているとき）。',
         ],
-        tips: ['保存は、この端末（ブラウザ）の中です。ほかの端末へは DXF・SIMA などで書き出して渡します。', 'ホーム画面に追加すると、アプリのように全画面で使えます。'],
+        tips: ['保存は、この端末（ブラウザ）の中です。ほかの端末へは ☰ → 📦図面一式 で1つのファイル（.webcad）に書き出し、その端末の 📁開く で開きます。写真・メモの写真・下絵・系番号もそのまま渡ります。',
+            '図面一式で開いた図面は、まだ保存一覧に入っていません。💾保存 で名前を付けると入ります。',
+            'ホーム画面に追加すると、アプリのように全画面で使えます。'],
         open: { label: '📂 保存一覧を開く', run: () => showProjectList() } },
     { id: 'export', cat: 'file', title: '書き出す（DXF・SIMA・座標CSV・SDR33）', keys: 'かきだし しゅつりょく えくすぽーと dxf しま csv sdr 書き出し 出力 エクスポート jw じぇいだぶ jwcad r12 しふとじす',
         steps: [
@@ -508,7 +510,7 @@ const GUIDE_COMMANDS = [
     ['測量', [['COORDS', 'ZAHYO', '座標一覧（POINTS）'], ['COGO', 'CALC', '測量計算'], ['AREA', 'AA', '求積（KYUSEKI）'], ['INV', '-', '逆計算（INVERSE）'], ['PTADD', 'RADIATE', '点の追加'], ['INTERS', 'KOUTEN', '交点'],
         ['HELMERT', 'HENKAN', 'SIMA の変換'], ['TS', 'SOKKIA', 'TS連携（TSLINK）'], ['SDROUT', '-', 'SDR33出力'], ['STAKE', 'KUI', '杭打ち（SETOUT）'], ['PHOTO', 'MEMO', '写真・メモ（PIN）'],
         ['GNSS', 'GPS', '現在地'], ['GNSSZONE', '-', '系番号の選択'], ['SIMAOUT', '-', 'SIMA出力'], ['CSVOUT', '-', '座標CSV出力']]],
-    ['図面・表示', [['OPEN', '-', '開く（IMPORT）'], ['SAVE', '-', '保存'], ['PROJECTS', '-', '保存一覧（RESTORE）'], ['EXPORTDXF', 'SAVEAS', 'DXF出力'], ['DXFJW', '-', 'DXF出力（Jw_cad 向け）'], ['PRINT', 'PDF', '印刷・PDF（PLOT）'],
+    ['図面・表示', [['OPEN', '-', '開く（IMPORT）'], ['SAVE', '-', '保存'], ['PROJECTS', '-', '保存一覧（RESTORE）'], ['WEBCADOUT', 'PACK', '図面一式の書き出し（.webcad）'], ['EXPORTDXF', 'SAVEAS', 'DXF出力'], ['DXFJW', '-', 'DXF出力（Jw_cad 向け）'], ['PRINT', 'PDF', '印刷・PDF（PLOT）'],
         ['MAP', 'SHITAE', '地図・下絵（UNDERLAY）'], ['ZOOM', 'ZE', '全体表示'], ['UCS', '-', 'UCS（原点）'], ['UCS2P', '2P', 'UCS（2点）'], ['WCS', '-', 'UCSを戻す'],
         ['BLOCKS', '-', 'ブロック管理'], ['LAYOFF', '-', 'タッチで画層を非表示'], ['SHOWALL', '-', '隠した図形を再表示'], ['FAV', 'OKINI', 'お気に入りの登録'], ['UNIT', 'LENUNIT', '長さの単位を m ⇔ mm に切り替え'], ['CUNIT', 'COORDUNIT', '座標の単位を m ⇔ mm に切り替え'], ['OUTDOOR', 'SUN', '屋外モードの入・切'], ['MOTION', 'UIMOTION', 'UIの動き（試用）の入・切'], ['ERRORS', 'ERRLOG', 'エラーログ']]],
 ];

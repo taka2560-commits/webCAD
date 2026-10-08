@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.29（2026年10月8日リリース）**
+**現在のバージョン: v5.30（2026年10月8日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（683件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（688件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,11 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-08: バージョン5.30（図面一式のファイル .webcad）** 📦
+  * cad-webcad.js（新）: { format: 'webcad', version: 1, project（_buildSaveData の形）, photos（ピンが使う写真。base64）, underlay（今の下絵。base64）, gnssZone } の JSON を CompressionStream で gzip（無ければ JSON のまま。開くときは先頭 1F 8B で見分ける）。☰「📦 図面一式」・保存一覧の「📦 一式を書き出す／📂 一式を開く」・📁開く（.webcad は置き換えだけ）・コマンド WEBCADOUT（PACK）・お気に入り。
+  * 開くとき（sanitizeWebcadProject・parseWebcadBytes）: 文字は決まった項目だけ（実物の DWG・DXF とアプリの図形から集めた _WC_STR_KEYS）、数は有限、__proto__ などは捨てる。図形の種類・画層の番号・色（#RRGGBB）・写真の番号（英数字と _-。onclick に入るため）・下絵の合わせ方（数6つ）を確かめる。開いたら名前は付けず（保存一覧の上書きを防ぐ）、全体表示。
+  * eslint: ブラウザの TextEncoder・CompressionStream・DecompressionStream・btoa・atob を足した。tests/webcad-file.test.cjs。
 
 * **2026-10-08: バージョン5.29（DXF の書き出し: Jw_cad 向け R12・Shift-JIS・mm）** 📐
   * cad-dxf-r12.js（新）: ☰「DXF（Jw_cad 向け）」・コマンド DXFJW・お気に入り。dxf-writer を使わず R12（AC1009）を直接書く（コードは右詰め3桁・CRLF・ハンドルとサブクラス無し・$DWGCODEPAGE ANSI_932・$INSUNITS 4）。encodeShiftJis で Shift-JIS にする。長さは mm（×1000/surveyUnitFactor）、$LTSCALE も mm。

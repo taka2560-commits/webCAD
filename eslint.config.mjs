@@ -82,7 +82,8 @@ export default [
             globals: {
                 require: "readonly", module: "writable", __dirname: "readonly", process: "readonly",
                 console: "readonly", setTimeout: "readonly", structuredClone: "readonly",
-                TextEncoder: "readonly", TextDecoder: "readonly", Uint8ClampedArray: "readonly"
+                TextEncoder: "readonly", TextDecoder: "readonly", Uint8ClampedArray: "readonly",
+                CompressionStream: "readonly", DecompressionStream: "readonly"
             }
         },
         rules: {
@@ -115,6 +116,11 @@ export default [
                 URL: "readonly",
                 FileReader: "readonly",
                 TextDecoder: "readonly",
+                TextEncoder: "readonly",
+                CompressionStream: "readonly", // 図面一式（.webcad）の gzip
+                DecompressionStream: "readonly",
+                btoa: "readonly",
+                atob: "readonly",
                 Uint8Array: "readonly",
                 Promise: "readonly",
                 MessageChannel: "readonly",
