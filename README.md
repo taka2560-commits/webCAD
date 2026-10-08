@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.30（2026年10月8日リリース）**
+**現在のバージョン: v5.31（2026年10月8日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（688件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（693件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-08: バージョン5.31（共有メニューで送る・画面の画像 PNG）** 📤
+  * cad-share.js（新）: downloadBlob の最後に offerShare（指で操作する端末＝ (pointer: coarse) か isAppleTouchDevice、かつ navigator.canShare({ files }) のとき、スナックバーに「📤 送る」→ navigator.share。AbortError は黙る）。
+  * 画面の画像: exportScreenPng がキャンバスの画素を k 倍（2〜3。1600万画素まで）にして drawCleanFrame(k)（cad-render.js の _drawFrame に _cleanScale: 変換を k にし、背景・下絵・図形・寸法・写真のピンだけ描いて戻る）→ toBlob（呼んだときの画素を写す）→ 大きさ・選択を戻して描き直す。下絵・地図の _ulDrawAffine も k 倍、地図の出典は画像の右上。tests/share-png.test.cjs。テストの jsdom に toBlob の代用品。
 
 * **2026-10-08: バージョン5.30（図面一式のファイル .webcad）** 📦
   * cad-webcad.js（新）: { format: 'webcad', version: 1, project（_buildSaveData の形）, photos（ピンが使う写真。base64）, underlay（今の下絵。base64）, gnssZone } の JSON を CompressionStream で gzip（無ければ JSON のまま。開くときは先頭 1F 8B で見分ける）。☰「📦 図面一式」・保存一覧の「📦 一式を書き出す／📂 一式を開く」・📁開く（.webcad は置き換えだけ）・コマンド WEBCADOUT（PACK）・お気に入り。

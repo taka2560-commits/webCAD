@@ -66,6 +66,7 @@ const FAV_CATALOG = [
     { id: 'EXPORTDXF', label: 'DXF出力', icon: '📄', cat: 'view', run: () => exportDxf() },
     { id: 'DXFJW', label: 'Jw用DXF', icon: '📄', cat: 'view', run: () => exportDxfJw() },
     { id: 'PRINT', label: '印刷', icon: '🖨', cat: 'view', panel: '🖨 印刷・PDF', run: () => showPrintPanel() },
+    { id: 'PNGOUT', label: '画面の画像', icon: '🖼', cat: 'view', run: () => exportScreenPng() },
     { id: 'MAP', label: '地図・下絵', icon: '🗺', cat: 'view', panel: '🗺 地図・下絵', run: () => showUnderlayPanel() },
     { id: 'ZOOM', label: '全体', icon: '🔍', cat: 'view', run: () => zoomExtents() },
     { id: 'ZOOMORIGIN', label: '原点へ', icon: '🔍', cat: 'view', run: () => zoomToOrigin() },

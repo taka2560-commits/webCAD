@@ -113,6 +113,7 @@ export default [
                 parseInt: "readonly",
                 isNaN: "readonly",
                 Blob: "readonly",
+                File: "readonly", // 共有メニューで送るファイル（cad-share.js）
                 URL: "readonly",
                 FileReader: "readonly",
                 TextDecoder: "readonly",

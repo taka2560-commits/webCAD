@@ -103,7 +103,8 @@ function ulForgetFailedTiles() {
 window.addEventListener('online', () => { ulForgetFailedTiles(); _ul.warned.net = 0; _ulScheduleRender(); });
 // 画像の3点（左上・右上・左下）が画面のどこに来るかから、描く変換を決めて描く
 function _ulDrawAffine(src, w, h, p0, p1, p2) {
-    ctx.setTransform((p1.x - p0.x) / w, (p1.y - p0.y) / w, (p2.x - p0.x) / h, (p2.y - p0.y) / h, p0.x, p0.y);
+    const k = _cleanScale || 1; // 画面の画像（PNG）は k 倍で描く
+    ctx.setTransform(k * (p1.x - p0.x) / w, k * (p1.y - p0.y) / w, k * (p2.x - p0.x) / h, k * (p2.y - p0.y) / h, k * p0.x, k * p0.y);
     ctx.drawImage(src, 0, 0, w, h);
 }
 function _ulLLToScreen(lat, lon, zone) { const p = latLonToJprcs(lat, lon, zone), w = surveyToWcs(p.X, p.Y); return wcsToScreen(w.x, w.y); }
@@ -121,13 +122,14 @@ function _ulDrawMap(o) {
     });
     ctx.restore();
     // 出典（国土地理院のコンテンツ利用規約）。右上の上部バーのすぐ下（右下は ? などのボタンで隠れる）
-    const tb = document.getElementById('top-bar');
-    const y0 = (tb && tb.getBoundingClientRect().bottom > 0 ? tb.getBoundingClientRect().bottom : 0) + 4;
+    // 画面の画像（PNG）では、上部バーが無いので右上に出す（画像にも出典を入れる）
+    const tb = document.getElementById('top-bar'), cw = canvas.width / (_cleanScale || 1);
+    const y0 = (!_cleanScale && tb && tb.getBoundingClientRect().bottom > 0 ? tb.getBoundingClientRect().bottom : 0) + 4;
     ctx.save();
     ctx.font = '11px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
     const s = '出典：地理院タイル', w = ctx.measureText(s).width;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(canvas.width - w - 14, y0, w + 10, 16);
-    ctx.fillStyle = '#e0e0e0'; ctx.fillText(s, canvas.width - 9, y0 + 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(cw - w - 14, y0, w + 10, 16);
+    ctx.fillStyle = '#e0e0e0'; ctx.fillText(s, cw - 9, y0 + 2);
     ctx.restore();
 }
 

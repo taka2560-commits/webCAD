@@ -80,12 +80,29 @@ function _saveFrameCache() {
     fc.w = canvas.width; fc.h = canvas.height; fc.epoch = _geomEpoch; fc.bg = canvasBg; fc.sig = _baseSignature();
 }
 
+// 画面の画像（PNG）を描いているときの倍率（0 は画面）。cad-share.js の drawCleanFrame
+let _cleanScale = 0;
+// 画面の画像（PNG）用: 選択・カーソル・スナップ・軸・補助の印を描かず、背景の地図・下絵・図形・寸法・写真のピンだけを k 倍で描く
+// （キャンバスの画素は呼ぶ側で k 倍にしておく。線の太さ・文字の大きさは画面と同じ見え方のまま細かくなる）
+function drawCleanFrame(k) {
+    _cleanScale = k;
+    try { _drawFrame(false); } finally { _cleanScale = 0; }
+}
+
 // 1フレーム分の描画（同期）。render() が requestAnimationFrame から呼ぶ。計測・テストからも直接呼べる
 // overlayOnly: 重ね表示だけが変わった描画要求（renderOverlay）。前回と同じ画面なら図形を描き直さない
 function _drawFrame(overlayOnly) {
         // 描画の状態を毎回初期に戻す（どこかで ctx.save() と restore() の数がずれても、点線・移動・透明度が
         // 次のコマの図形に残らないように。以前、座標寸法のプレビューの点線が残り、図面の線がすべて点線になった）
-        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.setLineDash([]); ctx.globalAlpha = 1;
+        const ck = _cleanScale;
+        ctx.setTransform(ck || 1, 0, 0, ck || 1, 0, 0); ctx.setLineDash([]); ctx.globalAlpha = 1;
+        if(ck) {
+            ctx.fillStyle = canvasBg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            if(typeof drawUnderlays === 'function') drawUnderlays();
+            drawEntities(); drawDimensions();
+            if(typeof drawPhotoPins === 'function') drawPhotoPins();
+            return;
+        }
         if(overlayOnly && _canReuseStaticFrame()) {
             // 図形・表示位置が前回と同じ: 保存した画面を貼るだけ（背景・軸・図形・寸法を含む）
             ctx.drawImage(_frameCache.canvas, 0, 0);

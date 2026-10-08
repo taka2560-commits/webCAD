@@ -941,6 +941,7 @@
                 <button class="menu-item-btn" data-fav="EXPORTDXF" onclick="exportDxf(); toggleTopMenu();" title="AutoCAD 向け（AutoCAD 2007 形式・UTF-8。寸法・測点の属性もそのまま。DWG では書き出せません）">DXF 出力</button>
                 <button class="menu-item-btn" data-fav="DXFJW" onclick="exportDxfJw(); toggleTopMenu();" title="Jw_cad・古い CAD 向け（R12 形式・Shift-JIS・mm。寸法・塗りつぶしは線・ソリッドに分けて書きます）">DXF（Jw_cad 向け）</button>
                 <button class="menu-item-btn" data-fav="PRINT" onclick="showPrintPanel(); toggleTopMenu();" title="用紙と縮尺を決めて PDF にする（図枠・表題欄・方位記号つき）">🖨 印刷・PDF</button>
+                <button class="menu-item-btn" data-fav="PNGOUT" onclick="toggleTopMenu(); exportScreenPng();" title="今の画面の図を画像（PNG）にします。選択・カーソルなどの印は入れません。スマホでは「📤 送る」で LINE・メールに送れます">🖼 画面の画像</button>
                 <button class="menu-item-btn danger" onclick="closeDrawing(); toggleTopMenu();">✕ 図面を閉じる</button>
             </div>
         </div>
@@ -1295,6 +1296,7 @@
     <script src="cad-motion.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-webcad.js"></script>
+    <script src="cad-share.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-guide-tours.js"></script>
     <script src="cad-guide-help.js"></script>

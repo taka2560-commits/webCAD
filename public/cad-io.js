@@ -890,6 +890,8 @@ function downloadBlob(blob, filename) {
     document.body.removeChild(a);
     // すぐ消すと、Safari（iPhone・iPad・Mac）では保存が始まる前に中身が無くなり、保存に失敗することがある
     setTimeout(() => URL.revokeObjectURL(url), 60000);
+    // スマホ・タブレットでは、共有メニュー（LINE・メール・「ファイル」に保存）で送れるよう「📤 送る」を出す（cad-share.js）
+    if(typeof offerShare === 'function') offerShare(blob, filename);
 }
 
 // ===== ファイルコマンド（cad-core.jsから呼ばれる） =====
@@ -901,6 +903,7 @@ function processIOCommand(cmd) {
     if(cmd === 'SAVEAS' || cmd === 'EXPORTDXF') { exportDxf(); return true; }
     if(cmd === 'DXFJW' || cmd === 'EXPORTDXFJW') { exportDxfJw(); return true; } // Jw_cad 向け（R12・Shift-JIS・mm。cad-dxf-r12.js）
     if(cmd === 'WEBCADOUT' || cmd === 'PACK') { exportWebcadFile(); return true; } // 図面一式（.webcad。cad-webcad.js）
+    if(cmd === 'PNGOUT' || cmd === 'PNG') { exportScreenPng(); return true; } // 画面の画像（cad-share.js）
     if(cmd === 'EXPORTDWG') { exportDwg(); return true; }
     return false;
 }
