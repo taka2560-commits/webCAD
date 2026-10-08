@@ -205,38 +205,7 @@ async function loadSimaFile(file) {
 }
 
 // ===== 座標CSV =====
-// 受け付ける並び（区切りはカンマまたはタブ。見出し行は自動で読み飛ばす）:
-//   点名, X, Y[, 標高]   /   点番号, 点名, X, Y[, 標高]
-//   （すべて数字の行は 3列=点名,X,Y / 4列=点名,X,Y,標高 / 5列以上=点番号,点名,X,Y,標高）
-function parseCoordCsv(text) {
-    const out = { points: [], skipped: 0 };
-    const isNum = (s) => /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s);
-    String(text).replace(/^\uFEFF/, '').split(/\r\n|\r|\n/).forEach(raw => {
-        const line = raw.trim();
-        if(!line) return;
-        const sep = (line.indexOf('\t') >= 0 && line.indexOf(',') < 0) ? '\t' : ',';
-        const f = _splitCsvLine(line, sep);
-        const firstText = f.findIndex(s => s !== '' && !isNum(s));
-        let num = '', name, nums;
-        if(firstText < 0) {
-            const vals = f.filter(s => s !== '');
-            if(vals.length >= 5) { num = vals[0]; name = vals[1]; nums = vals.slice(2); }
-            else if(vals.length >= 3) { name = vals[0]; nums = vals.slice(1); }
-            else { out.skipped++; return; }
-        } else {
-            name = f[firstText];
-            if(firstText > 0 && isNum(f[0])) num = f[0];
-            nums = f.slice(firstText + 1).filter(s => s !== '');
-            if(!nums.every(isNum) || nums.length < 2) { if(out.points.length) out.skipped++; return; } // 見出し行など
-        }
-        const X = parseFloat(nums[0]), Y = parseFloat(nums[1]);
-        const z = nums.length >= 3 ? parseFloat(nums[2]) : null;
-        if(!isFinite(X) || !isFinite(Y)) { out.skipped++; return; }
-        out.points.push({ num, name, X, Y, z: (z !== null && isFinite(z)) ? z : null });
-    });
-    return out;
-}
-
+// 読み込み（列の割り当て・プレビュー）は cad-csv-import.js
 // CSV の1行を項目に分ける（"…" で囲まれた項目の中の区切り文字・"" に対応。Excel の出力形式）
 function _splitCsvLine(line, sep) {
     const out = [];
@@ -252,33 +221,6 @@ function _splitCsvLine(line, sep) {
     }
     out.push(cur.trim());
     return out;
-}
-
-async function loadCoordCsvFile(file) {
-    addCommandLog(`座標CSVを読み込み中: ${file.name}...`);
-    try {
-        const dec = await _readTextFile(file);
-        const data = parseCoordCsv(dec.text);
-        if(!data.points.length) {
-            if(typeof _restoreAfterFailedImport === 'function') _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
-            if(typeof showToast === 'function') showToast('座標を読み取れませんでした。\n「点名,X,Y,標高」または「点番号,点名,X,Y,標高」の並びにしてください', { kind: 'error', ms: 6000 });
-            addCommandLog('注意: 座標を読み取れませんでした');
-            return null;
-        }
-        const r = addSurveyData(data.points, []);
-        setDrawingName(file.name);
-        zoomExtents();
-        render();
-        const msg = `座標CSV読み込み: 測点 ${r.pointCount}点` + (data.skipped ? `\n（読めない行 ${data.skipped}件は省略）` : '');
-        addCommandLog('-> ' + msg.replace(/\n/g, ' '));
-        if(typeof showToast === 'function') showToast(msg, 4000);
-        if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
-        return r;
-    } catch(err) {
-        addCommandLog(`エラー: 座標CSVの読み込みに失敗 - ${err.message}`);
-        if(typeof reportImportFailure === 'function') reportImportFailure('座標CSV', file.name, err);
-        return null;
-    }
 }
 
 // ===== 図面上の測点・区画を集める =====

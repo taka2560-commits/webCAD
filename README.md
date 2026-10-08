@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.31（2026年10月8日リリース）**
+**現在のバージョン: v5.32（2026年10月8日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（693件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（700件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-08: バージョン5.32（座標CSV の列の割り当て）** 📥
+  * cad-csv-import.js（新）: loadCoordCsvFile を移し、プロパティパネルに列の割り当て（select）とプレビュー。csvDetectSep（タブ・カンマ・空白）・csvRows・csvGuessMapping（行ごとの並び _csvRolesOfRow の多数決＋見出しの名前 _csvRoleOfName。見出しが無いときは localStorage cad_csv_map の割り当て）・csvPointsByRoles。📁開く の .csv・.txt は、取り込むを押してから _prepareImportTarget。
+  * cad-survey.js の parseCoordCsv（行ごとの推し量り）は外した。tests/csv-import.test.cjs、survey.test.cjs の CSV のテストを新しい推し量りに。
 
 * **2026-10-08: バージョン5.31（共有メニューで送る・画面の画像 PNG）** 📤
   * cad-share.js（新）: downloadBlob の最後に offerShare（指で操作する端末＝ (pointer: coarse) か isAppleTouchDevice、かつ navigator.canShare({ files }) のとき、スナックバーに「📤 送る」→ navigator.share。AbortError は黙る）。

@@ -236,6 +236,7 @@ const GUIDE_TOPICS = [
     { id: 'open', cat: 'file', title: '図面を開く（DXF・DWG・SIMA・座標CSV・SDR・図面一式）', keys: 'ひらく よみこみ ふぁいる dxf dwg しま csv sdr webcad いっしき 開く 読み込み ファイル 図面一式',
         steps: [
             '上のバーの 📁開く → DXF・DWG・SIMA（.sim）・座標CSV・SDR（.sdr）・図面一式（.webcad）を選びます。',
+            '座標CSV・テキスト（.csv・.txt）は、プレビューを見ながら列（点番号・点名・X・Y・標高）を選んでから取り込みます。区切り（カンマ・タブ・空白）・見出しの行の数も変えられ、「⇄ X と Y を入れ替える」で東・北の順のファイルにも合わせられます。',
             '図面があるときは「置き換える」か「追加する」を選びます。',
             '文字コード（UTF-8・Shift-JIS）は自動で判定します。',
         ],

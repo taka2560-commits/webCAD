@@ -124,23 +124,30 @@ describe('測量: SIMA・座標CSV', () => {
         assert.equal(app.eval('window._drawingName'), '現場.sim');
     });
 
-    it('座標CSVをいろいろな並びで読み取る（見出し行・点番号の有無・標高の有無・タブ区切り）', () => {
-        app.window.__csv = [
-            '点番号,点名,X,Y,標高',
-            '1,KP1,100.1,200.2,10.5',
-            '2,"KP,2",101,201,',
-            'KP3,102,202',
-            '4\t103\t203\t11',
-            '5,6,104,204,12',
-        ].join('\r\n');
-        const d = app.val('parseCoordCsv(window.__csv)');
-        assert.deepEqual(d.points.map((p) => [p.num, p.name, p.X, p.Y, p.z]), [
-            ['1', 'KP1', 100.1, 200.2, 10.5],
-            ['2', 'KP,2', 101, 201, null],
-            ['', 'KP3', 102, 202, null],
-            ['', '4', 103, 203, 11],
-            ['5', '6', 104, 204, 12],
-        ]);
+    it('座標CSVの列をいろいろな並びで推し量る（見出し行・点番号の有無・標高の有無・タブ・空白・見出しの名前・全角の数）', () => {
+        const read = (lines) => {
+            app.window.__csv = lines.join('\r\n');
+            return app.val(`(() => { const g = csvGuessMapping(window.__csv); const d = csvPointsByRoles(csvRows(window.__csv, g.sep), g.roles, g.header);
+                return { sep: g.sep, header: g.header, roles: g.roles, pts: d.points.map(p => [p.num, p.name, p.X, p.Y, p.z]), skipped: d.skipped }; })()`);
+        };
+        let r = read(['点番号,点名,X,Y,標高', '1,KP1,100.1,200.2,10.5', '2,"KP,2",101,201,']);
+        assert.deepEqual([r.sep, r.header, r.roles], [',', 1, ['num', 'name', 'X', 'Y', 'Z']]);
+        assert.deepEqual(r.pts, [['1', 'KP1', 100.1, 200.2, 10.5], ['2', 'KP,2', 101, 201, null]]);
+        r = read(['KP3,102,202', 'KP4,103,203']);
+        assert.deepEqual([r.header, r.roles], [0, ['name', 'X', 'Y']]);
+        r = read(['4\t103\t203\t11', '5\t104\t204\t12']);
+        assert.deepEqual([r.sep, r.roles, r.pts[0]], ['\t', ['name', 'X', 'Y', 'Z'], ['', '4', 103, 203, 11]]);
+        r = read(['5,6,104,204,12']);
+        assert.deepEqual(r.pts, [['5', '6', 104, 204, 12]]);
+        // 空白区切り（いくつ続いても1つ）
+        r = read(['KP1   100.1  200.2   10.5', 'KP2 101 201 11']);
+        assert.deepEqual([r.sep, r.pts], [' ', [['', 'KP1', 100.1, 200.2, 10.5], ['', 'KP2', 101, 201, 11]]]);
+        // 見出しの名前が「東・北」の順（E,N）なら、その並びで X（北）・Y（東）にする
+        r = read(['Name,E,N,H', 'A,200.5,100.25,3']);
+        assert.deepEqual([r.roles, r.pts], [['name', 'Y', 'X', 'Z'], [['', 'A', 100.25, 200.5, 3]]]);
+        // 全角の数
+        r = read(['ＫＰ１，１００．５，２００', 'KP2,101,201'].map((s) => s.replace(/，/g, ',')));
+        assert.deepEqual(r.pts[0], ['', 'ＫＰ１', 100.5, 200, null]);
     });
 
     it('座標CSVは UTF-8（BOM付き）で「点番号,点名,X,Y,標高」を書き出す', async () => {
