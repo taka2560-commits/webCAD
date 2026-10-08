@@ -103,6 +103,9 @@ function _buildSaveData(name) {
         savedUCSList: JSON.parse(JSON.stringify(savedUCSList)),
         // 図面の1単位（m / mm）。DWG・DXF を開くとファイルの単位に合わせるので、図面ごとに覚えて開いたときに戻す
         surveyUnit: (typeof getSurveyUnit === 'function') ? getSurveyUnit() : undefined,
+        // 線種表（取り込んだファイルの線種）と線種の尺度（LTSCALE）。cad-ltype.js
+        lineTypes: (typeof drawingLineTypes !== 'undefined') ? JSON.parse(JSON.stringify(drawingLineTypes)) : undefined,
+        ltscale: (typeof drawingLtscale !== 'undefined') ? drawingLtscale : undefined,
         entityCount: entities.length,
         savedAt: new Date().toISOString()
     };
@@ -134,6 +137,9 @@ function applyProjectData(data) {
     // 保存済みUCSリスト
     if (data.savedUCSList) savedUCSList = data.savedUCSList;
     else savedUCSList = [];
+    // 線種表と線種の尺度（以前の保存データには無いので、そのときは標準の線種・既定の尺度）
+    if (typeof drawingLineTypes !== 'undefined') drawingLineTypes = (data.lineTypes && typeof data.lineTypes === 'object') ? data.lineTypes : {};
+    if (typeof drawingLtscale !== 'undefined') drawingLtscale = (data.ltscale > 0) ? data.ltscale : null;
     // 図面の1単位（保存したときの単位に戻す。以前の保存データには無いので、そのときは今の設定のまま）
     if ((data.surveyUnit === 'm' || data.surveyUnit === 'mm') && typeof getSurveyUnit === 'function' &&
         getSurveyUnit() !== data.surveyUnit && typeof window.setSurveyUnit === 'function') window.setSurveyUnit(data.surveyUnit);

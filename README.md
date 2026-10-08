@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.26（2026年10月8日リリース）**
+**現在のバージョン: v5.27（2026年10月8日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（652件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（663件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-08: バージョン5.27（線種・線の太さ）** 〰️
+  * cad-ltype.js（新）: 図面の線種表 drawingLineTypes（ファイルの LTYPE。無ければ acadiso.lin と同じ標準の線種。2・X2 も）・線種の尺度 drawingLtscale（LTSCALE。既定は mm 500・m 0.5）・線の太さ（lw 1/100mm。画層の lt・lw に従う）。画面は makeLineStyler（模様 × LTSCALE × 図形の ltScale × 表示の倍率を setLineDash。1周期 4px 未満は実線。太さは mm × 4px、1〜6px）を drawEntities のまとめ描き（色・濃さ・描き方が同じものを1本のパス）に入れた。印刷は printLineStyle（[…] 0 d と w）。
+  * 取り込み: DXF は LTYPE 表（dxf-parser）・画層表の 6 と 370 は DXF の文字から（dxfLayerStylesFromText）・図形の 6/370/48・BYBLOCK はブロック参照の値。DWG は LTYPE の pattern・画層の線種は libredwg-web が空にするので dwg_ref_get_object_name で引き直す（readDwgLayerLinetypes）・線の太さは番号（0〜23・29 画層・30 ブロック・31 既定）。書き出しは線種表・画層の 6・図形の 6/370/48・$LTSCALE。保存データに lineTypes・ltscale。コマンド LTSCALE・LWDISPLAY。tests/linetype.test.cjs。
 
 * **2026-10-08: バージョン5.26（DWG・DXF の取りこぼしを減らす: 塗りつぶし・引出線・寸法線）** 📥
   * 手元の実物 31 本で取りこぼしを数えた（DWG は libredwg-web を Node で直接動かす: createByWasmInstance に wasmBinary を渡す）。DXF の HATCH・LEADER・MULTILEADER は dxf-parser 1.1.2 が読まず、知らせずに消えていた。DWG は HATCH・LEADER・POLYLINE3D を除外、SOLID は角が corner1〜4 で届くのに points を見ていたため全滅、寸法は文字だけ、ATTRIB は INSERT の中と図形一覧の両方から取り込んで二重。

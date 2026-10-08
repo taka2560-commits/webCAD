@@ -209,7 +209,7 @@ describe('表示の単位（m / mm）', () => {
         app.eval(`entities.push({ type:'LINE', layer:0, color:null, x1:1.5, y1:2.25, x2:4, y2:6 });
                   entities.push({ type:'CIRCLE', layer:0, color:null, cx:10, cy:20, radius:0.75 });
                   cmdState.highlightIdx = 0; updatePropertiesPanel();`);
-        const vals = () => app.val(`[...document.querySelectorAll('#props-content input.prop-val[type=number]')].map(i => i.value)`);
+        const vals = () => app.val(`[...document.querySelectorAll('#props-content input.prop-val[type=number]:not(.prop-lts)')].map(i => i.value)`);
         // 図面どおり（1単位＝1m）: 小数3桁（1mm まで）。以前は小数1桁（0.1m）で、2.25m が「2.3」と出ていた（値の監査で見つけた）
         assert.deepEqual(vals(), ['2.250', '1.500', '6.000', '4.000']);
         assert.equal(app.eval(`document.querySelector('#props-content .prop-unit-note')`), null);
@@ -262,7 +262,7 @@ describe('表示の単位（m / mm）', () => {
         assert.ok(t.includes('X: 2') && t.includes('Y: 29510'), t.join(','));
         // プロパティ欄: 測点の X・Y は mm の小数1桁
         app.eval(`entities.push({ type:'POINT', layer:0, color:null, x:29510.405, y:2.258, name:'A2-8' }); cmdState.highlightIdx = 1; updatePropertiesPanel();`);
-        const vals = app.val(`[...document.querySelectorAll('#props-content input.prop-val[type=number]')].map(i => i.value)`);
+        const vals = app.val(`[...document.querySelectorAll('#props-content input.prop-val[type=number]:not(.prop-lts)')].map(i => i.value)`);
         assert.ok(vals.includes('2.3') && vals.includes('29510.4'), vals.join(','));
         app.eval('cmdState.highlightIdx = -1;');
         // 座標を m で見たいときは「座標の単位」を m に（29510.405mm → 29.51m）

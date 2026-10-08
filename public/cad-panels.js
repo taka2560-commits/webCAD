@@ -394,6 +394,7 @@ window.updateLayerManagerContent = function() {
                 <div class="lm-name" style="${textStyle}" onclick="changeCurrentLayer('${l.index}')" title="クリックで作図画層に設定: ${escapeHtml(l.name)}">
                     ${currentMark}${escapeHtml(l.name)}
                 </div>
+                ${typeof ltypeOptionsHtml === 'function' ? `<select class="lm-lt" onchange="changeLayerLinetype(${l.index}, this.value)" title="画層の線種: ${escapeHtml(l.name)}" aria-label="画層「${escapeHtml(l.name)}」の線種">${ltypeOptionsHtml(layers[l.index] && layers[l.index].lt, false)}</select>` : ''}
                 ${picked ? '<span class="lm-pick-badge">消す候補</span>' : ''}
             </div>`;
     };
@@ -558,7 +559,7 @@ function _propNum(v, kind) {
 const PROP_COORD_KEYS = ['x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy'];
 const PROP_LENGTH_KEYS = ['radius', 'rx', 'ry', 'height'];
 // 数ではない欄（文字・色・名前・点番号・表示・標高（空欄＝なし））
-const PROP_TEXT_KEYS = ['color', 'text', 'name', 'num', 'z', 'textOverride', 'hidden'];
+const PROP_TEXT_KEYS = ['color', 'text', 'name', 'num', 'z', 'textOverride', 'hidden', 'lt', 'lw'];
 
 function updatePropertiesPanel() {
     const p = document.getElementById('props-content');
@@ -587,10 +588,23 @@ function updatePropertiesPanel() {
                 <button class="status-btn" style="font-size:10px;padding:2px 6px;border:1px solid #666;border-radius:3px;" onclick="hideLayerOfSelected()" title="この画層のオブジェクトをすべて非表示">🚫画層非表示</button>
             </div>
         </div>`;
+        if(layers[e.layer] && typeof ltypeOptionsHtml === 'function') {
+            // 画層の線種・線の太さ（画層に従う図形がこの線で描かれる）
+            html += `<div class="prop-row"><div class="prop-label">画層の線</div><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                <select class="prop-val" style="max-width:140px;" onchange="changeLayerLinetype(${e.layer}, this.value)" title="この画層の線種">${ltypeOptionsHtml(layers[e.layer].lt, false)}</select>
+                <select class="prop-val" style="max-width:96px;" onchange="changeLayerLineweight(${e.layer}, this.value)" title="この画層の線の太さ">${lweightOptionsHtml(layers[e.layer].lw, false)}</select>
+            </div></div>`;
+        }
         html += `<div class="prop-row"><div class="prop-label">色</div><div style="display:flex;align-items:center;gap:5px;">
             <input class="prop-val" type="color" value="${getEntityColor(e)}" onchange="changeEntityPropById(${eid}, 'color', this.value)">
             ${e.color ? `<button class="prop-btn" style="font-size:10px;padding:2px 4px;" onclick="changeEntityPropById(${eid}, 'color', null)">ByLayer</button>` : `<span style="font-size:10px;color:#888;">ByLayer</span>`}
         </div></div>`;
+        if(['LINE', 'PLINE', 'RECTANG', 'CIRCLE', 'ARC', 'ELLIPSE'].includes(e.type) && typeof ltypeOptionsHtml === 'function') {
+            // 線種・線の太さ（画層に従う／図形ごと）・線種の尺度。cad-ltype.js
+            html += `<div class="prop-row"><div class="prop-label">線種</div><select class="prop-val" onchange="changeEntityPropById(${eid}, 'lt', this.value)">${ltypeOptionsHtml(e.lt, true)}</select></div>`;
+            html += `<div class="prop-row"><div class="prop-label">線の太さ</div><select class="prop-val" onchange="changeEntityPropById(${eid}, 'lw', this.value)">${lweightOptionsHtml(e.lw, true)}</select></div>`;
+            html += `<div class="prop-row"><div class="prop-label">線種の尺度</div><input class="prop-val prop-lts" type="number" step="any" value="${e.ltScale > 0 ? e.ltScale : 1}" onchange="changeEntityPropById(${eid}, 'ltScale', this.value, this)"></div>`;
+        }
         html += `<div class="prop-row"><div class="prop-label">表示</div><input class="sw" role="switch" type="checkbox" ${e.hidden?'':'checked'} onchange="changeEntityPropById(${eid}, 'hidden', !this.checked)"></div>`;
         if(e.type === 'POINT' || e.size !== undefined) {
             html += `<div class="prop-row"><div class="prop-label">サイズ</div><input class="prop-val" type="number" step="0.1" value="${e.size||10}" onchange="changeEntityPropById(${eid}, 'size', this.value, this)"></div>`;
@@ -670,7 +684,7 @@ window.changeEntityProp = function(idx, prop, val, el) {
     if(!PROP_TEXT_KEYS.includes(prop)) {
         const num = parseFloat(typeof cogoHalfWidth === 'function' ? cogoHalfWidth(val) : val);
         const bad = !isFinite(num) ? '数を入れてください'
-            : ((PROP_LENGTH_KEYS.includes(prop) || prop === 'size') && num <= 0) ? '0 より大きい数を入れてください'
+            : ((PROP_LENGTH_KEYS.includes(prop) || prop === 'size' || prop === 'ltScale') && num <= 0) ? '0 より大きい数を入れてください'
             : (prop === 'alpha' && (num < 0 || num > 1)) ? '0〜1 の数を入れてください' : '';
         if(bad) {
             if(el && typeof fieldError === 'function') { fieldError(el, `${bad}（この欄はまだ変わっていません）`); return; }
@@ -698,6 +712,8 @@ window.changeEntityProp = function(idx, prop, val, el) {
         entities[idx].z = (val === '' || val === null || !isFinite(zv)) ? null : zv;
     }
     else if(prop==='textOverride') entities[idx].textOverride = val===''?null:val;
+    else if(prop==='lt') { if(!val || String(val).toUpperCase() === 'BYLAYER') delete entities[idx].lt; else entities[idx].lt = String(val); } // 線種（空は画層に従う）
+    else if(prop==='lw') { const w = Number(val); if(val === '' || val === null || !(w >= 0)) delete entities[idx].lw; else entities[idx].lw = w; } // 線の太さ（1/100 mm）
     else if(prop==='hidden') entities[idx].hidden = (val === 'true' || val === true);
     else {
         let num = parseFloat(val);

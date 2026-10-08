@@ -35,6 +35,10 @@ function _clearForReplace() {
     entities.length = 0;
     layers.splice(0, layers.length, { name: '0', color: '#00ffff', visible: true });
     currentLayerIndex = 0;
+    if(typeof drawingLineTypes !== 'undefined') { // 線種表・線種の尺度も新しいファイルのものにする（読めなかったら戻す）
+        _importLtState = { t: drawingLineTypes, s: drawingLtscale };
+        drawingLineTypes = {}; drawingLtscale = null;
+    }
     cmdState.highlightIdx = -1; cmdState.selectedIndices = [];
     if(typeof window.setCurrentProjectName === 'function') window.setCurrentProjectName(null);
     initLayers();
@@ -42,12 +46,14 @@ function _clearForReplace() {
 }
 // 置き換えで開いたファイルが読めなかったとき、消した図面を元に戻す（使った ↩ 1回分も戻す）。戻したら true。
 // 読み込みのあいだに別の操作をしていたら（↩ の履歴が進んでいたら）、その操作を消さないよう戻さない
+let _importLtState = null; // 置き換える前の線種表・線種の尺度
 function _restoreAfterFailedImport() {
     const snap = _importUndo, proj = _importProject;
     _importUndo = null; _importProject = null;
     if(_importMode !== 'replace' || !snap || undoStack[undoStack.length - 1] !== snap) return false;
     undoStack.pop();
     _applyUndoSnapshot(snap);
+    if(_importLtState && typeof drawingLineTypes !== 'undefined') { drawingLineTypes = _importLtState.t; drawingLtscale = _importLtState.s; }
     _bumpGeomEpoch();
     if(proj && typeof window.restoreProjectState === 'function') window.restoreProjectState(proj);
     _importMode = 'append';

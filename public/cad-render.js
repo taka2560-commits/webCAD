@@ -401,14 +401,20 @@ function drawEntities() {
     const TX = rotated ? (x, y) => (x * rc - y * rs) * sc + vx : (x) => x * sc + vx;
     const TY = rotated ? (x, y) => -(x * rs + y * rc) * sc + vy : (x, y) => -y * sc + vy;
 
-    let batchOpen = false, batchColor = null, batchAlpha = 1;
+    let batchOpen = false, batchColor = null, batchAlpha = 1, batchStyle = '';
+    const solidW = ctx.lineWidth;
+    // 線種・線の太さ（cad-ltype.js）。同じ色・濃さ・線の描き方で続く図形をまとめて描く
+    const lineStyle = (typeof makeLineStyler === 'function') ? makeLineStyler() : null;
     const flush = () => { if(batchOpen) { ctx.stroke(); batchOpen = false; } };
-    const begin = (color, alpha) => {
-        if(batchOpen && color === batchColor && alpha === batchAlpha) return;
+    const begin = (color, alpha, st) => {
+        const key = st ? st.key : '';
+        if(batchOpen && color === batchColor && alpha === batchAlpha && key === batchStyle) return;
         flush();
         ctx.globalAlpha = alpha;
         ctx.strokeStyle = color;
-        batchColor = color; batchAlpha = alpha;
+        ctx.lineWidth = st ? st.w : solidW;
+        ctx.setLineDash(st && st.dash ? st.dash : []);
+        batchColor = color; batchAlpha = alpha; batchStyle = key;
         ctx.beginPath();
         batchOpen = true;
     };
@@ -445,27 +451,28 @@ function drawEntities() {
             continue;
         }
 
+        const ls = lineStyle ? lineStyle(e) : null;
         if(t === 'LINE') {
-            begin(color, alpha);
+            begin(color, alpha, ls);
             ctx.moveTo(TX(e.x1, e.y1), TY(e.x1, e.y1)); ctx.lineTo(TX(e.x2, e.y2), TY(e.x2, e.y2));
         } else if(t === 'CIRCLE') {
-            begin(color, alpha);
+            begin(color, alpha, ls);
             const cx = TX(e.cx, e.cy), cy = TY(e.cx, e.cy), r = e.radius * sc;
             ctx.moveTo(cx + r, cy); ctx.arc(cx, cy, r, 0, Math.PI * 2);
         } else if(t === 'ARC') {
-            begin(color, alpha);
+            begin(color, alpha, ls);
             const cx = TX(e.cx, e.cy), cy = TY(e.cx, e.cy), r = e.radius * sc;
             const a0 = -e.startAngle - rot, a1 = -e.endAngle - rot;
             ctx.moveTo(cx + r * Math.cos(a0), cy + r * Math.sin(a0));
             ctx.arc(cx, cy, r, a0, a1, e.counterclockwise !== false);
         } else if(t === 'RECTANG') {
-            begin(color, alpha);
+            begin(color, alpha, ls);
             ctx.moveTo(TX(e.x1, e.y1), TY(e.x1, e.y1)); ctx.lineTo(TX(e.x2, e.y1), TY(e.x2, e.y1));
             ctx.lineTo(TX(e.x2, e.y2), TY(e.x2, e.y2)); ctx.lineTo(TX(e.x1, e.y2), TY(e.x1, e.y2)); ctx.closePath();
         } else if(t === 'PLINE') {
             const pts = e.points;
             if(!pts || pts.length < 2) continue;
-            begin(color, alpha);
+            begin(color, alpha, ls);
             let lx = TX(pts[0].x, pts[0].y), ly = TY(pts[0].x, pts[0].y);
             ctx.moveTo(lx, ly);
             const last = pts.length - 1;
@@ -478,7 +485,7 @@ function drawEntities() {
             }
             if(e.closed) ctx.closePath();
         } else if(t === 'ELLIPSE') {
-            begin(color, alpha);
+            begin(color, alpha, ls);
             const cx = TX(e.cx, e.cy), cy = TY(e.cx, e.cy), th = -(e.rotation || 0) - rot;
             ctx.moveTo(cx + e.rx * sc * Math.cos(th), cy + e.rx * sc * Math.sin(th));
             ctx.ellipse(cx, cy, e.rx * sc, e.ry * sc, th, 0, Math.PI * 2);

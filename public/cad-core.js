@@ -53,6 +53,9 @@ function showOptionsPanel(){
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" class="sw" role="switch" ${hideArcs?'checked':''} onchange="setImportHideArcs(this.checked)"> 取り込み時に円弧を非表示にする</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" class="sw" role="switch" ${hideFills?'checked':''} onchange="setImportHideFills(this.checked)"> 取り込み時に塗りつぶしを非表示にする</label>
             <div style="color:#888;font-size:10px;">非表示にした円弧・塗りつぶし（塗り・斜線などの模様）は、画層管理の「円弧を表示」「塗りつぶしを表示」で表示できます</div>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" class="sw" role="switch" ${(typeof showLineweights === 'undefined' || showLineweights)?'checked':''} onchange="setShowLineweights(this.checked)"> 線の太さを表示する</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#ddd;">線種の尺度（LTSCALE）<input class="prop-val" type="number" step="any" style="width:90px;" value="${typeof getDrawingLtscale === 'function' ? getDrawingLtscale() : 1}" onchange="setDrawingLtscale(this.value)"></label>
+            <div style="color:#888;font-size:10px;">破線・一点鎖線などの模様の長さの倍率です（AutoCAD の LTSCALE。DWG・DXF を開くとファイルの値になります）</div>
         </div>
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
             <div style="font-size:11px;color:#aaa;font-weight:700;">オフライン・データ</div>

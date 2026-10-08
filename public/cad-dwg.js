@@ -49,6 +49,7 @@ async function loadDwgFile(file) {
 
         await busyStep('  図形に変換中…');
         const db = libredwg.convert(dwg);
+        db.__layerLt = readDwgLayerLinetypes(libredwg, dwg); // 画層の線種（読込エンジンは空にしているので引き直す。cad-ltype.js）
 
         // C側のメモリ解放
         libredwg.dwg_free(dwg);
@@ -116,6 +117,9 @@ function convertDwgDatabaseToApp(db) {
     const result = { entities: [], warnings: [], paperSkipped: 0, skipStats: {}, hiddenFills: 0 };
     const dh = db.header || {};
     _beginImport(dh.INSUNITS, dh.DIMTXT, dh.DIMSCALE, dh.DIMASZ); // 寸法の値の桁・文字と矢印の大きさ（ファイルの単位・寸法の設定）
+    // 線種表と線種の尺度（LTSCALE）。cad-ltype.js
+    registerFileLinetypes(((db.tables && db.tables.LTYPE && db.tables.LTYPE.entries) || []).map(t => ({ name: t.name, d: (t.pattern || []).map(p => p.elementLength), desc: t.description })));
+    applyFileLtscale(dh.LTSCALE);
     const hideArcs = shouldHideImportedArcs();
 
     // 画層テーブル: 既存の layers に無いものだけ追加し、以降は「名前→index」で解決する
@@ -129,7 +133,13 @@ function convertDwgDatabaseToApp(db) {
             else if (cIdx === undefined && typeof l.color === 'number') cIdx = l.color;
             if (cIdx !== undefined && cIdx > 0 && cIdx < 256) hexColor = aciToHex(cIdx);
             const lName = l.name || '0';
-            if (!layers.find(x => x.name === lName)) layers.push({ name: lName, color: hexColor, visible: !l.off && !l.frozen });
+            if (!layers.find(x => x.name === lName)) {
+                const lay = { name: lName, color: hexColor, visible: !l.off && !l.frozen };
+                const lt = (db.__layerLt || {})[lName], lw = dwgLineweight(l.lineweight);
+                if (lt && String(lt).toUpperCase() !== 'CONTINUOUS') lay.lt = lt;
+                if (typeof lw === 'number') lay.lw = lw;
+                layers.push(lay);
+            }
         });
     }
     const layerIndexOf = (name) => {
@@ -155,7 +165,7 @@ function convertDwgDatabaseToApp(db) {
     };
 
     // 再帰的にエンティティを展開する内部関数（gid: 最上位INSERT単位のグループID）
-    function processDwgEntity(ent, depth, pX, pY, sX, sY, rot, gid, blockName) {
+    function processDwgEntity(ent, depth, pX, pY, sX, sY, rot, gid, blockName, blk) {
         if (depth > 10) return; // 無限再帰防止
         try {
             // ブロック参照 (INSERT) の再帰展開
@@ -165,6 +175,8 @@ function convertDwgDatabaseToApp(db) {
                 const bnHere = blockName || ent.name;
                 const topLevel = !gid;
                 const startCount = result.entities.length;
+                // ブロック参照の線種・太さ（中の BYBLOCK の図形に渡す）
+                const insStyle = insertLineStyle(importLineStyle(ent.lineType, dwgLineweight(ent.lineweight), 1, blk), layerIndexOf(typeof ent.layer === 'object' ? (ent.layer && ent.layer.name) : ent.layer), blk);
                 if (b && b.entities && Array.isArray(b.entities)) {
                     const insX = ent.insertionPoint ? ent.insertionPoint.x : 0;
                     const insY = ent.insertionPoint ? ent.insertionPoint.y : 0;
@@ -179,11 +191,11 @@ function convertDwgDatabaseToApp(db) {
                     const bpx = bp ? (bp.x || 0) : 0, bpy = bp ? (bp.y || 0) : 0;
                     const newPx = insWx - (newSx * bpx * Math.cos(newRot) - newSy * bpy * Math.sin(newRot));
                     const newPy = insWy - (newSx * bpx * Math.sin(newRot) + newSy * bpy * Math.cos(newRot));
-                    b.entities.forEach(child => processDwgEntity(child, depth + 1, newPx, newPy, newSx, newSy, newRot, gidHere, bnHere));
+                    b.entities.forEach(child => processDwgEntity(child, depth + 1, newPx, newPy, newSx, newSy, newRot, gidHere, bnHere, insStyle));
                 }
                 // 属性（測点名など）が INSERT に付随している場合
                 const attrs = ent.attributes || ent.attribs || ent.attribList;
-                if (Array.isArray(attrs)) attrs.forEach(a => processDwgEntity(Object.assign({ type: 'ATTRIB' }, a), depth + 1, pX, pY, sX, sY, rot, gidHere, bnHere));
+                if (Array.isArray(attrs)) attrs.forEach(a => processDwgEntity(Object.assign({ type: 'ATTRIB' }, a), depth + 1, pX, pY, sX, sY, rot, gidHere, bnHere, insStyle));
                 // 最上位の挿入点を記録（座標一覧・SIMA出力でブロックの測点を扱うため）
                 if (topLevel && ent.insertionPoint) {
                     const ix = pX + (ent.insertionPoint.x * sX * Math.cos(rot) - ent.insertionPoint.y * sY * Math.sin(rot));
@@ -204,7 +216,7 @@ function convertDwgDatabaseToApp(db) {
 
             let color = null; // ByLayer
             if (ent.colorIndex !== undefined && ent.colorIndex !== 256 && ent.colorIndex !== 0) color = aciToHex(ent.colorIndex);
-            const base = { layer, color };
+            const base = Object.assign({ layer, color }, importLineStyle(ent.lineType, dwgLineweight(ent.lineweight), ent.lineTypeScale, blk)); // 線種・線の太さ（cad-ltype.js）
 
             if (ent.type === 'LINE') {
                 if (ent.startPoint && ent.endPoint) {
@@ -235,7 +247,7 @@ function convertDwgDatabaseToApp(db) {
                 const flags = Number(ent.flags) || 0;
                 if (ent.invisible || (flags & 1)) return;
                 const str = gid ? ((ent.constant || (flags & 2)) ? (ent.text || '') : '') : (ent.tag || ent.text || '');
-                if (str) processDwgEntity(Object.assign({}, ent, { type: 'TEXT', text: str, textValue: str }), depth, pX, pY, sX, sY, rot, gid, blockName);
+                if (str) processDwgEntity(Object.assign({}, ent, { type: 'TEXT', text: str, textValue: str }), depth, pX, pY, sX, sY, rot, gid, blockName, blk);
             } else if (ent.type === 'TEXT' || ent.type === 'ATTRIB') {
                 if (ent.type === 'ATTRIB' && (ent.invisible || (ent.flags & 1))) return;
                 const pt = ent.alignmentPoint || ent.insertionPoint || ent.insertion_pt || ent.position || ent.startPoint;
@@ -270,7 +282,8 @@ function convertDwgDatabaseToApp(db) {
                 if (db0 && Array.isArray(db0.entities) && db0.entities.length) {
                     const start = result.entities.length;
                     const g = gid || newGroupId('d'), bn = blockName || '寸法'; // 寸法1つを1つのまとまりに
-                    db0.entities.forEach(child => processDwgEntity(child, depth + 1, pX, pY, sX, sY, rot, g, bn));
+                    const dimStyle = insertLineStyle(importLineStyle(ent.lineType, dwgLineweight(ent.lineweight), 1, blk), layer, blk);
+                    db0.entities.forEach(child => processDwgEntity(child, depth + 1, pX, pY, sX, sY, rot, g, bn, dimStyle));
                     if (result.entities.length > start) { unhideFills(result.entities.slice(start)); return; } // 矢印（塗り）は非表示にしない
                 }
                 const pt = ent.textPoint || ent.definitionPoint || ent.insertionPoint;

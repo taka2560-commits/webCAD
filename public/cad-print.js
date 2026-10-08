@@ -147,6 +147,9 @@ function printCompose(o, center, rot, meta) {
     const setStroke = (c) => { const s = c.map(pdfNum).join(' ') + ' RG'; if(s !== stroke) { out.push(s); stroke = s; } };
     const setFill = (c) => { const s = c.map(pdfNum).join(' ') + ' rg'; if(s !== fill) { out.push(s); fill = s; } };
     const setW = (mm) => { const s = pdfNum(mm * k) + ' w'; if(s !== lw) { out.push(s); lw = s; } };
+    let dashS = '[] 0 d';
+    const setDash = (arr) => { const s = (arr && arr.length) ? '[' + arr.map(pdfNum).join(' ') + '] 0 d' : '[] 0 d'; if(s !== dashS) { out.push(s); dashS = s; } };
+    const LINEAR = new Set(['LINE', 'PLINE', 'RECTANG', 'CIRCLE', 'ARC', 'ELLIPSE']);
     const M = (p) => pdfNum(p[0]) + ' ' + pdfNum(p[1]);
     // 円弧（図面の角度 a0 から開き da。反時計回りが正）を 90° 以下の3次ベジェに分けて足す
     const arcPath = (cx, cy, r, a0, da, move) => {
@@ -287,10 +290,13 @@ function printCompose(o, center, rot, meta) {
         if(outside(e)) return;
         const c = printColor(getEntityColor(e), o.color);
         setStroke(c);
+        // 線の太さ（図形・画層の値。無ければ 0.2mm）と線種（点線）。cad-ltype.js
+        const ls = (typeof printLineStyle === 'function' && LINEAR.has(e.type)) ? printLineStyle(e, mmU, k) : null;
+        if(ls) { setW(ls.wmm); setDash(ls.dash); } else { setDash(null); if(LINEAR.has(e.type)) setW(0.2); }
         if(e.type === 'PIN') drawPin(e); else drawShape(e, c);
         count++;
     });
-    out.push('Q');
+    out.push('Q'); dashS = '[] 0 d'; // 切り抜きを戻すと、点線の指定も戻る
     // 方位記号（右上）: 北は図面の +y を画面と同じだけ回した向き
     {
         const r = 6, ox = P.inner.x + P.inner.w - r - 5, oy = P.inner.y + P.inner.h - r - 5, na = Math.PI / 2 + rot;

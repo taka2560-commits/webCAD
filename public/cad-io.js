@@ -50,7 +50,7 @@ function _loadDxfBuffer(file, e) {
             const parser = new window.DxfParser();
             registerExtraDxfHandlers(parser, text);
             const dxf = parser.parseSync(text);
-            importDxfData(dxf, { skipUndo: true });
+            importDxfData(dxf, { skipUndo: true, text });
             // 開いた直後にアプリが落ちても復元できるよう、読み込んだ図面を自動保存の対象にする
             if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
             setDrawingName(file.name);
@@ -153,6 +153,11 @@ function importDxfData(dxf, opts) {
     const hd = (dxf && dxf.header) || {};
     _beginImport(hd.$INSUNITS, hd.$DIMTXT, hd.$DIMSCALE, hd.$DIMASZ); // 寸法の値の桁・文字と矢印の大きさ（ファイルの単位・寸法の設定）
     _dxfLayersAdded = false;
+    // 線種表・線種の尺度（LTSCALE）・画層の線種と線の太さ（画層表の 6・370 は dxf-parser が読まないので DXF の文字から）。cad-ltype.js
+    const ltTable = dxf.tables && dxf.tables.lineType && dxf.tables.lineType.lineTypes;
+    if(ltTable) registerFileLinetypes(Object.values(ltTable).map(t => ({ name: t.name, d: t.pattern || [], desc: t.description })));
+    applyFileLtscale(hd.$LTSCALE);
+    const layerStyles = dxf.layerStyles || (opts.text ? dxfLayerStylesFromText(opts.text) : {});
     const hideArcs = shouldHideImportedArcs();
     let importCount = 0, hiddenFills = 0;
     const skipStats = {};
@@ -167,7 +172,11 @@ function importDxfData(dxf, opts) {
         Object.keys(dxfLayers).forEach(name => {
             const dl = dxfLayers[name];
             if(!layers.find(l => l.name === name)) {
-                layers.push({ name: name, color: dxfLayerColorHex(dl), visible: !(dl.visible === false || dl.frozen === true) });
+                const lay = { name: name, color: dxfLayerColorHex(dl), visible: !(dl.visible === false || dl.frozen === true) };
+                const ls = layerStyles[name] || {};
+                if(ls.lt && String(ls.lt).toUpperCase() !== 'CONTINUOUS') lay.lt = ls.lt;
+                if(typeof ls.lw === 'number' && ls.lw >= 0) lay.lw = ls.lw;
+                layers.push(lay);
             }
         });
         initLayers();
@@ -296,10 +305,12 @@ let _importSkipNote = null;
 // ・ブロック基点(BLOCK 10/20)を差し引いてから縮尺・回転・挿入点を適用する
 // ・ネストしたINSERTは親の回転・縮尺を継承する
 // ・展開した図形には gid（挿入1つ＝1グループ）と blockName を付与し、まとめて選択・移動・非表示できるようにする
-function expandInsert(insertEnt, blocks, depth, gid, blockName) {
+function expandInsert(insertEnt, blocks, depth, gid, blockName, blkStyle) {
     if(depth > 10) return []; // 無限再帰防止
     const block = blocks[insertEnt.name];
     if(!block || !block.entities) return [];
+    // ブロック参照の線種・太さ（中の BYBLOCK の図形に渡す）
+    const insStyle = insertLineStyle(importLineStyle(insertEnt.lineType, dxfLineweight(insertEnt.lineweight), 1, blkStyle), dxfLayerIndex(insertEnt.layer), blkStyle);
     gid = gid || newGroupId('b');
     blockName = blockName || insertEnt.name;
 
@@ -339,14 +350,14 @@ function expandInsert(insertEnt, blocks, depth, gid, blockName) {
                             xScale: ((be.xScale === undefined || be.xScale === 0) ? 1 : be.xScale) * sx,
                             yScale: ((be.yScale === undefined || be.yScale === 0) ? 1 : be.yScale) * sy
                         });
-                        expandInsert(nested, blocks, depth + 1, gid, blockName).forEach(n => result.push(n));
+                        expandInsert(nested, blocks, depth + 1, gid, blockName, insStyle).forEach(n => result.push(n));
                     } else if(be.type === 'ATTDEF') {
                         // 定数属性だけはブロック定義の値をそのまま表示する。可変属性の値は INSERT 側の ATTRIB が持つ
-                        if(be.constant && !be.invisible) tagAll(convertDxfEntity(Object.assign({}, be, { type: 'TEXT', halign: be.horizontalJustification, valign: be.verticalJustification }), ox, oy, sx, sy, rot));
+                        if(be.constant && !be.invisible) tagAll(convertDxfEntity(Object.assign({}, be, { type: 'TEXT', halign: be.horizontalJustification, valign: be.verticalJustification }), ox, oy, sx, sy, rot, insStyle));
                     } else if(be.type === 'ATTRIB') {
-                        if(!be.invisible) tagAll(convertDxfEntity(be, ox, oy, sx, sy, rot));
+                        if(!be.invisible) tagAll(convertDxfEntity(be, ox, oy, sx, sy, rot, insStyle));
                     } else {
-                        const r = convertDxfEntity(be, ox, oy, sx, sy, rot);
+                        const r = convertDxfEntity(be, ox, oy, sx, sy, rot, insStyle);
                         if((!r || (Array.isArray(r) && !r.length)) && _importSkipNote) _importSkipNote(be.type || '?');
                         tagAll(r);
                     }
@@ -427,8 +438,8 @@ function evalBSplinePoints(ctrl, degree, knots, samples) {
 }
 
 // ===== DXFエンティティ変換 =====
-// (offX, offY, scaleX, scaleY, rotation) はブロック展開時の変換。回転はラジアン
-function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
+// (offX, offY, scaleX, scaleY, rotation) はブロック展開時の変換。回転はラジアン。blk はブロック参照の線種・太さ（BYBLOCK 用）
+function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation, blk) {
     offX = offX || 0; offY = offY || 0;
     scaleX = (scaleX === undefined || scaleX === 0) ? 1 : scaleX;
     scaleY = (scaleY === undefined || scaleY === 0) ? 1 : scaleY;
@@ -442,7 +453,7 @@ function convertDxfEntity(e, offX, offY, scaleX, scaleY, rotation) {
     const sAbs = Math.abs(scaleX);
     const layer = dxfLayerIndex(e.layer);
     const color = dxfEntityColorHex(e);
-    const base = { layer, color };
+    const base = Object.assign({ layer, color }, importLineStyle(e.lineType, dxfLineweight(e.lineweight), e.lineTypeScale, blk)); // 線種・線の太さ（cad-ltype.js）
     if(e.visible === false) base.hidden = true;
     const mk = (obj) => Object.assign({}, base, obj);
 
@@ -655,28 +666,36 @@ function exportDxf() {
         const unitMm = (typeof getSurveyUnit === 'function') && getSurveyUnit() === 'mm';
         d.setUnits(unitMm ? 'Millimeters' : 'Meters');
         // 画層登録（カラー対応）
-        layers.forEach(l => { try { d.addLayer(l.name, hexToAci(l.color), 'CONTINUOUS'); } catch(e){} });
+        // 線種表（使っている線種）と線種の尺度（LTSCALE）。cad-ltype.js
+        if(typeof exportLinetypes === 'function') exportLinetypes(d);
+        try { d.header('LTSCALE', [[40, getDrawingLtscale()]]); } catch { /* 書けなくても続行 */ }
+        layers.forEach(l => { try { d.addLayer(l.name, hexToAci(l.color), l.lt || 'CONTINUOUS'); } catch(e){} });
         // 寸法出力用の画層を事前登録（未定義のままsetActiveLayerするとエクスポート全体が失敗する）
         if(!layers.find(l => l.name === '寸法')) {
             try { d.addLayer('寸法', 4, 'CONTINUOUS'); } catch(e){}
         }
-        // 図形ごとの色（ByLayer 以外）。dxf-writer は図形単位の色に対応していないため、
-        // 直前に追加した図形の出力時に「画層(8)の直後に色(62)」を差し込む（既定の 62=256 は置き換え）
-        const applyEntityColor = (hex) => {
-            if(!hex) return;
+        // 図形ごとの色（ByLayer 以外）・線種（6）・線の太さ（370）・線種の尺度（48）。dxf-writer は図形単位の色・線種に対応していないため、
+        // 直前に追加した図形の出力時に「画層(8)の直後」に差し込む（既定の 62=256 は置き換え）
+        const applyEntityColor = (ent) => {
+            const hex = ent && ent.color;
+            const extra = [];
+            if(ent && ent.lt) extra.push([6, String(ent.lt)]);
+            if(hex) extra.push([62, hexToAci(hex)]);
+            if(ent && typeof ent.lw === 'number' && ent.lw >= 0) extra.push([370, ent.lw]);
+            if(ent && ent.ltScale > 0 && ent.ltScale !== 1) extra.push([48, ent.ltScale]);
+            if(!extra.length) return;
             const shapes = d.activeLayer && d.activeLayer.shapes;
             const shape = shapes && shapes[shapes.length - 1];
             if(!shape || typeof shape.tags !== 'function') return;
-            const aci = hexToAci(hex);
             const origTags = shape.tags.bind(shape);
             shape.tags = (manager) => {
                 const hadOwn = Object.prototype.hasOwnProperty.call(manager, 'push');
                 const origPush = manager.push;
                 let injected = false;
                 manager.push = function(code, value) {
-                    if(code === 62 && injected) return;
+                    if(code === 62 && injected && hex) return;
                     origPush.call(manager, code, value);
-                    if(code === 8 && !injected) { origPush.call(manager, 62, aci); injected = true; }
+                    if(code === 8 && !injected) { extra.forEach(([c, v]) => origPush.call(manager, c, v)); injected = true; }
                 };
                 try { origTags(manager); }
                 finally { if(hadOwn) manager.push = origPush; else delete manager.push; }
@@ -793,7 +812,7 @@ function exportDxf() {
             else if(e.type === 'PIN') { drawn = false; } // 現場写真・メモのピンはアプリだけのもの（DXF には出さない）
             else { drawn = false; skipped++; }
 
-            if(drawn) applyEntityColor(e.color);
+            if(drawn) applyEntityColor(e);
         });
         if(skipped > 0) addCommandLog(`  注意: 書き出しに未対応の図形 ${skipped}個 を省略しました`);
         const blob = new Blob([d.toDxfString()], {type:'application/dxf'});

@@ -307,6 +307,7 @@ function _dxfCommon(type, tags) {
         if(c === 8) e.layer = v; else if(c === 62) e.colorIndex = Number(v); else if(c === 420) e.color = Number(v);
         else if(c === 67) e.inPaperSpace = Number(v) !== 0; else if(c === 330) e.ownerHandle = String(v); else if(c === 5) e.handle = String(v);
         else if(c === 60) e.visible = Number(v) === 0; else if(c === 6) e.lineType = String(v); else if(c === 370) e.lineweight = Number(v);
+        else if(c === 48) e.lineTypeScale = Number(v);
         else continue;
         seen.add(c);
     }
