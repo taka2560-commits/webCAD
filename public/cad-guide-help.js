@@ -351,6 +351,15 @@ const GUIDE_TOPICS = [
             '☰ → ↩WCSリセット: 本来の座標に戻します。💾UCS保存・UCS読込 で名前を付けて使い分けます。',
         ],
         tips: ['下のステータスバーの左に、今の座標系（WCS・UCS）が出ます。', 'SIMA・座標CSV・測量計算は、UCS を設定していても図面の本来の座標（WCS）で扱います。'] },
+    { id: 'shareapp', cat: 'setting', title: 'このアプリを人に渡す（QR コード）', where: '☰ メニュー → 📱 このアプリを渡す（コマンド QR）', keys: 'きゅーあーる qr こーど わたす しょうかい りんく いんすとーる ほーむがめん ついか きょうゆう QRコード 渡す 紹介 リンク インストール ホーム画面 共有',
+        lead: 'このアプリのリンクを大きな QR コードで出します。相手がスマホのカメラで読み取ると、Web CAD が開きます。',
+        steps: [
+            '☰ メニュー →「📱 このアプリを渡す」。□（画面いっぱい）で QR を大きくできます。',
+            '相手は、カメラで QR を読み取って開き、ホーム画面に追加します（iPhone は Safari の共有ボタン →「ホーム画面に追加」、Android は Chrome の ⋮ →「アプリをインストール」か「ホーム画面に追加」）。',
+            '「📤 リンクを送る」で LINE・メールなどにリンクを送れます。「📋 リンクをコピー」もあります。',
+        ],
+        tips: ['QR はアプリの中で作るので、電波の無い所でも出せます（相手が開くには通信が要ります。一度開けば、そのあとは電波が無くても使えます）。', '図面は端末ごとに保存されます。図面を渡すときは ☰「📦 図面一式」や DXF を送ります。'],
+        open: { label: '📱 QR コードを出す', run: () => showShareAppPanel() } },
     { id: 'fav', cat: 'setting', title: 'お気に入りのボタン（よく使うコマンド）', where: '☰ メニュー → ⭐ お気に入り', keys: 'おきにいり ほし すたー とうろく ふろーてぃんぐ ぼたん しょーとかっと よくつかう お気に入り 登録 ショートカット',
         lead: 'よく使うコマンドを登録すると、画面の右に浮かぶバーのボタンから、すぐに始められます。',
         steps: [
@@ -542,7 +551,7 @@ const GUIDE_COMMANDS = [
         ['GNSS', 'GPS', '現在地'], ['GNSSZONE', '-', '系番号の選択'], ['SIMAOUT', '-', 'SIMA出力'], ['CSVOUT', '-', '座標CSV出力']]],
     ['図面・表示', [['OPEN', '-', '開く（IMPORT）'], ['SAVE', '-', '保存'], ['PROJECTS', '-', '保存一覧（RESTORE）'], ['WEBCADOUT', 'PACK', '図面一式の書き出し（.webcad）'], ['EXPORTDXF', 'SAVEAS', 'DXF出力'], ['DXFJW', '-', 'DXF出力（Jw_cad 向け）'], ['PRINT', 'PDF', '印刷・PDF（PLOT）'], ['PNGOUT', 'PNG', '画面の画像（PNG）'],
         ['MAP', 'SHITAE', '地図・下絵（UNDERLAY）'], ['LAYOUT', '-', 'レイアウトを見る（次のレイアウトへ）'], ['MODEL', '-', 'モデルに戻る'], ['ZOOM', 'ZE', '全体表示'], ['UCS', '-', 'UCS（原点）'], ['UCS2P', '2P', 'UCS（2点）'], ['WCS', '-', 'UCSを戻す'],
-        ['BLOCKS', '-', 'ブロック管理'], ['LAYOFF', '-', 'タッチで画層を非表示'], ['SHOWALL', '-', '隠した図形を再表示'], ['FAV', 'OKINI', 'お気に入りの登録'], ['UNIT', 'LENUNIT', '長さの単位を m ⇔ mm に切り替え'], ['CUNIT', 'COORDUNIT', '座標の単位を m ⇔ mm に切り替え'], ['OUTDOOR', 'SUN', '屋外モードの入・切'], ['MOTION', 'UIMOTION', 'UIの動き（試用）の入・切'], ['ERRORS', 'ERRLOG', 'エラーログ']]],
+        ['BLOCKS', '-', 'ブロック管理'], ['LAYOFF', '-', 'タッチで画層を非表示'], ['SHOWALL', '-', '隠した図形を再表示'], ['FAV', 'OKINI', 'お気に入りの登録'], ['QR', 'SHAREAPP', 'このアプリを渡す（QR コード）'], ['UNIT', 'LENUNIT', '長さの単位を m ⇔ mm に切り替え'], ['CUNIT', 'COORDUNIT', '座標の単位を m ⇔ mm に切り替え'], ['OUTDOOR', 'SUN', '屋外モードの入・切'], ['MOTION', 'UIMOTION', 'UIの動き（試用）の入・切'], ['ERRORS', 'ERRLOG', 'エラーログ']]],
 ];
 
 // パネルの見出しの「？」: パネルの題 → 説明（id、または id を返す関数）と、ヘルプから戻るときに開き直す関数
@@ -560,6 +569,7 @@ const GUIDE_PANEL_HELP = {
     '画層一括管理': { topic: 'layers', back: () => showLayerManagerPanel() },
     'ブロック管理': { topic: 'blocks', back: () => showBlockManagerPanel() },
     '⭐ お気に入り': { topic: 'fav', back: () => showFavPanel() },
+    '📱 このアプリを渡す': { topic: 'shareapp', back: () => showShareAppPanel() },
 };
 
 // ===== 探す =====

@@ -621,6 +621,11 @@
         /* 文字の大きさ（cad-textsize.js）: 種類・今の高さの切り替えボタンの並び */
         .tsz-chips { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0; }
         .tsz-chips .prop-btn { flex:0 0 auto; margin-top:0; min-height:30px; padding:2px 10px; font-size:11px; border-radius:15px; }
+        /* このアプリを渡す QR コード（cad-qr.js）: 白地に黒で大きく。画面いっぱい（□）ではさらに大きく */
+        .qr-box { display:flex; justify-content:center; }
+        .qr-svg { display:block; width:min(260px, 70vw); height:auto; border-radius:8px; }
+        #property-panel.win-max:not(.win-min) .qr-svg { width:min(62vh, 88vw, 560px); }
+        .qr-url { text-align:center; font:13px Consolas,monospace; color:#cfd3d8; word-break:break-all; user-select:text; -webkit-user-select:text; }
         /* モデル｜レイアウトのタブ（cad-layout.js）: 状態バーの上の左。レイアウトがある図面だけ出す */
         #space-tabs { position:absolute; left:8px; bottom:calc(14px + 38px * var(--btn-k, 1)); z-index:29; display:none; gap:4px; padding:3px; border-radius:var(--r-pill); max-width:calc(100% - 150px); overflow-x:auto; scrollbar-width:none; }
         #space-tabs button { flex:0 0 auto; min-height:30px; padding:0 12px; border-radius:15px; border:1px solid var(--border-3); background:var(--btn-fill); color:#e0e0e0; font-size:12px; white-space:nowrap; cursor:pointer; }
@@ -1039,6 +1044,7 @@
                 <button class="menu-item-btn" data-fav="TEXTSIZE" onclick="showTextSizePanel(); toggleTopMenu();" title="文字の高さをまとめて変える（選んだ文字・画層・すべて。点名・寸法の値・今の高さで絞れる）">🔠 文字の大きさ</button>
                 <button class="menu-item-btn" data-fav="MAP" onclick="showUnderlayPanel(); toggleTopMenu();" title="国土地理院の地図・下絵の画像を図面の下に表示">🗺 地図・下絵</button>
                 <button class="menu-item-btn" onclick="showFavPanel(); toggleTopMenu();" title="よく使うコマンドを、画面に浮かぶボタンに登録（ボタンの長押しでも登録）">⭐ お気に入り</button>
+                <button class="menu-item-btn" data-fav="SHAREAPP" onclick="showShareAppPanel(); toggleTopMenu();" title="このアプリのリンクを QR コードで出す（相手がカメラで読み取ると開く）">📱 このアプリを渡す</button>
             </div>
         </div>
     </div>
@@ -1362,6 +1368,7 @@
     <script src="cad-storage.js"></script>
     <script src="cad-webcad.js"></script>
     <script src="cad-share.js"></script>
+    <script src="cad-qr.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-guide-tours.js"></script>
     <script src="cad-guide-help.js"></script>

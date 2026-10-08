@@ -844,6 +844,7 @@ function processCommand(cmdText) {
     else if(typeof processPointCommand === 'function' && processPointCommand(cmd)) { /* 点（POINT）処理済み */ }
     else if(typeof processTextSizeCommand === 'function' && processTextSizeCommand(cmd)) { /* 文字の大きさ（TEXTSIZE）処理済み */ }
     else if(typeof processLayoutCommand === 'function' && processLayoutCommand(cmd)) { /* レイアウト（LAYOUT・MODEL）処理済み */ }
+    else if(typeof processShareAppCommand === 'function' && processShareAppCommand(cmd)) { /* このアプリを渡す（QR・SHAREAPP）処理済み */ }
     else if(typeof processLtypeCommand === 'function' && processLtypeCommand(cmd)) { /* 線種の尺度（LTSCALE）・線の太さの表示（LWDISPLAY） */ }
     else if(typeof processFavCommand === 'function' && processFavCommand(cmd)) { /* お気に入りの登録（FAV）処理済み */ }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }

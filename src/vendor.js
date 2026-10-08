@@ -4,9 +4,11 @@
 // Service Worker で「一度取得したら不変」として安全にキャッシュできる。
 import DxfParser from 'dxf-parser';
 import Drawing from 'dxf-writer';
+import qrcode from 'qrcode-generator'; // このアプリを渡す QR コード（cad-qr.js。小さいので最初から同梱）
 
 window.DxfParser = DxfParser;
 window.Drawing = Drawing;
+window.qrcode = qrcode;
 
 // DWG 読込エンジン（libredwg-web、WASM 埋め込みで約9MB）は重いため、
 // DWG を開いたとき（またはオプションの「オフライン用に保存」）に初めて読み込む。

@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.38.3（2026年10月9日リリース）**
+**現在のバージョン: v5.39（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（758件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（761件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -265,6 +265,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.39（このアプリを QR コードで渡す）** 📱
+  * cad-qr.js（新）: shareAppUrl（今の場所。localhost・私設の IP・file: は公開の https://antigravity-web-cad.vercel.app/）・qrSvg（qrcode-generator の isDark を SVG の四角に。余白 4 マス・誤り訂正 M）・showShareAppPanel・shareAppLink（navigator.share）・copyAppLink。依存に qrcode-generator 2.0.4（MIT・依存なし。src/vendor.js で window.qrcode）。tests/qr.test.cjs。
 
 * **2026-10-09: バージョン5.38.3（☰ メニューのスクロール）** 📜
   * #top-menu-modal に max-height（100dvh − 上のバー − 余白）と overflow-y: auto。続きの印は scrollCue（cad-form.js）の more-up / more-down（toggleTopMenu と scroll で付け直す）。tests/polish.test.cjs。

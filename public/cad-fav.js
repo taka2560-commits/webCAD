@@ -81,6 +81,7 @@ const FAV_CATALOG = [
     { id: 'WCS', label: 'WCS', icon: '↩', color: '#528bff', cat: 'view', run: () => issueCommand('WCS') },
     { id: 'OPTIONS', label: 'オプション', icon: '⚙', cat: 'view', panel: 'オプション', run: () => showOptionsPanel() },
     { id: 'HELP', label: 'ヘルプ', icon: '❓', cat: 'view', panel: '❓ ヘルプ・操作ガイド', run: () => showGuideHelp() },
+    { id: 'SHAREAPP', label: 'アプリを渡す', icon: '📱', cat: 'view', panel: '📱 このアプリを渡す', run: () => showShareAppPanel() },
     // 単位の切り替え（押すたびに m ⇔ mm）。ボタンにはいまの単位を出す（iconFn）
     { id: 'LENUNIT', label: '長さ単位', icon: 'mm', color: '#00ffff', cat: 'view', run: () => toggleDisplayUnit('len'), iconFn: () => displayUnit('len') },
     { id: 'COORDUNIT', label: '座標単位', icon: 'm', color: '#528bff', cat: 'view', run: () => toggleDisplayUnit('coord'), iconFn: () => displayUnit('coord') },

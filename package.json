@@ -39,6 +39,7 @@
     "@mlightcad/libredwg-web": "0.6.6",
     "dxf-parser": "1.1.2",
     "dxf-writer": "1.18.4",
-    "pdfjs-dist": "^4.10.38"
+    "pdfjs-dist": "^4.10.38",
+    "qrcode-generator": "2.0.4"
   }
 }
