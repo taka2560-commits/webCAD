@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.27（2026年10月8日リリース）**
+**現在のバージョン: v5.28（2026年10月8日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（663件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（670件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,11 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-08: バージョン5.28（DXF の書き出し: 測点の属性・標高・複数行の文字・寸法）** 📤
+  * cad-dxf-out.js（新）: dxf-writer のブロックは外枠だけなので、中身（dxfOutBlock）を書く。ハンドルは dxf-writer の通し番号から組み立てるときに取って記録し、書き出しで再生する（書き出しの最中に取ると $HANDSEED より後になる）。所有（330）は dxf-writer に合わせる。寸法スタイル STANDARD（ハンドルは 105）と APPID WEBCAD を足す。
+  * 測点: ブロック「測点」（POINT と ATTDEF 点番号・点名・標高）の INSERT（Z ＝ 標高 × 図面の倍率）と ATTRIB・SEQEND。点名の文字（ptLabel）は属性にしたので別に書かない。読み直しは surveyPointFromInsert（DXF・DWG）。複数行の文字は MTEXT（\\・{・} を打ち消し、\P）。
+  * 寸法: DIMENSION（LINEAR は回転・ALIGNED は平行・RADIUS・DIAMETER・ANGULAR は3点・ORDINATE は X と Y の2段を上書きの文字）と *D ブロック（dimExportPrims）。寸法ごとの上書き（拡張データ ACAD の DSTYLE: DIMTXT・DIMASZ・DIMDEC・DIMZIN・DIMTAD）と、アプリの寸法の JSON（拡張データ WEBCAD。非 ASCII は \uXXXX、250字ずつ）。読み直しで webcadEntityFromXdata。libredwg-web の DXF 読み取りは実物の DXF も読めないので検証に使えず、DWG FastView で目視した。tests/dxf-out.test.cjs。
 
 * **2026-10-08: バージョン5.27（線種・線の太さ）** 〰️
   * cad-ltype.js（新）: 図面の線種表 drawingLineTypes（ファイルの LTYPE。無ければ acadiso.lin と同じ標準の線種。2・X2 も）・線種の尺度 drawingLtscale（LTSCALE。既定は mm 500・m 0.5）・線の太さ（lw 1/100mm。画層の lt・lw に従う）。画面は makeLineStyler（模様 × LTSCALE × 図形の ltScale × 表示の倍率を setLineDash。1周期 4px 未満は実線。太さは mm × 4px、1〜6px）を drawEntities のまとめ描き（色・濃さ・描き方が同じものを1本のパス）に入れた。印刷は printLineStyle（[…] 0 d と w）。

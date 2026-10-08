@@ -93,14 +93,19 @@ describe('不具合チェックの修正（2026-09-24）', () => {
             entities.push({ type:'HATCH', layer:0, color:null, target:{ type:'RECTANG', x1:60, y1:0, x2:70, y2:10 } });`);
         const dxf = await exportDxfText();
         const parsed = new DxfParser().parseSync(dxf);
-        const t = parsed.entities.filter(e => e.type === 'TEXT').map(e => e.text);
+        // 寸法は DIMENSION（測定値 42）と、その形のブロック（*D…。線・矢印・文字）で書く（v5.28）
+        const dims = parsed.entities.filter(e => e.type === 'DIMENSION');
+        assert.equal(dims.length, 2);
+        assert.ok(near(dims[0].actualMeasurement, 30) && near(dims[1].actualMeasurement, Math.PI / 2, 1e-9), JSON.stringify(dims.map(d => d.actualMeasurement)));
+        const inBlocks = dims.flatMap(dm => (parsed.blocks[dm.block] || {}).entities || []);
+        const t = inBlocks.filter(e => e.type === 'TEXT').map(e => e.text);
         assert.ok(t.includes('30') && !t.includes('36.06'), t.join(','));
         assert.ok(t.includes('90.0°'));
         assert.equal(parsed.header.$INSUNITS, 6); // m
         assert.ok(/\n\s*0\s*\r?\n\s*HATCH\s*\r?\n/.test(dxf), '塗りつぶしが出力されていない');
-        assert.ok(parsed.entities.some(e => e.type === 'SOLID'), '矢印（SOLID）が無い');
+        assert.ok(inBlocks.some(e => e.type === 'SOLID'), '矢印（SOLID）が無い');
         // 寸法線は測った点からずらした位置（y = 0 + (-3)）に引かれている
-        assert.ok(parsed.entities.some(e => e.type === 'LINE' && near(e.vertices[0].y, -3) && near(e.vertices[1].y, -3)));
+        assert.ok(inBlocks.some(e => e.type === 'LINE' && near(e.vertices[0].y, -3) && near(e.vertices[1].y, -3)));
     });
     it('#3 DXF出力: 単位が 1mm の図面なら $INSUNITS は mm', async () => {
         app.eval(`localStorage.setItem('cad_survey_unit', 'mm'); entities.push({ type:'LINE', layer:0, color:null, x1:0,y1:0,x2:1,y2:1 });`);

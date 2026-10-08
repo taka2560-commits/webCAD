@@ -255,10 +255,13 @@ const GUIDE_TOPICS = [
         open: { label: '📂 保存一覧を開く', run: () => showProjectList() } },
     { id: 'export', cat: 'file', title: '書き出す（DXF・SIMA・座標CSV・SDR33）', keys: 'かきだし しゅつりょく えくすぽーと dxf しま csv sdr 書き出し 出力 エクスポート',
         steps: [
-            '☰ → DXF 出力: AutoCAD・Jw_cad などで開けます（寸法・塗りつぶしも。DWG では書き出せません）。',
+            '☰ → DXF 出力: AutoCAD・Jw_cad などで開けます（寸法・塗りつぶし・線種も。DWG では書き出せません）。',
             '☰ → SIMA 出力・座標CSV 出力: 測点（と区画）を書き出します。',
             '📡TS連携 → 📄 SDR33 で書き出す: 機械の既知点・杭打ち点に使います。',
-        ] },
+        ],
+        tips: ['DXF の測点は、ブロック「測点」（属性 点番号・点名・標高）で書きます。高さ（Z）は挿入点に入るので、AutoCAD でも点名・標高を属性として使えます。',
+            '寸法は AutoCAD の寸法（DIMENSION）として書きます。複数行の文字は MTEXT（改行つき）です。',
+            'アプリで書き出した DXF・それを AutoCAD で保存した DWG を開き直すと、測点は座標一覧の点に、寸法はアプリの寸法に戻ります。'] },
     { id: 'print', cat: 'file', title: '印刷・PDF（縮尺どおり）', tour: 'print', where: '☰ メニュー → 🖨 印刷・PDF', keys: 'いんさつ ぷりんと pdf しゅくしゃく ようし ずわく 印刷 縮尺 用紙 図枠 表題欄',
         steps: [
             '用紙（A4〜A1・横縦）・縮尺・白黒／カラー・図面名・作成者を選びます。',

@@ -169,6 +169,13 @@ function convertDwgDatabaseToApp(db) {
         if (depth > 10) return; // 無限再帰防止
         try {
             // ブロック参照 (INSERT) の再帰展開
+            // アプリが書き出した測点（ブロック「測点」と属性）は、座標一覧の点に戻す
+            if (ent.type === 'INSERT' && ent.name === '測点' && !gid && typeof surveyPointFromInsert === 'function') {
+                const ip = ent.insertionPoint || {};
+                const attrs = (ent.attribs || ent.attributes || []).map(a => { const q = a.insertionPoint || a.startPoint || a.position || {}; return { tag: a.tag, text: a.textValue !== undefined ? a.textValue : a.text, x: q.x || 0, y: q.y || 0, h: a.textHeight || a.height, layer: layerIndexOf(typeof a.layer === 'object' ? (a.layer && a.layer.name) : a.layer), invisible: !!(a.invisible || (Number(a.flags) & 1)) }; });
+                surveyPointFromInsert({ x: ip.x || 0, y: ip.y || 0, z: ip.z || 0 }, layerIndexOf(typeof ent.layer === 'object' ? (ent.layer && ent.layer.name) : ent.layer), attrs).forEach(o => push(o));
+                return;
+            }
             if (ent.type === 'INSERT') {
                 const b = blocks[ent.name];
                 const gidHere = gid || newGroupId('b');
@@ -278,6 +285,9 @@ function convertDwgDatabaseToApp(db) {
                         height: (ent.textHeight || ent.height || 2.5) * sAbs, rotation: mrot + rot, halign, valign }, base), gid, blockName);
                 } else noteSkip('MTEXT');
             } else if (ent.type && ent.type.includes('DIMENSION')) {
+                // アプリが書き出した寸法（拡張データ WEBCAD に中身がある）は、アプリの寸法に戻す
+                const own = (!gid && typeof webcadEntityFromXdata === 'function') ? webcadEntityFromXdata(webcadXdataStringsDwg(ent)) : null;
+                if (own) { own.layer = layer; push(own); return; }
                 const db0 = ent.name && blocks[ent.name];
                 if (db0 && Array.isArray(db0.entities) && db0.entities.length) {
                     const start = result.entities.length;

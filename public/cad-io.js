@@ -197,9 +197,24 @@ function importDxfData(dxf, opts) {
 
     // エンティティは元の順序で処理する（ATTRIB は直前の INSERT に属する属性文字のため）
     let lastInsertGid = null, lastInsertBlock = null, lastInsertPos = null;
+    // アプリが書き出した測点（ブロック「測点」と属性）は、座標一覧の点に戻す（属性は INSERT のあとに続く）
+    let pendingPt = null;
+    const flushPt = () => { if(pendingPt) { addResults(surveyPointFromInsert(pendingPt.pos, pendingPt.layer, pendingPt.attrs)); pendingPt = null; } };
     (dxf.entities || []).forEach(e => {
+        if(pendingPt && e.type !== 'ATTRIB') flushPt();
         if(isPaper(e)) { paperSkipped++; lastInsertGid = null; lastInsertPos = null; return; }
         try {
+            if(e.type === 'INSERT' && e.name === '測点' && typeof surveyPointFromInsert === 'function') {
+                const p = e.position || {};
+                pendingPt = { pos: { x: p.x || 0, y: p.y || 0, z: p.z || 0 }, layer: dxfLayerIndex(e.layer), attrs: [] };
+                lastInsertGid = null;
+                return;
+            }
+            if(e.type === 'ATTRIB' && pendingPt) {
+                const sp = e.startPoint || {};
+                pendingPt.attrs.push({ tag: e.tag, text: e.text, x: sp.x || 0, y: sp.y || 0, h: e.textHeight, layer: dxfLayerIndex(e.layer), invisible: !!e.invisible });
+                return;
+            }
             if(e.type === 'INSERT') {
                 const gid = newGroupId('b');
                 const expanded = expandInsert(e, blocks, 0, gid, e.name);
@@ -224,6 +239,9 @@ function importDxfData(dxf, opts) {
             }
             lastInsertGid = null; lastInsertBlock = null; lastInsertPos = null;
             if(e.type === 'DIMENSION') {
+                // アプリが書き出した寸法（拡張データ WEBCAD に中身がある）は、アプリの寸法に戻す
+                const own = (typeof webcadEntityFromXdata === 'function') ? webcadEntityFromXdata(e.extendedData && e.extendedData.customStrings) : null;
+                if(own) { own.layer = dxfLayerIndex(e.layer); addEntity(own); return; }
                 const dimEnts = expandDimension(e, blocks);
                 if(dimEnts.length === 0) noteSkip('DIMENSION');
                 dimEnts.forEach(addEntity);
@@ -233,6 +251,7 @@ function importDxfData(dxf, opts) {
         } catch(err) { noteSkip(e.type || '?'); console.warn('エンティティ変換エラー:', e.type, err); }
     });
 
+    flushPt();
     if(_dxfLayersAdded) initLayers();
 
     _importSkipNote = null;
@@ -769,6 +788,14 @@ function exportDxf() {
             P.texts.forEach(t => d.drawText(t.x, t.y, t.h, t.ang * 180 / Math.PI, String(t.s), t.ha, t.va));
         };
 
+        // 測点（点名・点番号・標高のある点）はブロック「測点」と属性で、複数行の文字は MTEXT で、寸法は DIMENSION で書く（cad-dxf-out.js）。
+        // 測点の点名の文字は属性に入れるので、別には書かない
+        const xs = (typeof dxfOutNewState === 'function') ? dxfOutNewState(d) : null;
+        const isSurveyPt = (e) => e.type === 'POINT' && !!(e.name || e.num || (typeof e.z === 'number' && isFinite(e.z)));
+        const ptLabels = new Map();
+        entities.forEach(e => { if(e && e.ptLabel && e.gid) ptLabels.set(e.gid, e); });
+        const ptGids = new Set(entities.filter(e => e && e.gid && isSurveyPt(e)).map(e => e.gid));
+
         // エンティティ出力
         entities.forEach(e => {
             const layerName = layers[e.layer]?.name || '0';
@@ -791,7 +818,10 @@ function exportDxf() {
             else if(e.type === 'PLINE' && e.points && e.points.length >= 2) {
                 d.drawPolyline(e.points.map(p => [p.x, p.y]), !!e.closed);
             }
-            else if(e.type === 'POINT') { d.drawPoint(e.x, e.y); }
+            else if(e.type === 'POINT') {
+                if(xs && isSurveyPt(e)) { const lb = e.gid ? ptLabels.get(e.gid) : null; dxfOutSurveyPoint(xs, addRaw, withType, e, lb || null, lb ? (layers[lb.layer] ? layers[lb.layer].name : '0') : null); }
+                else d.drawPoint(e.x, e.y);
+            }
             else if(e.type === 'ELLIPSE') {
                 // 長い方の軸を長軸として出力（rx < ry のときは90°回した ry 側が長軸）
                 const rot = e.rotation || 0;
@@ -802,11 +832,20 @@ function exportDxf() {
                 d.drawEllipse(e.cx, e.cy, major * Math.cos(ang), major * Math.sin(ang), ratio);
             }
             else if(e.type === 'TEXT') {
-                d.drawText(e.x, e.y, e.height || 2.5, (e.rotation || 0) * 180 / Math.PI, String(e.text || '').replace(/\n/g, ' '),
+                if(e.ptLabel && e.gid && ptGids.has(e.gid) && xs) drawn = false; // 測点の点名は、ブロックの属性に書いた
+                else if(xs && String(e.text || '').includes('\n')) dxfOutMText(xs, addRaw, withType, e); // 複数行は MTEXT（以前は空白で1行につないでいた）
+                else d.drawText(e.x, e.y, e.height || 2.5, (e.rotation || 0) * 180 / Math.PI, String(e.text || '').replace(/\n/g, ' '),
                     H_ALIGN[e.halign] || 'left', V_ALIGN[e.valign] || 'baseline');
             }
             // 寸法は画面と同じ形の線・矢印・文字として出力（画層「寸法」）
-            else if(e.type === 'DIMENSION') { d.setActiveLayer('寸法'); writeDim(e); drawn = false; }
+            // 寸法は DIMENSION（寸法の形のブロックと定義点。AutoCAD で寸法として扱える）。書けない形は、以前と同じ線・矢印・文字
+            else if(e.type === 'DIMENSION') {
+                d.setActiveLayer('寸法');
+                let ok = false;
+                try { ok = !!(xs && dxfOutDimension(xs, addRaw, withType, e, dimExportPrims(e, dimK), dimK)); } catch(err) { console.warn('寸法を DIMENSION で書けません:', err); }
+                if(!ok) writeDim(e);
+                drawn = false;
+            }
             // 塗りつぶしは HATCH（単色）として出力
             else if(e.type === 'HATCH') { drawn = !!(e.target && writeHatch(e.target, e.pat)); if(!drawn) skipped++; }
             else if(e.type === 'PIN') { drawn = false; } // 現場写真・メモのピンはアプリだけのもの（DXF には出さない）
