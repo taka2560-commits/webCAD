@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.38.1（2026年10月9日リリース）**
+**現在のバージョン: v5.38.2（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -265,6 +265,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.38.2（座標一覧を大きく見やすく）** 📍
+  * 座標一覧の行を .coord-row の grid（番号・点名・.cr-xyz（X・Y・H）・🗑）にし、@container coordlist（幅 560px 以上）で列をそろえた表と見出し .coord-head。.coord-list は画面いっぱいで flex 1 1 0・min-height 45vh（以前は max-height 48vh のまま、ほかの欄に押されて縮んでいた）。見出しの単位は測量の座標の m に直した。
 
 * **2026-10-09: バージョン5.38.1（レイアウト・書き出す前の確認の見落とし）** 🔧
   * layoutTabsUpdate は選んだときのバー（#sel-actionbar）が出ている間タブを隠す（updateSelectionBar から呼ぶ）。startGuideTour はモデルに戻り、練習の間は layoutsClear（控えの _undoSnapshot の lay で戻る）。zoomToEntities はモデルに戻ってから。GUIDE_PANEL_HELP の「📄 書き出す前の確認」の戻るは _xpRender。

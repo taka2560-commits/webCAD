@@ -236,7 +236,11 @@ describe('測量: ブロックで描かれた測点・点のプロパティ・�
         app.eval(`addSurveyData([{ num: '1', name: 'A-1', X: 1000, Y: 2000, z: null }, { num: '2', name: 'B-2', X: 1010, Y: 2010, z: 4.5 }, { num: '3', name: 'A-3', X: 1020, Y: 2020, z: null }], []);`);
         app.eval('showCoordListPanel();');
         assert.equal(app.eval(`document.querySelectorAll('#coord-list-rows .coord-row').length`), 3);
-        assert.match(app.eval(`document.querySelector('#coord-list-rows').textContent`), /X 1010\.000 {2}Y 2010\.000 {2}H 4\.500/);
+        // 行は「番号・点名・X・Y・H」の欄（v5.38.2）。狭い画面では X・Y・H の印つき、広い画面では列の見出し
+        assert.deepEqual(app.val(`[...document.querySelectorAll('#coord-list-rows .coord-row')[1].children].map(c => c.textContent)`), ['2', 'B-2', 'X1010.000Y2010.000H4.500', '🗑']);
+        assert.deepEqual(app.val(`[...document.querySelectorAll('#coord-list-rows .coord-row')[0].querySelectorAll('.cr-xyz > span')].map(c => c.className)`), ['cr-x', 'cr-y', 'cr-h cr-none'], '標高の無い点');
+        assert.match(app.eval(`document.querySelector('#coord-list-rows .coord-head').textContent`), /番号点名X（北）Y（東）H（標高）/);
+        assert.match(app.eval(`document.getElementById('coord-list-note').textContent`), /測量の座標・m）\s*3点/);
         app.eval(`document.getElementById('coord-search').value = 'a-'; updateCoordListContent();`);
         assert.equal(app.eval(`document.querySelectorAll('#coord-list-rows .coord-row').length`), 2);
         app.eval(`document.querySelectorAll('#coord-list-rows .coord-row')[1].click();`); // A-3

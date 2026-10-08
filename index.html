@@ -295,6 +295,42 @@
         .gh-search-row { display:flex; gap:6px; align-items:center; }
         /* 座標一覧の行の 🗑（点を消す。削除は赤） */
         .coord-del { flex-shrink:0; width:34px; height:30px; padding:0; border-radius:var(--r-sub); border:1px solid rgba(255,107,107,0.45); background:rgba(255,107,107,0.08); color:#ff6b6b; font-size:14px; cursor:pointer; }
+        /* 座標一覧（cad-survey.js。v5.38.2）: 行と字を大きく。狭いときは2段（番号・点名／X・Y・H）、
+           一覧の幅が 560px 以上（画面いっぱい・タブレット）のときは列をそろえた表。画面いっぱいでは残りの高さを一覧に使う */
+        .coord-top { display:flex; gap:6px; align-items:center; }
+        .coord-top .prop-val { flex:1; min-height:38px; font-size:15px; }
+        .coord-note { font-size:11px; color:#9aa0a8; margin-top:-4px; }
+        .coord-list { flex:0 1 auto; min-height:min(260px, 42vh); max-height:58vh; overflow:auto; border:1px solid var(--border-2); border-radius:var(--r-sub); container:coordlist / inline-size; }
+        #property-panel.win-max:not(.win-min) .coord-list { flex:1 1 0; min-height:45vh; max-height:none; }
+        .coord-head { display:none; }
+        .coord-row { display:grid; grid-template-columns:max-content minmax(0,1fr) 42px; grid-template-areas:"num name del" "xyz xyz del"; column-gap:10px; row-gap:3px; align-items:center; padding:9px 8px 9px 12px; border-bottom:1px solid var(--border-1); cursor:pointer; }
+        .coord-row:hover, .coord-row:focus-visible { background:rgba(var(--hl-rgb),0.08); outline:none; }
+        .coord-row .cr-num { grid-area:num; font:600 14px Consolas,monospace; color:#9aa0a8; }
+        .coord-row .cr-name { grid-area:name; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:16px; font-weight:700; color:#eeeeee; }
+        .coord-row .cr-xyz { grid-area:xyz; display:flex; flex-wrap:wrap; gap:2px 18px; font:15px/1.35 Consolas,monospace; color:var(--green); }
+        .coord-row .cr-xyz i { font-style:normal; color:#8fa39a; margin-right:5px; }
+        .coord-row .cr-xyz .cr-none { display:none; }
+        .coord-row .coord-del { grid-area:del; width:42px; height:38px; font-size:16px; }
+        @container coordlist (min-width: 560px) {
+            .coord-head { display:grid; position:sticky; top:0; z-index:1; background:linear-gradient(var(--panel-2), var(--panel-2)), #1e2228; padding:7px 8px 7px 12px; border-bottom:1px solid var(--border-2); font-size:12px; font-weight:700; color:#9aa0a8; }
+            .coord-head, .coord-row { grid-template-columns:5em minmax(7em, 1fr) 10em 10em 7.5em 42px; grid-template-areas:none; column-gap:14px; }
+            .coord-row { padding:5px 8px 5px 12px; }
+            .coord-row .coord-del { height:34px; }
+            .coord-row .cr-num, .coord-row .cr-name, .coord-row .coord-del { grid-area:auto; }
+            .coord-row .cr-xyz { display:contents; }
+            .coord-row .cr-xyz > span { text-align:right; font:16px/1.3 Consolas,monospace; color:var(--green); }
+            .coord-row .cr-xyz i { display:none; }
+            .coord-row .cr-xyz .cr-none { display:block; }
+            .coord-head span:nth-child(n+3):nth-child(-n+5) { text-align:right; }
+        }
+        .coord-io { display:flex; flex-wrap:wrap; gap:6px 14px; }
+        .coord-grp { flex:1 1 300px; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+        .coord-grp-label { flex:0 0 auto; font-size:11px; font-weight:700; color:var(--dim); min-width:2.5em; }
+        .coord-grp .prop-btn { flex:1 1 auto; margin-top:0; min-height:38px; }
+        .coord-lbl { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
+        .coord-lbl .pl-ctl { flex:0 1 auto; }
+        .coord-lbl > .prop-btn { flex:1 1 200px; margin-top:0; min-height:36px; }
+        .pl-ctl .pl-h:disabled { opacity:0.5; }
         .gh-search-row .gh-search { flex:1; min-width:0; }
         .search-x { flex-shrink:0; width:36px; height:36px; border-radius:var(--r-sub); border:1px solid var(--border-1); background:var(--btn-fill); color:#ddd; font-size:18px; line-height:1; cursor:pointer; }
         .gh-found { font-size:11.5px; color:var(--brand); display:none; }

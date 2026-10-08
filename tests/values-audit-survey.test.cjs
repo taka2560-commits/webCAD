@@ -60,8 +60,10 @@ describe('値の監査: 座標一覧・SIMA・座標 CSV', () => {
                 if (Math.abs(back[i].Y - Number(fix3(p.Y))) > 1e-9) bad.push(`読み直し Y ${tag} 点${p.num}: 出た ${back[i].Y}`);
             });
             // 座標一覧の画面の文字（X・Y・H）
+            // 行ごとの X・Y・H の欄（v5.38.2 から欄に分けた。印の X・Y・H を除いた数の文字）を「X 値  Y 値  H 値」の形にして照合する
             app.eval('showCoordListPanel()');
-            const panel = app.eval(`document.getElementById('property-panel-content').textContent`);
+            const panel = app.val(`[...document.querySelectorAll('#coord-list-rows .coord-row')].map(r => [...r.querySelectorAll('.cr-xyz > span')]
+                .filter(c => !c.classList.contains('cr-none')).map(c => c.firstChild.textContent + ' ' + c.lastChild.textContent).join('  ')).join(' | ')`);
             SURVEY_PTS.forEach((p) => {
                 const want = `X ${fix3(p.X)}  Y ${fix3(p.Y)}` + (p.z !== null ? `  H ${fix3(p.z)}` : '');
                 n++; if (!panel.replace(/\s+/g, ' ').includes(want.replace(/\s+/g, ' '))) bad.push(`座標一覧 ${tag} 点${p.num}: 「${want}」が見当たらない`);

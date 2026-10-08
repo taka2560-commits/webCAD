@@ -35,7 +35,7 @@ function ptLabelControlHtml() {
     return `<div class="pl-ctl" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <span style="font-size:11px;">点名の大きさ</span>
         <div class="opt-pref-seg" style="flex:0 0 auto;min-width:96px;">${b('auto', '自動')}${b('fix', '指定')}</div>
-        <input class="prop-val pl-h" type="text" inputmode="decimal" autocomplete="off" value="${escapeHtml(v)}" style="width:72px;" ${s.mode === 'fix' ? '' : 'disabled'} aria-label="点名の文字の高さ" onchange="ptLabelSetHeight(this)">
+        <input class="prop-val pl-h" type="text" inputmode="decimal" autocomplete="off" value="${escapeHtml(v)}" style="flex:0 0 96px;width:96px;" ${s.mode === 'fix' ? '' : 'disabled'} aria-label="点名の文字の高さ" onchange="ptLabelSetHeight(this)">
         <span style="font-size:11px;color:#888;">${displayUnitTag('len')}</span>
     </div>`;
 }

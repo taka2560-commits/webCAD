@@ -428,27 +428,28 @@ let _coordListSnapshot = [];
 window.showCoordListPanel = function() {
     const unit = getSurveyUnit();
     const ucsActive = !(ucs.originX === 0 && ucs.originY === 0 && ucs.angle === 0);
+    // v5.38.2: 一覧を大きく（行と字を大きく、広い画面では列をそろえた表。画面いっぱいでは残りの高さを一覧に使う）。
+    // 入力・出力・点名の大きさは下に詰めて並べ、長い説明は ？（ヘルプ）へ
     const html = `
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-            <input id="coord-search" class="prop-val" type="search" placeholder="点名・点番号で検索" oninput="updateCoordListContent()" style="flex:1;">${searchClearBtn('coord-search')}
+        <div class="coord-top">
+            <input id="coord-search" class="prop-val" type="search" placeholder="点名・点番号で検索" oninput="updateCoordListContent()">${searchClearBtn('coord-search')}
         </div>
-        <div id="coord-list-note" style="font-size:10px;color:#888;margin-bottom:6px;">X＝北、Y＝東（図面の座標・単位 ${unit}）${ucsActive ? '<br><span style="color:#ffcc00;">※UCS設定中ですが、一覧と出力は図面の座標（WCS）です</span>' : ''}</div>
-        <div id="coord-list-rows" style="max-height:48vh;overflow:auto;border:1px solid var(--border-2);border-radius:var(--r-sub);"></div>
-        <div class="ts-sec" style="margin-top:8px;">入力</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="prop-btn" style="flex:1;margin-top:0;" onclick="coordListImportSima()" title="SIMA（.sim）の測点・区画を図面に入れる">📥 SIMA を読み込む</button>
-            <button class="prop-btn btn-sub" style="flex:1;margin-top:0;" onclick="closePropertyPanel(); toggleCommand('POINT')" title="図面をタップした所に測点を置く（左のツールバーの「点」と同じ）">⊙ 点を置く</button>
+        <div id="coord-list-note" class="coord-note">X＝北・Y＝東・H＝標高（測量の座標・m${unit === 'mm' ? '。図面の1単位は mm' : ''}）<span id="coord-list-count"></span>${ucsActive ? '<br><span style="color:#ffcc00;">※UCS設定中ですが、一覧と出力は図面の座標（WCS）です</span>' : ''}</div>
+        <div id="coord-list-rows" class="coord-list"></div>
+        <div class="coord-io">
+            <div class="coord-grp"><span class="coord-grp-label">入力</span>
+                <button class="prop-btn" onclick="coordListImportSima()" title="SIMA（.sim）の測点・区画を図面に入れる（座標CSV・SDR は上のバーの「📁 開く」から）">📥 SIMA を読み込む</button>
+                <button class="prop-btn btn-sub" onclick="closePropertyPanel(); toggleCommand('POINT')" title="図面をタップした所に測点を置く（左のツールバーの「点」と同じ）">⊙ 点を置く</button>
+            </div>
+            <div class="coord-grp"><span class="coord-grp-label">出力</span>
+                <button class="prop-btn btn-sub" onclick="exportCoordCsv()">📄 CSV出力</button>
+                <button class="prop-btn btn-sub" onclick="exportSima()">📄 SIMA出力</button>
+                <button class="prop-btn btn-sub" onclick="exportSdr33()" title="ソキアのトータルステーション用（既知点・杭打ち点）">📄 SDR33出力</button>
+            </div>
         </div>
-        <div style="margin-top:6px;">${ptLabelControlHtml()}</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;"><button class="prop-btn btn-sub" style="flex:1;margin-top:0;" onclick="ptLabelApplyExisting()" title="図面の点名の文字を、この大きさにそろえる（↩ で戻せます）">🔠 今の点名をこの大きさに</button></div>
-        <div style="font-size:10px;color:#666;margin-top:4px;">点名の大きさ: 「自動」は点の広がりから決めます。「指定」にすると、読み込む・置く点の点名をその高さにします（例: 縮尺 1/500 で 2.5mm の文字なら 1.25 m）</div>
-        <div class="ts-sec" style="margin-top:8px;">出力</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="prop-btn btn-sub" style="flex:1;" onclick="exportCoordCsv()">📄 CSV出力</button>
-            <button class="prop-btn btn-sub" style="flex:1;" onclick="exportSima()">📄 SIMA出力</button>
-            <button class="prop-btn btn-sub" style="flex:1;" onclick="exportSdr33()" title="ソキアのトータルステーション用（既知点・杭打ち点）">📄 SDR33出力</button>
-        </div>
-        <div style="font-size:10px;color:#666;margin-top:6px;">SIMA を読み込むと、測点・区画が図面に入り、この一覧にも出ます（今の図面があれば、置き換えるか追加するかを選べます）。座標CSV・SDR は上のバーの「📁 開く」から読み込めます</div>`;
+        <div class="coord-lbl" title="「自動」は点の広がりから決めます。「指定」にすると、読み込む・置く点の点名をその高さにします（例: 縮尺 1/500 で 2.5mm の文字なら 1.25 m）">${ptLabelControlHtml()}
+            <button class="prop-btn btn-sub" onclick="ptLabelApplyExisting()" title="図面の点名の文字を、この大きさにそろえる（↩ で戻せます）">🔠 今の点名をこの大きさに</button>
+        </div>`;
     showPropertyPanel('📍 座標一覧', html);
     window.updateCoordListContent();
 };
@@ -495,6 +496,8 @@ window.updateCoordListContent = function() {
     const list = q ? all.filter(p => String(p.name).toLowerCase().includes(q) || String(p.num).toLowerCase().includes(q)) : all;
     _coordListSnapshot = list;
     box.textContent = '';
+    const cnt = document.getElementById('coord-list-count');
+    if(cnt) cnt.textContent = all.length ? ` ${q ? `${list.length} / ` : ''}${all.length}点` : '';
     if(!list.length) {
         const empty = document.createElement('div');
         empty.style.cssText = 'color:#888;text-align:center;padding:16px;font-size:12px;';
@@ -503,30 +506,41 @@ window.updateCoordListContent = function() {
         return;
     }
     const frag = document.createDocumentFragment();
+    // 見出し（広い画面の表のときだけ見える。CSS の @container coordlist）
+    const head = document.createElement('div');
+    head.className = 'coord-head';
+    ['番号', '点名', 'X（北）', 'Y（東）', 'H（標高）', ''].forEach(t => { const c = document.createElement('span'); c.textContent = t; head.appendChild(c); });
+    frag.appendChild(head);
+    const span = (cls, text) => { const c = document.createElement('span'); c.className = cls; c.textContent = text; return c; };
+    // 座標の欄: 狭い画面では「X 1.929」のように印を付け、広い画面では印を隠して列にそろえる。値の無い標高は狭い画面では出さない
+    const cell = (cls, mark, v) => {
+        const c = span(cls + (v === '' ? ' cr-none' : ''), '');
+        const i = document.createElement('i'); i.textContent = mark;
+        c.append(i, document.createTextNode(v));
+        return c;
+    };
     list.slice(0, COORD_LIST_MAX_ROWS).forEach((p, k) => {
         const s = wcsToSurvey(p.x, p.y);
         const row = document.createElement('div');
         row.className = 'coord-row';
-        row.style.cssText = 'display:flex;gap:6px;align-items:center;padding:5px 6px 5px 8px;border-bottom:1px solid var(--border-1);cursor:pointer;font-size:12px;';
+        row.tabIndex = 0;
+        row.setAttribute('role', 'button');
         row.addEventListener('click', () => window.zoomToSurveyPoint(k));
-        const nm = document.createElement('div');
-        nm.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e0e0e0;font-weight:600;';
-        nm.textContent = (p.num ? p.num + ' ' : '') + (p.name || '(名称なし)') + (p.kind === 'block' ? ' 🧩' : '');
-        const xy = document.createElement('div');
-        xy.style.cssText = 'font-family:Consolas,monospace;color:#00ff88;font-size:11px;text-align:right;white-space:nowrap;';
-        xy.textContent = `X ${formatSurveyNumber(s.X)}  Y ${formatSurveyNumber(s.Y)}` + (p.z !== null ? `  H ${formatSurveyNumber(p.z)}` : '');
+        row.addEventListener('keydown', (ev) => { if(ev.key === 'Enter' && ev.target === row) window.zoomToSurveyPoint(k); });
+        const xyz = span('cr-xyz', '');
+        xyz.append(cell('cr-x', 'X', formatSurveyNumber(s.X)), cell('cr-y', 'Y', formatSurveyNumber(s.Y)), cell('cr-h', 'H', p.z !== null ? formatSurveyNumber(p.z) : ''));
         // 🗑 この点を消す（点と点名の文字をいっしょに。「↩ 元に戻す」で戻せる）
         const del = document.createElement('button');
         del.type = 'button'; del.className = 'coord-del'; del.textContent = '🗑';
         const label = p.name || p.num || '(名称なし)';
         del.title = `点「${label}」を消す`; del.setAttribute('aria-label', del.title);
         del.addEventListener('click', (ev) => { ev.stopPropagation(); window.coordListDeletePoint(p); });
-        row.appendChild(nm); row.appendChild(xy); row.appendChild(del);
+        row.append(span('cr-num', p.num || ''), span('cr-name', (p.name || '(名称なし)') + (p.kind === 'block' ? ' 🧩' : '')), xyz, del);
         frag.appendChild(row);
     });
     if(list.length > COORD_LIST_MAX_ROWS) {
         const more = document.createElement('div');
-        more.style.cssText = 'color:#888;text-align:center;padding:8px;font-size:11px;';
+        more.style.cssText = 'color:#888;text-align:center;padding:10px;font-size:13px;';
         more.textContent = `他 ${list.length - COORD_LIST_MAX_ROWS}点（検索で絞り込んでください）`;
         frag.appendChild(more);
     }
