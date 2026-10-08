@@ -89,6 +89,7 @@ function _editXformShape(e, T) {
         _editTransformDim(e, T);
     } else if(t === 'HATCH') {
         if(e.target) _editXformShape(e.target, T); // 塗りつぶしの範囲
+        hatchExtrasXform(e, (x, y) => editXformPoint(T, x, y), T.k); // 穴の輪・模様
     }
     return e;
 }

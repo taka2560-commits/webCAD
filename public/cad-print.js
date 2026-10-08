@@ -245,11 +245,15 @@ function printCompose(o, center, rot, meta) {
         }
         if(t === 'HATCH' && e.target) {
             const g = e.target;
+            const rings = (g.type === 'PLINE' && g.points) ? [g.points].concat(g.holes || []) : null;
+            // 斜線などの模様: 輪で切り抜いて線を引く（線・間の長さは省いて実線。用紙で 0.3mm より細かいときは薄く塗る）
+            if(e.pat && rings && printHatchLines(e, mmU, (a, b) => out.push(M(T(a.x, a.y)) + ' m ' + M(T(b.x, b.y)) + ' l'), () => { out.push('q'); rings.forEach(r => poly(r, true, '')); out.push('W* n'); }, () => out.push('S Q'))) return;
             out.push('/GS1 gs');
             setFill(c);
             if(g.type === 'CIRCLE') { arcPath(g.cx, g.cy, g.radius, 0, Math.PI * 2, true); out.push('h f'); }
             else if(g.type === 'RECTANG') poly([{ x: g.x1, y: g.y1 }, { x: g.x2, y: g.y1 }, { x: g.x2, y: g.y2 }, { x: g.x1, y: g.y2 }], true, 'f');
-            else if(g.type === 'PLINE' && g.points) poly(g.points, true, 'f');
+            else if(rings && rings.length > 1) { rings.forEach(r => poly(r, true, '')); out.push('f*'); } // 穴・離れた輪は偶奇の規則で塗る
+            else if(rings) poly(g.points, true, 'f');
             out.push('/GS0 gs');
         }
     };

@@ -532,13 +532,17 @@ function setupEventListeners() {
     });
 }
 
-// 非表示フラグ付き図形（インポートされた円弧など）の一括再表示
-window.showHiddenEntities = function() {
-    const hiddenCount = entities.filter(e => e.hidden).length;
+// 非表示フラグ付き図形（取り込み時に非表示にした円弧・塗りつぶしなど）の再表示。kind: 'arc' 円弧・'fill' 塗りつぶし・'other' そのほか・省くと全部
+function _hiddenKindOf(e) { return e.hiddenBy === 'fill' ? 'fill' : e.type === 'ARC' ? 'arc' : 'other'; }
+window.showHiddenEntities = function(kind) {
+    const list = entities.filter(e => e.hidden && (!kind || _hiddenKindOf(e) === kind));
+    const hiddenCount = list.length;
     if(hiddenCount === 0) { addCommandLog('-> 非表示の図形はありません'); return; }
     saveUndo();
-    entities.forEach(e => { if(e.hidden) e.hidden = false; });
-    addCommandLog(`-> 非表示だった図形 ${hiddenCount}個 を再表示しました（元に戻すにはUndo）`);
+    list.forEach(e => { e.hidden = false; delete e.hiddenBy; });
+    if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
+    const what = kind === 'fill' ? '塗りつぶし' : kind === 'arc' ? '円弧' : '図形';
+    addCommandLog(`-> 非表示だった${what} ${hiddenCount}個 を表示しました（元に戻すにはUndo）`);
     if (typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
     render();
 };

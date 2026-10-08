@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.25.5（2026年10月5日リリース）**
+**現在のバージョン: v5.26（2026年10月8日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（633件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（652件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,11 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-08: バージョン5.26（DWG・DXF の取りこぼしを減らす: 塗りつぶし・引出線・寸法線）** 📥
+  * 手元の実物 31 本で取りこぼしを数えた（DWG は libredwg-web を Node で直接動かす: createByWasmInstance に wasmBinary を渡す）。DXF の HATCH・LEADER・MULTILEADER は dxf-parser 1.1.2 が読まず、知らせずに消えていた。DWG は HATCH・LEADER・POLYLINE3D を除外、SOLID は角が corner1〜4 で届くのに points を見ていたため全滅、寸法は文字だけ、ATTRIB は INSERT の中と図形一覧の両方から取り込んで二重。
+  * cad-import-shapes.js（新）: タグを集める dxf-parser のハンドラ（HATCH・LEADER・MULTILEADER・TRACE と、ファイルにある読めない図形）、境界の輪（ふくらみ付き折れ線・線・円弧・楕円弧・スプライン。右回りの辺は角度の符号を変えてたどる。実物 8,830 本の境界でつなぎ目が閉じることを確かめた）、makeImportedHatch（いちばん広い輪を target、ほかを target.holes。模様は pat.lines。定義の無い DWG の ANSI31 などは名前から）、引出線・矢印、hatchExtrasXform（移動・回転・鏡像で穴と模様も写す）、drawHatchPattern・printHatchLines、取り込めなかった図形の日本語名（importSkipText）。
+  * cad-dwg.js（新）: cad-io.js から DWG の読み込みを移した（cad-io.js が 1200 行に近いため）。寸法は ent.name の *D ブロックを広げる。塗りつぶしの非表示は hiddenBy: 'fill'（オプション cad_import_hide_fills・初期値 入）。画層管理のボタンを種類別（円弧・塗りつぶし・そのほか）にし、「塗りつぶしを隠す」を足した（矢印は arrow で残す）。tests/import-shapes.test.cjs。
 
 * **2026-10-05: バージョン5.25.5（iPhone・iPad 特有の不具合の修正）** 📱
   * isAppleTouchDevice（cad-core.js）: UA の iPhone・iPad・iPod に加え、Macintosh でタッチ点が2つ以上なら iPad（iPadOS の Safari は Mac と名乗る）。fileAcceptFor: iPhone・iPad では file input の accept を空にする（未知の拡張子 .dxf・.sim などが灰色で選べないため）。開く・座標一覧の SIMA・ヘルマートの SIMA。

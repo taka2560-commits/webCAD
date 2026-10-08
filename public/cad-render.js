@@ -339,9 +339,13 @@ function drawOneEntity(e, color) {
         } else if(tgt.type==='CIRCLE') {
             const c=wcsToScreen(tgt.cx,tgt.cy); ctx.beginPath(); ctx.arc(c.x,c.y,tgt.radius*view.scale,0,Math.PI*2); ctx.fill();
         } else if(tgt.type==='PLINE' && tgt.closed) {
-            ctx.beginPath();
-            tgt.points.forEach((pt,i)=>{ const p=wcsToScreen(pt.x,pt.y); if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
-            ctx.closePath(); ctx.fill();
+            // 取り込んだ塗りつぶしは、穴・離れた輪（holes）を偶奇の規則で塗る。斜線などの模様（pat）は輪で切り抜いて線で描く
+            const ringPath = () => {
+                ctx.beginPath();
+                [tgt.points].concat(tgt.holes || []).forEach(r => { r.forEach((pt,i)=>{ const p=wcsToScreen(pt.x,pt.y); if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); }); ctx.closePath(); });
+            };
+            if(e.pat && typeof drawHatchPattern === 'function') drawHatchPattern(e, ringPath);
+            else { ringPath(); ctx.fill('evenodd'); }
         }
         ctx.globalAlpha = 1.0;
     }

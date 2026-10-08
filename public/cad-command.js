@@ -398,6 +398,7 @@ function rotateEntity(e, cx, cy, angle) {
         if(e.subType === 'RADIUS' || e.subType === 'DIAMETER') e.angle = (e.angle || 0) + angle;
     } else if(e.type === 'HATCH') {
         if(e.target) rotateEntity(e.target, cx, cy, angle); // 塗りつぶしの範囲
+        hatchExtrasXform(e, (x, y) => ({ x: rx(x, y), y: ry(x, y) }), 1); // 穴の輪・模様
     }
 }
 

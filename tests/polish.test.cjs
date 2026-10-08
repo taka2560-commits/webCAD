@@ -17,7 +17,8 @@ describe('仕上げ', () => {
 
     it('入・切の設定はスイッチ（role=switch。チェックボックスのままなので checked・onchange はそのまま）', () => {
         app.eval('showOptionsPanel()');
-        assert.equal(app.eval(`document.querySelectorAll('#property-panel-content input[type=checkbox].sw[role=switch]').length`), 2);
+        // タップでブロック全体を選択・取り込み時に円弧を非表示・取り込み時に塗りつぶしを非表示
+        assert.equal(app.eval(`document.querySelectorAll('#property-panel-content input[type=checkbox].sw[role=switch]').length`), 3);
         app.eval('showLayerManagerPanel()');
         assert.equal(app.eval(`document.getElementById('ghost-layer-toggle').getAttribute('role')`), 'switch');
         const css = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

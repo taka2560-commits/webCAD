@@ -43,6 +43,7 @@ function showOptionsPanel(){
     const opts = [['#000','黒'],['#808080','グレー'],['#ffffff','白']];
     const btns = opts.map(o=>`<button class="prop-btn opt-bg-btn ${canvasBg===o[0]?'active':''}" data-bg="${o[0]}" onclick="setCanvasBackground('${o[0]}')" style="flex:1;">${o[1]}</button>`).join('');
     const hideArcs = (typeof shouldHideImportedArcs === 'function') ? shouldHideImportedArcs() : true;
+    const hideFills = (typeof shouldHideImportedFills === 'function') ? shouldHideImportedFills() : true;
     const html = `
         <div class="prop-row"><label>背景色:</label></div>
         <div style="display:flex;gap:6px;">${btns}</div>
@@ -50,7 +51,8 @@ function showOptionsPanel(){
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" class="sw" role="switch" ${window.groupSelectEnabled?'checked':''} onchange="setGroupSelectEnabled(this.checked)"> タップでブロック全体を選択</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" class="sw" role="switch" ${hideArcs?'checked':''} onchange="setImportHideArcs(this.checked)"> 取り込み時に円弧を非表示にする</label>
-            <div style="color:#888;font-size:10px;">非表示にした円弧は、画層管理の「隠れ図形を再表示」で表示できます</div>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#ddd;"><input type="checkbox" class="sw" role="switch" ${hideFills?'checked':''} onchange="setImportHideFills(this.checked)"> 取り込み時に塗りつぶしを非表示にする</label>
+            <div style="color:#888;font-size:10px;">非表示にした円弧・塗りつぶし（塗り・斜線などの模様）は、画層管理の「円弧を表示」「塗りつぶしを表示」で表示できます</div>
         </div>
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
             <div style="font-size:11px;color:#aaa;font-weight:700;">オフライン・データ</div>

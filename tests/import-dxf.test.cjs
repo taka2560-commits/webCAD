@@ -132,9 +132,11 @@ describe('DXF取り込み: test_blocks.dxf', () => {
         }
     });
 
-    it('SOLID は頂点順を補正した閉じたポリラインになる（蝶ネクタイ状にならない）', () => {
-        const so = ents.find((e) => e.type === 'PLINE' && e.closed && !e.blockName);
-        assert.deepEqual(so.points, [{ x: 0, y: -200 }, { x: 10, y: -200 }, { x: 10, y: -190 }, { x: 0, y: -190 }]);
+    it('SOLID は塗り（HATCH）になり、頂点順を補正する（蝶ネクタイ状にならない）。初期値では塗りつぶしとして非表示', () => {
+        const so = ents.find((e) => e.type === 'HATCH' && !e.blockName);
+        assert.deepEqual(so.target.points, [{ x: 0, y: -200 }, { x: 10, y: -200 }, { x: 10, y: -190 }, { x: 0, y: -190 }]);
+        assert.equal(so.hidden, true);
+        assert.equal(so.hiddenBy, 'fill');
     });
 
     it('ARC の角度を正しく取り込む（度→ラジアンの二重変換をしない）', () => {

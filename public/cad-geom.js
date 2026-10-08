@@ -305,6 +305,8 @@ function calcBBox(e) {
             if(p.x < minX) minX = p.x; if(p.y < minY) minY = p.y;
             if(p.x > maxX) maxX = p.x; if(p.y > maxY) maxY = p.y;
         }
+        // 取り込んだ塗りつぶしの範囲の、ほかの輪（穴・離れた輪）
+        if(e.holes) e.holes.forEach(r => r.forEach(p => { if(p.x < minX) minX = p.x; if(p.y < minY) minY = p.y; if(p.x > maxX) maxX = p.x; if(p.y > maxY) maxY = p.y; }));
     } else if(e.type==='POINT') {
         minX = e.x; maxX = e.x; minY = e.y; maxY = e.y;
     } else if(e.type==='TEXT') {

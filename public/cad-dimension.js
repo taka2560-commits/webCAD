@@ -836,7 +836,7 @@ function moveEntity(e, dx, dy) {
     else if(e.type === 'RECTANG') { e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; }
     else if(e.type === 'PLINE') { e.points.forEach(p => { p.x+=dx; p.y+=dy; }); }
     else if(e.type === 'POINT' || e.type === 'TEXT') { e.x+=dx; e.y+=dy; }
-    else if(e.type === 'HATCH') { if(e.target) moveEntity(e.target, dx, dy); }
+    else if(e.type === 'HATCH') { if(e.target) moveEntity(e.target, dx, dy); hatchExtrasXform(e, (x, y) => ({ x: x + dx, y: y + dy }), 1); } // 穴の輪・模様も
     else if(e.type === 'DIMENSION') {
         if(e.p1) { e.p1.x+=dx; e.p1.y+=dy; e.p2.x+=dx; e.p2.y+=dy; }
         if(e.center) { e.center.x+=dx; e.center.y+=dy; }

@@ -61,12 +61,16 @@ function fileUnitFromInsunits(code) { const n = Number(code); return n === 4 ? '
 
 // ===== 取り込んだ寸法（図形が無いとき、値の文字だけ置く）の値 =====
 // 取り込み中のファイルの単位と、寸法の文字の高さ。単位が書かれていなければ、いまの図面の単位
-let _importUnit = 'm', _importDimTxt = { h: 2.5 };
-function _beginImport(insunits, dimtxt, dimscale) {
+let _importUnit = 'm', _importDimTxt = { h: 2.5, asz: 2.5 }, _importHideFills = true;
+function _beginImport(insunits, dimtxt, dimscale, dimasz) {
     _importUnit = fileUnitFromInsunits(insunits) || ((typeof getSurveyUnit === 'function') ? getSurveyUnit() : 'm');
-    // 文字の高さ: 寸法の設定（DIMTXT）× 全体の尺度（DIMSCALE。0 や無いときは 1）。どちらも無ければ 2.5
-    const t = Number(dimtxt), s = Number(dimscale);
-    _importDimTxt = { h: (t > 0 ? t : 2.5) * (s > 0 ? s : 1) };
+    // 文字の高さ: 寸法の設定（DIMTXT）× 全体の尺度（DIMSCALE。0 や無いときは 1）。どちらも無ければ 2.5。
+    // 矢印の大きさ（引出線）: DIMASZ × DIMSCALE。無ければ文字の高さと同じ
+    const t = Number(dimtxt), s = Number(dimscale), a = Number(dimasz), k = (s > 0 ? s : 1);
+    const h = (t > 0 ? t : 2.5) * k;
+    _importDimTxt = { h, asz: a > 0 ? a * k : h };
+    // 取り込んだ塗りつぶしを非表示にするか（オプション。初期値: 入）
+    _importHideFills = (typeof shouldHideImportedFills === 'function') ? shouldHideImportedFills() : true;
 }
 // 寸法の種類: DXF は 70 の下位ビット（0・1 線、2・5 角度、3 直径、4 半径、6 座標）、DWG は subclassMarker
 function _dimKindDxf(type) { const t = (Number(type) || 0) & 7; return t === 3 ? 'diameter' : t === 4 ? 'radius' : (t === 2 || t === 5) ? 'angular' : t === 6 ? 'ordinate' : 'linear'; }

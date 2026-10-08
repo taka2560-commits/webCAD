@@ -426,9 +426,17 @@ window.updateLayerManagerContent = function() {
             </button>
         </div>
         ${(() => {
-            const hiddenEntCount = entities.filter(en => en.hidden).length;
-            if(hiddenEntCount === 0) return '';
-            return `<button class="prop-btn" style="background:rgba(40,44,52,0.9); color:#61afef; border:1px solid #61afef; font-weight:bold; padding:6px 12px; border-radius:14px; cursor:pointer;" onclick="showHiddenEntities()" title="インポート時に非表示化された円弧などを再表示します">⭕ 隠れ図形を再表示 (${hiddenEntCount}個)</button>`;
+            // 取り込み時に非表示にした図形を、種類ごとに表示する（円弧・塗りつぶし・そのほか）。取り込んだ塗りつぶしは、また隠せる
+            const hid = entities.filter(en => en.hidden);
+            const nFill = hid.filter(en => en.hiddenBy === 'fill').length, nArc = hid.filter(en => en.hiddenBy !== 'fill' && en.type === 'ARC').length;
+            const nOther = hid.length - nFill - nArc;
+            const nShownFill = entities.filter(en => en.type === 'HATCH' && en.imp && !en.arrow && !en.hidden).length;
+            const btn = (kind, label, n, title) => n ? `<button class="prop-btn" style="background:rgba(40,44,52,0.9); color:#61afef; border:1px solid #61afef; font-weight:bold; padding:6px 12px; border-radius:14px; cursor:pointer;" onclick="${kind}" title="${title}">${label} (${n}個)</button>` : '';
+            const html = btn("showHiddenEntities('arc')", '◠ 円弧を表示', nArc, '取り込み時に非表示にした円弧を表示します') +
+                btn("showHiddenEntities('fill')", '▨ 塗りつぶしを表示', nFill, '取り込み時に非表示にした塗りつぶし（塗り・斜線などの模様）を表示します') +
+                btn('hideImportedFills()', '▨ 塗りつぶしを隠す', nShownFill, '取り込んだ塗りつぶしを、また非表示にします（寸法・引出線の矢印は残します）') +
+                btn("showHiddenEntities('other')", '⭕ 隠れ図形を再表示', nOther, 'ファイルで非表示だった図形などを表示します');
+            return html ? `<div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:center;">${html}</div>` : '';
         })()}
         ${isLayoffActive ? `<div style="color:#ffcc00; font-size:10px; text-align:center; margin-top:2px; font-weight:bold;">図面の図形をタップすると、その画層が赤く光ります（もう一度タップで外す）。☑確定 で非表示にします（Escで終了）${pick.length ? `<br><span style="color:#ff6b6b;">消す候補: ${pick.map((i) => `「${escapeHtml(layers[i].name)}」`).join('')}</span>` : ''}</div>` : ''}
     </div>
