@@ -634,12 +634,19 @@ function helmSimaLines(withLots) {
     }
     return { lines: L, pointCount: idx.length, lotCount: lots.length };
 }
+// 書き出す前に中身を見せ、「📤 書き出す」で書き出す（cad-export-preview.js）。「やめる」なら変換のパネルに戻る
 window.helmExportSima = function() {
     if(!_helm.sol || !_helm.sol.ok) return false;
     const r = helmSimaLines(true);
-    downloadBlob(new Blob([encodeShiftJis(r.lines.join('\r\n') + '\r\n')], { type: 'text/plain' }), `${_helmBaseName()}_変換.sim`);
-    addCommandLog(`-> [変換] 変換後の SIMA を書き出しました: 点 ${r.pointCount}${r.lotCount ? '・区画 ' + r.lotCount : ''}（Shift-JIS）`);
-    showToast(`変換後の SIMA: 点 ${r.pointCount}${r.lotCount ? '・区画 ' + r.lotCount : ''}`, 3000);
+    const text = r.lines.join('\r\n') + '\r\n', name = `${_helmBaseName()}_変換.sim`;
+    const bad = sjisBadChars(simaPreviewRows(text).rows.map((p) => p.name).join(''));
+    const shown = sjisRoundTrip(text), pv = simaPreviewRows(shown); // 表・中身は Shift-JIS で書いたあとの文字（表せない文字は ?）
+    const notes = bad.length ? [{ warn: true, text: `Shift-JIS で表せない文字（${bad.slice(0, 10).join(' ')}）は「?」になります` }] : [];
+    showExportPreview({ kind: '変換後の SIMA', fileName: name, encoding: 'Shift-JIS', text: shown, rows: pv.rows, lots: pv.lots, notes, write: () => {
+        downloadBlob(new Blob([encodeShiftJis(text)], { type: 'text/plain' }), name);
+        addCommandLog(`-> [変換] 変換後の SIMA を書き出しました: 点 ${r.pointCount}${r.lotCount ? '・区画 ' + r.lotCount : ''}（Shift-JIS）`);
+        showToast(`変換後の SIMA: 点 ${r.pointCount}${r.lotCount ? '・区画 ' + r.lotCount : ''}`, 3000);
+    } });
     return true;
 };
 // 変換後の点を機械へ送る（既知点の外部入力。座標だけ）

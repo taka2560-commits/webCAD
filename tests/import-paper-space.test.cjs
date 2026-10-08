@@ -1,5 +1,5 @@
 'use strict';
-// レイアウト（ペーパー空間）は取り込まない。モデル空間の図形だけを図面にする（DWG・DXF）。
+// レイアウト（ペーパー空間）はモデルに入れない。モデル空間の図形だけを図面にし、レイアウトは別の画面のレイアウトにする（DWG・DXF。v5.38 cad-layout.js）。
 //   DWG: 読込エンジン（libredwg-web）は、モデル空間とすべてのレイアウトの図形を db.entities にまとめて返す。
 //        図形の持ち主は ownerBlockRecordSoftId（ブロックレコードの handle）、ブロック参照の属性は db.entities にも別に入る。
 //   DXF: レイアウトの図形には 67（inPaperSpace）が付く。付けないソフトもあるので、持ち主（330）が *Paper_Space でも見分ける。
@@ -34,10 +34,11 @@ function dwgDb() {
     };
 }
 
-describe('取り込み: レイアウト（ペーパー空間）は取り込まず、モデル空間だけ', () => {
+describe('取り込み: レイアウト（ペーパー空間）はモデルに入れず、別の画面のレイアウトにする', () => {
     let app;
     before(async () => { app = await loadApp(); });
     after(() => app.close());
+    const clearLayouts = () => app.eval('layoutsClear()');
 
     it('DWG: レイアウトの図形・ブロック参照・属性・ビューポートを除き、モデル空間の図形とブロックだけ取り込む', () => {
         app.window.__db = dwgDb();
@@ -45,7 +46,10 @@ describe('取り込み: レイアウト（ペーパー空間）は取り込ま�
         assert.deepEqual(r.xs, [10, 50], `モデル空間の線と MARK ブロックの線だけのはず: ${JSON.stringify(r.xs)}`);
         assert.equal(r.texts, 0, 'レイアウトの表題（属性）が入っている');
         assert.equal(r.paper, 5);
-        assert.match(app.eval(`document.getElementById('command-log').textContent`), /レイアウト（ペーパー空間）の図形 5個は取り込みません/);
+        assert.match(app.eval(`document.getElementById('command-log').textContent`), /レイアウト（ペーパー空間）の図形 5個は、モデルには入れません/);
+        // レイアウトは別に変える（LAYOUT の記録が無いので、名前はブロックレコードの名前）。属性の表題は図枠のブロックといっしょに
+        assert.deepEqual(app.val(`convertDwgDatabaseToApp(window.__db).layouts.map(l => [l.name, l.ents.map(e => e.type === 'TEXT' ? e.text : Math.min(e.x1, e.x2)).sort().join(',')])`),
+            [['Paper_Space', '9000,9200,表題'], ['Paper_Space0', '9100']]);
     });
 
     it('DWG: エンジンが isInPaperSpace を付けた図形も除く', () => {
@@ -71,7 +75,10 @@ describe('取り込み: レイアウト（ペーパー空間）は取り込ま�
         const xs = app.val(`entities.filter(e => e.type === 'LINE').map(e => e.x1)`);
         assert.deepEqual(xs, [10]);
         assert.equal(app.val(`entities.filter(e => e.type === 'TEXT').length`), 0, 'レイアウトの属性が入っている');
-        assert.match(app.eval(`document.getElementById('command-log').textContent`), /レイアウト（ペーパー空間）の図形 4個は取り込みません/);
+        assert.match(app.eval(`document.getElementById('command-log').textContent`), /レイアウト（ペーパー空間）の図形 4個は、モデルには入れません/);
+        // LAYOUT の記録が無い DXF: レイアウトの図形を1枚のレイアウトにする
+        assert.deepEqual(app.val(`cadLayouts.map(l => [l.name, l.ents.filter(e => e.type === 'LINE').map(e => e.x1).join(','), l.ents.filter(e => e.type === 'TEXT').map(e => e.text).join(',')])`), [['レイアウト', '9000,9100', '表題']]);
+        clearLayouts();
     });
 
     it('DXF: レイアウトの図形しか無いときは、そう知らせる（「未対応」とは数えない）', () => {
@@ -81,7 +88,10 @@ describe('取り込み: レイアウト（ペーパー空間）は取り込ま�
         const r = app.val(`(() => { entities.length = 0; return importDxfData(window.__dxf, { skipUndo: true }); })()`);
         assert.equal(r.importCount, 0); assert.equal(r.paperSkipped, 1);
         assert.deepEqual(r.skipStats, {});
-        assert.match(String(toast), /モデル空間に図形がありません/);
+        assert.match(String(toast), /モデル空間に図形がありません。レイアウト「レイアウト」を出しました/);
+        assert.equal(app.eval('layoutActive()'), true, 'モデルが空なら、レイアウトを出す');
+        clearLayouts();
+        assert.equal(app.eval('layoutActive()'), false);
     });
 
     it('未捕捉エラーが起きない', () => { assert.deepEqual(app.errors(), []); });

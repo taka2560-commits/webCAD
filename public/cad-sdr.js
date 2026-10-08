@@ -279,12 +279,23 @@ async function loadSdrFile(file) {
     }
 }
 // 測点を SDR33 ファイルで書き出す（機械の USB メモリへ入れて既知点・杭打ち点に）
+// 書き出す前に中身（表・ファイルの文字）と、点名を置き換えた点を見せ、「📤 書き出す」で書き出す（cad-export-preview.js）
 window.exportSdr33 = function() {
     const pts = sdrPointsFromDrawing();
     if(!pts.length) { if(typeof showToast === 'function') showToast('出力できる測点がありません（点・属性付きブロック）', 4000); return; }
     const r = buildSdr33Records(pts, { job: _baseName().replace(/[^\x20-\x7e]/g, '').slice(0, 16) || 'WEBCAD' });
-    downloadBlob(new Blob([sdrFileText(r.lines)], { type: 'text/plain' }), _baseName() + '.sdr');
-    const note = r.renamed.length ? `（点名を使えない ${r.renamed.length}点は P0001 などにしました）` : '';
-    addCommandLog(`-> SDR33出力: 測点 ${pts.length}点${note}`);
-    if(typeof showToast === 'function') showToast(`SDR33出力: 測点 ${pts.length}点${note ? '\n' + note : ''}`, 4000);
+    const text = sdrFileText(r.lines), name = _baseName() + '.sdr';
+    const rows = parseSdr(text).points.map((p, i) => ({ num: String(i + 1), name: p.id, X: p.X, Y: p.Y, z: p.Z }));
+    const notes = [];
+    if(r.renamed.length) {
+        const ex = r.renamed.slice(0, 5).map((x) => `${x.from || '（名前なし）'}→${x.to}`).join('、');
+        notes.push({ warn: true, text: `SDR の点名に使えない（日本語・15文字以上・重なり） ${r.renamed.length}点は、P0001 などにしました（${ex}${r.renamed.length > 5 ? ' など' : ''}）` });
+    }
+    showExportPreview({ kind: 'SDR33', fileName: name, encoding: '半角の英数字', text, rows, notes, write: () => _writeSdr33(text, name, pts.length, r.renamed) });
 };
+function _writeSdr33(text, name, count, renamed) {
+    downloadBlob(new Blob([text], { type: 'text/plain' }), name);
+    const note = renamed.length ? `（点名を使えない ${renamed.length}点は P0001 などにしました）` : '';
+    addCommandLog(`-> SDR33出力: 測点 ${count}点${note}`);
+    if(typeof showToast === 'function') showToast(`SDR33出力: 測点 ${count}点${note ? '\n' + note : ''}`, 4000);
+}

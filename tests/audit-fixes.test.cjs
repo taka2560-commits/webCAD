@@ -141,8 +141,11 @@ describe('不具合チェックの修正（2026-09-24）', () => {
             __touch('touchmove', [[280, 300], [420, 300]]); __touch('touchend', [[280, 300]]);
             __touch('touchmove', [[285, 302]]); __touch('touchend', []);`);
         assert.equal(app.eval('cmdState.mode'), 'WAITING_LINE_P1');
-        // そのあとの普通のタップでは点が入る
+        assert.equal(app.eval('cmdState.lineCand'), null, 'ピンチでは仮の点も置かない');
+        // そのあとの普通のタップでは点が入る（線分は仮の点 → ☑確定。v5.35）
         app.eval(`__touch('touchstart', [[200, 200]]); __touch('touchend', []);`);
+        assert.ok(app.eval('!!cmdState.lineCand'));
+        app.eval('dimConfirmPoint()');
         assert.equal(app.eval('cmdState.mode'), 'WAITING_LINE_P2');
     });
 

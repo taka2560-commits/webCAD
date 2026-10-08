@@ -57,7 +57,7 @@ async function exportScreenPng() {
         render();
     }
     if(failed || !blob) { notify('エラー: 画面の画像を作れませんでした' + (failed ? ` - ${failed.message}` : ''), { kind: 'error', ms: 5000 }); return; }
-    const name = `${_baseName()}_画面.png`;
+    const name = `${_baseName()}_${layoutActive() ? layoutCurrent().name.replace(/[/:*?"<>|]/g, '_') : '画面'}.png`; // レイアウトを見ていればその名前（cad-layout.js）
     downloadBlob(blob, name);
     notify(`-> 画面の画像を保存しました: ${name}（${Math.round(w * k)}×${Math.round(h * k)}）`, { kind: 'success', ms: 2500 });
 }

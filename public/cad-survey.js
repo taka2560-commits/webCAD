@@ -91,7 +91,7 @@ function polygonArea(pts) {
 function addSurveyData(points, lots, opt) {
     const one = opt && opt.layer ? _ensureSurveyLayer(opt.layer, opt.color || '#ffffff') : -1;
     const wpts = points.map(p => Object.assign({}, p, surveyToWcs(p.X, p.Y)));
-    const h = _autoLabelHeight(wpts);
+    const h = ptLabelFixedHeight() || _autoLabelHeight(wpts); // 座標一覧の「点名の大きさ」（自動・指定。cad-textsize.js）
     const lp = one >= 0 ? one : _ensureSurveyLayer(SURVEY_LAYER_POINT, '#ffff00');
     const ll = one >= 0 ? one : _ensureSurveyLayer(SURVEY_LAYER_LABEL, '#ffffff');
     wpts.forEach(p => makeSurveyPointEntities(p, h, lp, ll).forEach(e => entities.push(e)));
@@ -275,9 +275,17 @@ function _surveyExportPoints(onlyIdx) {
     const pts = src.map(p => { const s = wcsToSurvey(p.x, p.y); return { num: String(p.num || '').trim(), name: p.name, X: s.X, Y: s.Y, z: p.z }; });
     const nums = pts.map(p => p.num);
     const valid = nums.every(n => /^\d+$/.test(n)) && new Set(nums).size === nums.length;
+    // 点番号: kept（そのまま）・assigned（どの点にも無かったので付けた）・renumbered（重なり・数でないものがあったので振り直した）。書き出す前の確認に出す
+    pts.numMode = valid ? 'kept' : (nums.every(n => n === '') ? 'assigned' : 'renumbered');
     if(!valid) pts.forEach((p, i) => { p.num = String(i + 1); });
-    pts.forEach(p => { if(!p.name) p.name = 'P' + p.num; });
+    pts.unnamed = 0;
+    pts.forEach(p => { if(!p.name) { p.name = 'P' + p.num; pts.unnamed++; } });
     return pts;
+}
+// 書き出す前の確認（cad-export-preview.js）に出す、書き出しの様子
+function _surveyExportInfo(pts, lots, lotAdded) {
+    return { numMode: pts.numMode || 'kept', unnamed: pts.unnamed || 0, lotAdded: lotAdded || 0, pointCount: pts.length,
+        noZ: pts.filter(p => p.z === null || p.z === undefined).length, names: pts.map(p => String(p.name)).concat((lots || []).map(l => String(l.name))) };
 }
 function _simaA01(p) { return `A01,${_simaField(p.num)},${_simaField(p.name)},${formatSurveyNumber(p.X)},${formatSurveyNumber(p.Y)},${p.z === null || p.z === undefined ? '' : formatSurveyNumber(p.z)},`; }
 // 測点だけの SIMA（座標データ）の行（機械の既知点へ送るときなど）。onlyIdx があれば、その図形の測点だけ
@@ -291,6 +299,7 @@ function buildSimaPointLines(title, onlyIdx) {
 // 出力用に点番号・点名を揃え、区画の頂点を点に対応付ける
 function _prepareExport() {
     const pts = _surveyExportPoints();
+    const base = pts.length;
     // 区画の頂点 → 点（同じ座標の点が無ければ追加する）
     const key = (X, Y) => Math.round(X * 1000) + ',' + Math.round(Y * 1000);
     const byKey = new Map();
@@ -307,11 +316,11 @@ function _prepareExport() {
         });
         return { name: lotName, refs };
     });
-    return { pts, lots };
+    return { pts, lots, lotAdded: pts.length - base };
 }
 
 function buildSimaText(title) {
-    const { pts, lots } = _prepareExport();
+    const { pts, lots, lotAdded } = _prepareExport();
     const L = [];
     L.push(`G00,01,${_simaField(title || 'WebCAD')},`);
     L.push('Z00,座標ﾃﾞｰﾀ,,');
@@ -326,15 +335,20 @@ function buildSimaText(title) {
             L.push('D99,');
         });
     }
-    return { text: L.join('\r\n') + '\r\n', pointCount: pts.length, lotCount: lots.length };
+    return { text: L.join('\r\n') + '\r\n', pointCount: pts.length, lotCount: lots.length, info: _surveyExportInfo(pts, lots, lotAdded) };
 }
 
 function buildCoordCsvText() {
-    const { pts } = _prepareExport();
+    const { pts, lotAdded } = _prepareExport();
     const q = (s) => /[",\r\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s);
     const L = ['点番号,点名,X,Y,標高'];
     pts.forEach(p => L.push([q(p.num), q(p.name), formatSurveyNumber(p.X), formatSurveyNumber(p.Y), p.z === null || p.z === undefined ? '' : formatSurveyNumber(p.z)].join(',')));
-    return { text: L.join('\r\n') + '\r\n', pointCount: pts.length };
+    return { text: L.join('\r\n') + '\r\n', pointCount: pts.length, rows: pts.map(p => ({ num: p.num, name: p.name, X: p.X, Y: p.Y, z: p.z })), info: _surveyExportInfo(pts, [], lotAdded) };
+}
+// SIMA の文字 → 書き出す前の確認の表（ファイルに書く点・区画そのもの）
+function simaPreviewRows(text) {
+    const d = parseSima(text);
+    return { rows: d.points, lots: d.lots.map(l => ({ name: l.name, n: l.refs.length })) };
 }
 
 function _baseName() {
@@ -342,22 +356,33 @@ function _baseName() {
     return n || 'webcad';
 }
 
+// SIMA・座標CSV は、書き出す前に中身（表・ファイルの文字）と気づいたことを見せ、「📤 書き出す」で書き出す（cad-export-preview.js）
 window.exportSima = function() {
     const r = buildSimaText(_baseName());
     if(!r.pointCount) { if(typeof showToast === 'function') showToast('出力できる測点がありません（点・属性付きブロック・区画）', 4000); return; }
+    const name = _baseName() + '.sim', shown = sjisRoundTrip(r.text), pv = simaPreviewRows(shown); // 表・中身は Shift-JIS で書いたあとの文字（表せない文字は ?）
+    showExportPreview({ kind: 'SIMA', fileName: name, encoding: 'Shift-JIS', text: shown, rows: pv.rows, lots: pv.lots,
+        notes: surveyExportNotes(r.info, { sjis: true, sima: true }), write: () => _writeSima(r, name) });
+};
+function _writeSima(r, name) {
     const bytes = encodeShiftJis(r.text);
-    downloadBlob(new Blob([bytes], { type: 'text/plain' }), _baseName() + '.sim');
+    downloadBlob(new Blob([bytes], { type: 'text/plain' }), name);
     addCommandLog(`-> SIMA出力: 測点 ${r.pointCount}点` + (r.lotCount ? `・区画 ${r.lotCount}` : '') + '（Shift-JIS）');
     if(typeof showToast === 'function') showToast(`SIMA出力: 測点 ${r.pointCount}点` + (r.lotCount ? `・区画 ${r.lotCount}` : ''), 3000);
-};
+}
 window.exportCoordCsv = function() {
     const r = buildCoordCsvText();
     if(!r.pointCount) { if(typeof showToast === 'function') showToast('出力できる測点がありません', 4000); return; }
+    const name = _baseName() + '_座標.csv';
+    showExportPreview({ kind: '座標CSV', fileName: name, encoding: 'UTF-8・BOM付き（Excel で開けます）', text: r.text, rows: r.rows,
+        notes: surveyExportNotes(r.info, {}), write: () => _writeCoordCsv(r, name) });
+};
+function _writeCoordCsv(r, name) {
     // Excel で文字化けしないよう UTF-8（BOM付き）で出力
-    downloadBlob(new Blob(['\uFEFF' + r.text], { type: 'text/csv' }), _baseName() + '_座標.csv');
+    downloadBlob(new Blob(['\uFEFF' + r.text], { type: 'text/csv' }), name);
     addCommandLog(`-> 座標CSV出力: ${r.pointCount}点`);
     if(typeof showToast === 'function') showToast(`座標CSV出力: ${r.pointCount}点`, 3000);
-};
+}
 
 // ===== Shift-JIS への変換（SIMA は Shift-JIS が標準。ブラウザは Shift-JIS で書き出せないため対応表を作る） =====
 let _sjisMap = null;
@@ -414,6 +439,9 @@ window.showCoordListPanel = function() {
             <button class="prop-btn" style="flex:1;margin-top:0;" onclick="coordListImportSima()" title="SIMA（.sim）の測点・区画を図面に入れる">📥 SIMA を読み込む</button>
             <button class="prop-btn btn-sub" style="flex:1;margin-top:0;" onclick="closePropertyPanel(); toggleCommand('POINT')" title="図面をタップした所に測点を置く（左のツールバーの「点」と同じ）">⊙ 点を置く</button>
         </div>
+        <div style="margin-top:6px;">${ptLabelControlHtml()}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;"><button class="prop-btn btn-sub" style="flex:1;margin-top:0;" onclick="ptLabelApplyExisting()" title="図面の点名の文字を、この大きさにそろえる（↩ で戻せます）">🔠 今の点名をこの大きさに</button></div>
+        <div style="font-size:10px;color:#666;margin-top:4px;">点名の大きさ: 「自動」は点の広がりから決めます。「指定」にすると、読み込む・置く点の点名をその高さにします（例: 縮尺 1/500 で 2.5mm の文字なら 1.25 m）</div>
         <div class="ts-sec" style="margin-top:8px;">出力</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="prop-btn btn-sub" style="flex:1;" onclick="exportCoordCsv()">📄 CSV出力</button>
@@ -761,7 +789,7 @@ function _onGnssPosition(pos) {
     if(typeof stakeOnGnss === 'function') stakeOnGnss(); // 杭打ちナビ（現在地から）
     if(!_gnss.centered) {
         _gnss.centered = true;
-        window.centerOnGnss();
+        window.centerOnGnss(true);
         // 図面から大きく離れていれば、系番号や単位の設定違いの可能性を知らせる
         const bb = _drawingExtents();
         if(bb) {
@@ -775,7 +803,7 @@ function _onGnssPosition(pos) {
         }
         return;
     }
-    if(_gnss.follow) window.centerOnGnss(); else renderOverlay();
+    if(_gnss.follow) window.centerOnGnss(true); else renderOverlay();
 }
 function _onGnssError(err) {
     const msg = err && err.code === 1 ? '位置情報の利用が許可されていません。ブラウザ（またはOS）の設定で、このサイトの位置情報を許可してください'
@@ -795,7 +823,9 @@ function _drawingExtents() {
     });
     return minX === Infinity ? null : { minX, minY, maxX, maxY };
 }
-window.centerOnGnss = function() {
+// auto: 現在地を受けたときの自動の移動（レイアウトを見ている間は動かさない）。ボタンで押したときはモデルに戻ってから
+window.centerOnGnss = function(auto) {
+    if(typeof layoutActive === 'function' && layoutActive()) { if(auto === true) return; layoutShowModel(); }
     const f = _gnss.fix;
     if(!f) { if(typeof showToast === 'function') showToast('まだ現在地を取得していません', 2500); return; }
     const s = wcsToScreen(f.x, f.y);

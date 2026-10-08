@@ -173,6 +173,7 @@ function dxfLayerStylesFromText(text) {
         }
         if(!cur) continue;
         if(c === '2' && cur.name === undefined) cur.name = lines[i + 1].replace(/^\s+|\s+$/g, '');
+        else if(c === '5' && cur.handle === undefined) cur.handle = v; // ビューポートで凍結した画層を名前に直すため（cad-layout.js）
         else if(c === '6') cur.lt = v;
         else if(c === '370') cur.lw = Number(v);
     }

@@ -113,6 +113,8 @@ function registerExtraDxfHandlers(parser, text) {
         }
     }
     parser.registerEntityHandler(AttribHandler);
+    // ビューポート（レイアウトの中でモデルを写す枠。cad-layout.js）
+    if(typeof _dxfTagHandler === 'function' && typeof dxfViewportFromTags === 'function') parser.registerEntityHandler(_dxfTagHandler('VIEWPORT', dxfViewportFromTags));
     if(typeof registerShapeDxfHandlers === 'function') registerShapeDxfHandlers(parser, text);
 }
 
@@ -150,6 +152,7 @@ function dxfLayerIndex(name) {
 function importDxfData(dxf, opts) {
     opts = opts || {};
     if(!opts.skipUndo) saveUndo();
+    const appendMode = (typeof _importMode !== 'undefined' && _importMode === 'append'); // レイアウトを足すか置き換えるか（applyFileUnit で戻る前に覚える）
     const hd = (dxf && dxf.header) || {};
     _beginImport(hd.$INSUNITS, hd.$DIMTXT, hd.$DIMSCALE, hd.$DIMASZ); // 寸法の値の桁・文字と矢印の大きさ（ファイルの単位・寸法の設定）
     _dxfLayersAdded = false;
@@ -163,7 +166,7 @@ function importDxfData(dxf, opts) {
     const skipStats = {};
     const noteSkip = (t) => { skipStats[t] = (skipStats[t] || 0) + 1; };
     _importSkipNote = noteSkip; // ブロックの中の読めない図形も数える（expandInsert）
-    const isPaper = dxfPaperSpaceTester(dxf); // レイアウト（ペーパー空間）は取り込まない
+    const isPaper = dxfPaperSpaceTester(dxf); // レイアウト（ペーパー空間）はモデルに入れない（別の画面のレイアウトにする。cad-layout.js）
     let paperSkipped = 0;
 
     // 画層の読み込み（色はACI番号、非表示/フリーズ状態も引き継ぐ）
@@ -189,20 +192,45 @@ function importDxfData(dxf, opts) {
         if(ent.hiddenBy === 'fill') hiddenFills++;
         entities.push(ent); importCount++;
     };
+    // モデル空間の図形。レイアウトの図形は別に集め、あとで別の画面のレイアウトにする
+    const paperRaw = [];
+    _dxfConvertList(dxf.entities || [], blocks, addEntity, noteSkip, (e) => { if(!isPaper(e)) return false; paperRaw.push(e); paperSkipped++; return true; });
+    if(_dxfLayersAdded) initLayers();
+    // レイアウト（ペーパー空間）: 図枠・表題欄・ビューポート（cad-layout.js）
+    let layoutCount = 0;
+    if(typeof dxfLayoutsFromImport === 'function') {
+        const made = dxfLayoutsFromImport(dxf, opts.text, paperRaw, (list, out) => _dxfConvertList(list, blocks, (e) => { if(e) out.push(e); }, noteSkip, null), layerStyles);
+        layoutCount = layoutsFromImport(made, appendMode);
+        if(_dxfLayersAdded) initLayers();
+    }
+
+    _importSkipNote = null;
+    const skipTotal = Object.values(skipStats).reduce((a, b) => a + b, 0);
+    addCommandLog(`  読み込み: ${importCount}個 / 取り込めなかった図形: ${skipTotal}個`);
+    if(skipTotal > 0) addCommandLog(`  取り込めなかった図形: ${importSkipText(skipStats, true)}`);
+    if(hiddenFills > 0) addCommandLog(`  塗りつぶし ${hiddenFills}個は非表示にしました（画層管理の「塗りつぶしを表示」で表示。オプションで初めから表示にもできます）`);
+    if(paperSkipped > 0) addCommandLog(`  ${PAPER_SPACE_LABEL}の図形 ${paperSkipped}個は、モデルには入れません`);
+    const layoutNote = (typeof layoutImportNote === 'function') ? layoutImportNote(layoutCount) : '';
+    if(layoutNote) addCommandLog('  ' + layoutNote);
+    return _dxfImportFinish(dxf, { importCount, skipStats, paperSkipped, hiddenFills, skipTotal, layoutCount, layoutNote });
+}
+// 図形の並び（ENTITIES・レイアウトのブロックの中身）を、アプリの図形にして add で入れる。
+// skip(e) が true の図形は飛ばす（モデルの読み込みで、レイアウトの図形を別に集めるため）
+function _dxfConvertList(list, blocks, add, noteSkip, skip) {
     const addResults = (results) => {
         if(!results) return false;
-        if(Array.isArray(results)) { results.forEach(addEntity); return results.length > 0; }
-        addEntity(results); return true;
+        if(Array.isArray(results)) { results.forEach(add); return results.length > 0; }
+        add(results); return true;
     };
-
     // エンティティは元の順序で処理する（ATTRIB は直前の INSERT に属する属性文字のため）
     let lastInsertGid = null, lastInsertBlock = null, lastInsertPos = null;
     // アプリが書き出した測点（ブロック「測点」と属性）は、座標一覧の点に戻す（属性は INSERT のあとに続く）
     let pendingPt = null;
     const flushPt = () => { if(pendingPt) { addResults(surveyPointFromInsert(pendingPt.pos, pendingPt.layer, pendingPt.attrs)); pendingPt = null; } };
-    (dxf.entities || []).forEach(e => {
+    list.forEach(e => {
+        if(!e) return;
         if(pendingPt && e.type !== 'ATTRIB') flushPt();
-        if(isPaper(e)) { paperSkipped++; lastInsertGid = null; lastInsertPos = null; return; }
+        if(skip && skip(e)) { lastInsertGid = null; lastInsertPos = null; return; }
         try {
             if(e.type === 'INSERT' && e.name === '測点' && typeof surveyPointFromInsert === 'function') {
                 const p = e.position || {};
@@ -222,7 +250,7 @@ function importDxfData(dxf, opts) {
                 // 挿入点を各図形に記録（移動・回転で一緒に動く。図形ごとに別オブジェクトにする）
                 const ip = e.position ? { x: e.position.x || 0, y: e.position.y || 0 } : null;
                 if(ip) expanded.forEach(m => { m.ins = { x: ip.x, y: ip.y }; });
-                expanded.forEach(addEntity);
+                expanded.forEach(add);
                 lastInsertGid = gid; lastInsertBlock = e.name; lastInsertPos = ip;
                 return;
             }
@@ -232,7 +260,7 @@ function importDxfData(dxf, opts) {
                 if(t) {
                     if(lastInsertGid) { t.gid = lastInsertGid; t.blockName = lastInsertBlock; if(lastInsertPos) t.ins = { x: lastInsertPos.x, y: lastInsertPos.y }; }
                     if(e.tag) t.attTag = String(e.tag);
-                    addEntity(t);
+                    add(t);
                 }
                 else noteSkip('ATTRIB');
                 return; // 属性の並びは INSERT の続きなので lastInsertGid を維持
@@ -241,25 +269,20 @@ function importDxfData(dxf, opts) {
             if(e.type === 'DIMENSION') {
                 // アプリが書き出した寸法（拡張データ WEBCAD に中身がある）は、アプリの寸法に戻す
                 const own = (typeof webcadEntityFromXdata === 'function') ? webcadEntityFromXdata(e.extendedData && e.extendedData.customStrings) : null;
-                if(own) { own.layer = dxfLayerIndex(e.layer); addEntity(own); return; }
+                if(own) { own.layer = dxfLayerIndex(e.layer); add(own); return; }
                 const dimEnts = expandDimension(e, blocks);
                 if(dimEnts.length === 0) noteSkip('DIMENSION');
-                dimEnts.forEach(addEntity);
+                dimEnts.forEach(add);
                 return;
             }
             if(!addResults(convertDxfEntity(e))) noteSkip(e.type || '?');
         } catch(err) { noteSkip(e.type || '?'); console.warn('エンティティ変換エラー:', e.type, err); }
     });
-
     flushPt();
-    if(_dxfLayersAdded) initLayers();
-
-    _importSkipNote = null;
-    const skipTotal = Object.values(skipStats).reduce((a, b) => a + b, 0);
-    addCommandLog(`  読み込み: ${importCount}個 / 取り込めなかった図形: ${skipTotal}個`);
-    if(skipTotal > 0) addCommandLog(`  取り込めなかった図形: ${importSkipText(skipStats, true)}`);
-    if(hiddenFills > 0) addCommandLog(`  塗りつぶし ${hiddenFills}個は非表示にしました（画層管理の「塗りつぶしを表示」で表示。オプションで初めから表示にもできます）`);
-    if(paperSkipped > 0) addCommandLog(`  ${PAPER_SPACE_LABEL}の図形 ${paperSkipped}個は取り込みません（モデル空間だけ）`);
+}
+// DXF の読み込みの後半（重い画層・単位・表示・知らせ）
+function _dxfImportFinish(dxf, r) {
+    const { importCount, skipStats, paperSkipped, hiddenFills, skipTotal, layoutCount, layoutNote } = r;
 
     // === 重い画層の自動非表示 ===
     // 全エンティティ数が非常に多い場合のみ、極端に多い画層を自動非表示にする（bboxカリングがあるため閾値は高め）
@@ -287,15 +310,20 @@ function importDxfData(dxf, opts) {
     if(unitNote) addCommandLog('-> ' + unitNote);
     zoomExtents();
     render();
-    if(typeof showToast === 'function' && importCount === 0 && paperSkipped > 0) {
+    if(importCount === 0 && layoutCount > 0 && typeof layoutShow === 'function') {
+        // モデルに図形が無く、レイアウトだけある: そのレイアウトを出す
+        layoutShow(cadLayouts.length - layoutCount);
+        if(typeof showToast === 'function') showToast(`モデル空間に図形がありません。レイアウト「${cadLayouts[cadLayouts.length - layoutCount].name}」を出しました（画面の下のタブで切り替え）`, { kind: 'warn', ms: 6000 });
+    } else if(typeof showToast === 'function' && importCount === 0 && paperSkipped > 0) {
         showToast(paperOnlyNote(paperSkipped), { kind: 'warn', ms: 6000 });
     } else if(typeof showToast === 'function') {
         let msg = `読み込み完了: ${importCount}個の図形` + importResultNote(skipStats, hiddenFills);
         if(autoHidden.length > 0) msg += `\n重い画層を自動非表示: ${autoHidden.length}件`;
         if(unitNote) msg += '\n' + unitNote;
-        showToast(msg, (unitNote || skipTotal || hiddenFills) ? 7000 : 4000);
+        if(layoutNote) msg += '\n' + layoutNote;
+        showToast(msg, (unitNote || skipTotal || hiddenFills || layoutNote) ? 7000 : 4000);
     }
-    return { importCount, skipStats, paperSkipped, hiddenFills };
+    return { importCount, skipStats, paperSkipped, hiddenFills, layoutCount };
 }
 
 // ===== 寸法(DIMENSION)の展開 =====

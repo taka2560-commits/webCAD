@@ -106,6 +106,8 @@ function _buildSaveData(name) {
         // 線種表（取り込んだファイルの線種）と線種の尺度（LTSCALE）。cad-ltype.js
         lineTypes: (typeof drawingLineTypes !== 'undefined') ? JSON.parse(JSON.stringify(drawingLineTypes)) : undefined,
         ltscale: (typeof drawingLtscale !== 'undefined') ? drawingLtscale : undefined,
+        // レイアウト（DWG・DXF の図枠・表題欄・ビューポート。別の画面で見る。cad-layout.js）
+        layouts: (typeof layoutsForSave === 'function') ? layoutsForSave() : undefined,
         entityCount: entities.length,
         savedAt: new Date().toISOString()
     };
@@ -144,6 +146,8 @@ function applyProjectData(data) {
     if ((data.surveyUnit === 'm' || data.surveyUnit === 'mm') && typeof getSurveyUnit === 'function' &&
         getSurveyUnit() !== data.surveyUnit && typeof window.setSurveyUnit === 'function') window.setSurveyUnit(data.surveyUnit);
 
+    // レイアウト（以前の保存データには無いので、そのときは無し）
+    if (typeof layoutsLoad === 'function') layoutsLoad(data.layouts);
     // 固有IDを確認（古い保存データにはIDが無いので付ける。以後の選択はIDで保持される）
     if (typeof ensureEntityIds === 'function') ensureEntityIds();
     if (typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();

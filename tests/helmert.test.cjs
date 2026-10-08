@@ -352,7 +352,7 @@ describe('ヘルマート変換: 画面', () => {
     it('変換後の SIMA（Shift-JIS・範囲の中の点と区画）・結果の CSV・結果の表', async () => {
         app.eval('helmPairByName()');
         drag('rect', [[10, -10], [60, 50]]);
-        capture('helmExportSima()');
+        capture('helmExportSima(); exportPreviewWrite()');
         assert.equal(app.eval('window.__name'), 'genba_変換.sim');
         const sima = new util.TextDecoder('shift_jis').decode(Uint8Array.from(await readBlob('bytes')));
         const lines = sima.split('\r\n');

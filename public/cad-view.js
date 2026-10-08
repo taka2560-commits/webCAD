@@ -134,6 +134,7 @@ function updateUCSDropdowns() {
 
 // ===== 画面方向合わせ (PLAN) =====
 function togglePlanView() {
+    if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); // PLAN はモデルの画面で（cad-layout.js）
     const cx = canvas.width / 2, cy = canvas.height / 2;
     const targetWcs = screenToWcs(cx, cy); // 画面中央のWCSを維持する
 
@@ -148,8 +149,9 @@ function togglePlanView() {
     render();
 }
 
-function zoomToOrigin() { view.scale=1; _reanchorView(canvas.width/2, canvas.height/2, {x:ucs.originX, y:ucs.originY}); render(); addCommandLog('原点へズーム'); }
+function zoomToOrigin() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); view.scale=1; _reanchorView(canvas.width/2, canvas.height/2, {x:ucs.originX, y:ucs.originY}); render(); addCommandLog('原点へズーム'); }
 function zoomExtents() {
+    if(layoutZoomExtents()) return; // レイアウトの画面: 用紙全体（cad-layout.js）
     if(entities.length===0){zoomToOrigin();return;}
     let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;

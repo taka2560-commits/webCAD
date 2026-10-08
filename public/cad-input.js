@@ -22,6 +22,7 @@ function setupEventListeners() {
             view.x += e.movementX; view.y += e.movementY; // 中ボタンドラッグは画面パン（UCS原点は動かさない）
             render(); return;
         }
+        if(layoutActive()) { layoutShowCoords(mouse.wcsX, mouse.wcsY); return; } // レイアウト: 座標はビューポートの中のモデルの座標（cad-layout.js）
         if(mouse.isTrimming) {
             if(cmdState.trimPath) cmdState.trimPath.push({x: mouse.wcsX, y: mouse.wcsY});
             renderOverlay(); return; // なぞった線は重ね表示
@@ -44,6 +45,7 @@ function setupEventListeners() {
     canvas.addEventListener('mousedown', (e) => {
         if(Date.now() - lastTouchTime < 500) return; // タッチイベントに起因する疑似マウスイベントを無視
         if(e.button===1){mouse.isPanning=true;e.preventDefault();return;} // Middle click for panning
+        if(layoutActive()) { if(e.button===0) mouse.isPanning = true; e.preventDefault(); return; } // レイアウトは見るだけ: 左ボタンでも画面を動かす
         if(e.button===0) {
             // 動かさずに押したとき（ペン・自動操作などで mousemove が来ていない）も、押した所を使う（前の位置や 0,0 に置かない）
             const r0 = canvas.getBoundingClientRect();
@@ -104,7 +106,7 @@ function setupEventListeners() {
         }
     });
     window.addEventListener('mouseup',(e)=>{
-        if(e.button===1){ mouse.isPanning=false; render(); }
+        if(e.button===1 || (e.button===0 && mouse.isPanning)){ mouse.isPanning=false; render(); }
         // グリップを押したまま動かして離した: 離した所へ動かす（動かさずに離したときは、つかんだまま次のクリックを待つ）
         if(e.button===0 && mouse.gripGrab) {
             const g = mouse.gripGrab; mouse.gripGrab = null;
@@ -249,6 +251,7 @@ function setupEventListeners() {
             touchState.isPinch = false; touchState.isSelecting = false;
             touchState.showLoupe = false;
             touchState.multi = false; // この操作の途中で2本目の指が触れたか（触れたら指を全部離すまで点を入れない）
+            touchState.down = true;   // 指が触れている（線分の仮の点の印を薄くし、仮の線は指の所へ。cad-line.js）
 
             // 座標更新
             mouse.screenX = tx; mouse.screenY = ty;
@@ -256,6 +259,8 @@ function setupEventListeners() {
             mouse.wcsX = wcs.x; mouse.wcsY = wcs.y;
             const uc = wcsToUcs(wcs.x, wcs.y);
             mouse.ucsX = uc.x; mouse.ucsY = uc.y;
+            // レイアウトは見るだけ: 1本指でなぞると画面を動かす（点の入力・選択・長押しはしない。cad-layout.js）
+            if(layoutActive()) { touchState.panLast = { x: tx, y: ty }; layoutShowCoords(mouse.wcsX, mouse.wcsY); return; }
 
             // 選んだ図形のグリップの上に指を置いたら、その点をつかむ（cad-grip.js）。
             // そのままなぞって離すと離した所へ動かし、タップだけなら、次にタップした所へ動かす
@@ -311,7 +316,7 @@ function setupEventListeners() {
             }
             render();
         } else if(e.touches.length === 2) {
-            touchState.isPinch = true; touchState.showLoupe = false; touchState.isSelecting = false;
+            touchState.isPinch = true; touchState.showLoupe = false; touchState.isSelecting = false; touchState.panLast = null;
             // #5 2本指の操作になったら、指を全部離すまで点の入力・なぞり（トリム）・長押しをしない
             touchState.multi = true;
             // グリップをつかんだ指のあとに2本目が触れた: 画面を動かしたいので、つかむのをやめる（図形は選んだまま）
@@ -327,6 +332,15 @@ function setupEventListeners() {
     canvas.addEventListener('touchmove', (e) => {
         e.preventDefault();
         if(e.touches.length === 1 && touchState.multi) return; // ピンチのあとに残った指（点を入れない）
+        if(e.touches.length === 1 && layoutActive()) { // レイアウト: 1本指で画面を動かす
+            if(!touchState.panLast) return;
+            const t = e.touches[0], r = canvas.getBoundingClientRect();
+            const tx = t.clientX - r.left, ty = t.clientY - r.top;
+            view.x += tx - touchState.panLast.x; view.y += ty - touchState.panLast.y;
+            touchState.panLast = { x: tx, y: ty };
+            noteViewGesture(); render();
+            return;
+        }
         if(e.touches.length === 1 && !touchState.isPinch) {
             const touch = e.touches[0];
             const rect = canvas.getBoundingClientRect();
@@ -429,6 +443,13 @@ function setupEventListeners() {
         lastTouchTime = Date.now();
         
         if(touchState.pressTimer) { clearTimeout(touchState.pressTimer); touchState.pressTimer = null; }
+        if(e.touches.length === 0) touchState.down = false;
+        if(layoutActive()) { // レイアウトは見るだけ（点の入力・選択はしない）
+            touchState.panLast = null;
+            if(e.touches.length === 0) { touchState.multi = false; touchState.isDragging = false; touchState.hasMoved = false; }
+            if(e.touches.length < 2) { const wasPinch = touchState.isPinch; touchState.isPinch = false; touchState.lastDist = 0; touchState.lastMid = null; if(wasPinch) render(); }
+            return;
+        }
 
         // #5 ピンチをした操作では、指を全部離しても点を入れない（指を1本ずつ離したときに点が入っていた）
         if(e.touches.length === 0 && touchState.multi) {
@@ -439,8 +460,8 @@ function setupEventListeners() {
         }
         else if(e.touches.length === 0 && !touchState.isPinch) {
             touchState.showLoupe = false;
-            // 全画面座標ツールチップ: 寸法モード中は消さない（スナップ位置を確認できるように）
-            const isDimModeActive = cmdState.mode.startsWith('WAITING_DIM');
+            // 全画面座標ツールチップ: 寸法モード・線分の仮の点では消さない（スナップ位置を確認できるように）
+            const isDimModeActive = cmdState.mode.startsWith('WAITING_DIM') || (_isLineMode(cmdState.mode) && lineTouchConfirmOn());
             if(!isDimModeActive) {
                 if(window.hideFsCoordTooltip) window.hideFsCoordTooltip();
             }
@@ -466,6 +487,8 @@ function setupEventListeners() {
                     // ルーペは消すが、スナップ位置は保持・表示する
                     render();
                     drawSnapMarker();
+                } else if(lineTouchCandidate()) {
+                    // 線分: 指を離した所は仮の点。☑確定 で引く（触れてしまっても線が引かれない。cad-line.js）
                 } else {
                     // 通常コマンド: 指を離した位置で即時に確定
                     const pt = getInputPoint();
@@ -495,6 +518,7 @@ function setupEventListeners() {
 
     canvas.addEventListener('touchcancel', () => {
         if(touchState.pressTimer) { clearTimeout(touchState.pressTimer); touchState.pressTimer = null; }
+        touchState.down = false;
         touchState.showLoupe = false; touchState.isDragging = false; touchState.hasMoved = false;
         touchState.isPinch = false; touchState.isSelecting = false; touchState.multi = false;
         if(touchState.isTrimming) { touchState.isTrimming = false; cmdState.trimPath = []; }
@@ -527,7 +551,8 @@ function setupEventListeners() {
             if(cmdState.mode !== 'IDLE') { addCommandLog('* キャンセル *'); processCommand('CANCEL'); return; }
             if((cmdState.selectedIndices || []).length || cmdState.highlightIdx >= 0) { clearSelection(); if(typeof updateSelectionBar === 'function') updateSelectionBar(); render(); return; }
             const pp = document.getElementById('property-panel');
-            if(pp && pp.style.display === 'flex') hidePropertyPanel();
+            if(pp && pp.style.display === 'flex') { hidePropertyPanel(); return; }
+            if(layoutActive()) layoutShowModel(); // レイアウトを見ていたらモデルに戻る
         }
     });
 }
@@ -537,11 +562,13 @@ function _hiddenKindOf(e) { return e.hiddenBy === 'fill' ? 'fill' : e.type === '
 window.showHiddenEntities = function(kind) {
     const list = entities.filter(e => e.hidden && (!kind || _hiddenKindOf(e) === kind));
     const hiddenCount = list.length;
-    if(hiddenCount === 0) { addCommandLog('-> 非表示の図形はありません'); return; }
+    const inLayouts = (typeof layoutsShowHidden === 'function') ? layoutsShowHidden(kind) : 0; // レイアウトの図形も（cad-layout.js）
+    const what = kind === 'fill' ? '塗りつぶし' : kind === 'arc' ? '円弧' : '図形';
+    if(inLayouts) { addCommandLog(`-> レイアウトの非表示だった${what} ${inLayouts}個 を表示しました`); if(typeof _frameCache !== 'undefined') _frameCache = null; }
+    if(hiddenCount === 0) { if(!inLayouts) addCommandLog('-> 非表示の図形はありません'); else render(); return; }
     saveUndo();
     list.forEach(e => { e.hidden = false; delete e.hiddenBy; });
     if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
-    const what = kind === 'fill' ? '塗りつぶし' : kind === 'arc' ? '円弧' : '図形';
     addCommandLog(`-> 非表示だった${what} ${hiddenCount}個 を表示しました（元に戻すにはUndo）`);
     if (typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
     render();

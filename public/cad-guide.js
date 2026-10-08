@@ -543,8 +543,8 @@ const GUIDE_HINTS = [
     { key: 'DIMRAD', title: 'R 半径寸法', prefix: 'WAITING_DIMRAD_', steps: [{ modes: ['SELECT'], text: '円・円弧をタップ' }, { modes: ['POS'], text: '寸法の位置までなぞって ☑確定' }] },
     { key: 'DIMDIA', title: '⌀ 直径寸法', prefix: 'WAITING_DIMDIA_', steps: [{ modes: ['SELECT'], text: '円・円弧をタップ' }, { modes: ['POS'], text: '寸法の位置までなぞって ☑確定' }] },
     { key: 'LINE', title: '／ 線分', prefix: 'WAITING_LINE_', steps: [
-        { modes: ['P1'], text: { touch: '始点をタップ（なぞってルーペで合わせ、指を離すと決まります）', pc: '始点をクリック' } },
-        { modes: ['P2'], text: { touch: '次の点をタップ。続けて引けます。終わるときは左の「線分」をもう一度タップ', pc: '次の点をクリック。続けて引けます。右クリックで終了' } }] },
+        { modes: ['P1'], text: () => ({ touch: lineTouchConfirmOn() ? '始点をタップして ☑確定（なぞるとルーペで合わせられます。タップし直すと動きます）' : '始点をタップ（なぞってルーペで合わせ、指を離すと決まります）', pc: '始点をクリック' }) },
+        { modes: ['P2'], text: () => ({ touch: (lineTouchConfirmOn() ? '次の点をタップして ☑確定。' : '次の点をタップ。') + '続けて引けます。↶ 1つ戻す で最後の線を消せます。終わるときは ❌終了', pc: '次の点をクリック。続けて引けます。↶ 1つ戻す（U）で最後の線を消せます。右クリックで終了' }) }] },
     { key: 'PLINE', title: '∧ ポリライン', prefix: 'WAITING_PLINE_', steps: [
         { when: () => cmdState.points.length === 0, text: { touch: '始点をタップ（指を離すと決まります）', pc: '始点をクリック' } },
         { when: () => cmdState.points.length > 0, text: { touch: '次の点をタップ。☑確定 で完了、⭘閉じる で閉じた形に', pc: '次の点をクリック。☑確定（または Enter）で完了、⭘閉じる で閉じた形に' } }] },
@@ -662,6 +662,8 @@ function _guideReshowHint() {
 const GUIDE_TIPS = {
     idleDrag: { text: '画面を動かすには、2本指でスライドします（1本指でなぞるのは、位置や座標を読むときです）', max: 3 },
     dimConfirm: { text: '寸法・測定の点は、指を離したあと ☑確定 を押すと決まります', max: 3 },
+    lineConfirm: { text: '線分の点は、指を離したあと ☑確定 で決まります（オプションの「線分のタッチ」で「離したらすぐ」にもできます）', max: 3 },
+    layoutView: { text: 'レイアウトは見るだけの画面です。作図・編集のボタンを押すと、モデルに戻ってから始まります（画面の下の「モデル」でも戻れます）', max: 2 },
     stuck: { text: '手順は上の説明のとおりです。やめるときは ❌終了、または同じボタンをもう一度押します', max: 2 },
 };
 let _tipIdleDrags = [], _tipDimTouches = 0, _tipStuckTimer = null, _tipTimer = null;

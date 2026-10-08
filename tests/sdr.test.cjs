@@ -162,7 +162,7 @@ describe('TS連携: ファイルと通信', () => {
     });
     it('座標一覧・メニューから SDR33 で書き出す（点名は測点から）', async () => {
         app.eval(`addSurveyData([{ num: '1', name: 'KP1', X: 645.479, Y: -52621.837, z: 12.5 }, { num: '2', name: 'KP2', X: 642.388, Y: -52620.022 }], [])`);
-        app.eval(`window.__dl = downloadBlob; downloadBlob = (b, n) => { window.__blob = b; window.__name = n; }; exportSdr33(); downloadBlob = window.__dl;`);
+        app.eval(`window.__dl = downloadBlob; downloadBlob = (b, n) => { window.__blob = b; window.__name = n; }; exportSdr33(); exportPreviewWrite(); downloadBlob = window.__dl;`);
         assert.match(app.eval('window.__name'), /\.sdr$/);
         const text = await app.eval('new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsText(window.__blob); })');
         const back = (() => { app.window.__sdr = text; return app.val('parseSdr(window.__sdr)'); })();

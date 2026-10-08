@@ -278,9 +278,10 @@ function cogoNextName(name) {
 function cogoAddSurveyPoint(X, Y, name, z, labelH) {
     const w = surveyToWcs(X, Y);
     saveUndo();
-    // 点名の文字は、図面にある点名と同じ大きさにそろえる（無ければ点の広がりから決める）
-    let h = null;
-    for(let i = entities.length - 1; i >= 0; i--) { const e = entities[i]; if(e && e.type === 'TEXT' && e.ptLabel && e.height > 0) { h = e.height; break; } }
+    // 点名の文字は、座標一覧の「点名の大きさ」を指定していればその高さ（cad-textsize.js）。
+    // 自動なら図面にある点名と同じ大きさにそろえる（無ければ点の広がりから決める）
+    let h = ptLabelFixedHeight();
+    if(!h) for(let i = entities.length - 1; i >= 0; i--) { const e = entities[i]; if(e && e.type === 'TEXT' && e.ptLabel && e.height > 0) { h = e.height; break; } }
     if(!h && labelH > 0) h = labelH;
     if(!h) h = _autoLabelHeight(entities.filter((e) => e && e.type === 'POINT').map((e) => ({ x: e.x, y: e.y })).concat([w]));
     const lp = _ensureSurveyLayer(SURVEY_LAYER_POINT, '#ffff00');

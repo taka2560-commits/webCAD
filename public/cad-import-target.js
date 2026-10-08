@@ -13,6 +13,7 @@ let _importUndo = null, _importProject = null; // 置き換えで消す前の図
 // onCancel: 「やめる」を選んだときに呼ぶ
 function _prepareImportTarget(next, onCancel) {
     if(typeof guideBeforeFileOpen === 'function') guideBeforeFileOpen();
+    if(typeof layoutShowModel === 'function') layoutShowModel(); // レイアウトを見ていたらモデルに戻る（開いた図形はモデルに入る）
     saveUndo();
     _importUndo = null; _importProject = null;
     if(entities.length === 0) { _importMode = 'fresh'; if(next) next('fresh'); return 'fresh'; }
@@ -33,6 +34,7 @@ function _clearForReplace() {
     _importUndo = undoStack[undoStack.length - 1];
     _importProject = (typeof window.getProjectState === 'function') ? window.getProjectState() : null;
     entities.length = 0;
+    if(typeof layoutsClear === 'function') layoutsClear(); // レイアウトも新しいファイルのものにする（読めなかったら ↩ の履歴から戻す）
     layers.splice(0, layers.length, { name: '0', color: '#00ffff', visible: true });
     currentLayerIndex = 0;
     if(typeof drawingLineTypes !== 'undefined') { // 線種表・線種の尺度も新しいファイルのものにする（読めなかったら戻す）

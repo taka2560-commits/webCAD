@@ -102,7 +102,7 @@ describe('測量: SIMA・座標CSV', () => {
 
     it('SIMA は Shift-JIS で書き出し、日本語の点名・半角カナの見出しが正しく戻る', async () => {
         app.eval(`addSurveyData([{ num: '1', name: '測点Ａ－１', X: 10, Y: 20, z: null }, { num: '2', name: 'ﾃｽﾄ〜点', X: 30, Y: 40, z: 1.5 }], []);`);
-        app.eval('exportSima()');
+        app.eval('exportSima(); exportPreviewWrite()'); // 書き出す前の確認で「📤 書き出す」（v5.37）
         assert.match(app.eval('window.__download.name'), /\.sim$/);
         const bytes = await readDownload();
         const text = new TextDecoder('shift-jis').decode(bytes);
@@ -152,7 +152,7 @@ describe('測量: SIMA・座標CSV', () => {
 
     it('座標CSVは UTF-8（BOM付き）で「点番号,点名,X,Y,標高」を書き出す', async () => {
         app.eval(`addSurveyData([{ num: '7', name: 'BM,1', X: -1.23456, Y: 2, z: 5 }], []);`);
-        app.eval('exportCoordCsv()');
+        app.eval('exportCoordCsv(); exportPreviewWrite()');
         const bytes = await readDownload();
         assert.deepEqual([...bytes.slice(0, 3)], [0xEF, 0xBB, 0xBF], 'BOM が無い（Excelで文字化けする）');
         const text = new TextDecoder('utf-8').decode(bytes.slice(3));

@@ -23,6 +23,7 @@ const DISPLAY_PREF_DEFS = {
     lenUnit:       { label: '長さの単位',     def: 'auto', options: DISPLAY_UNIT_OPTIONS },
     angleFormat:   { label: '角度の表示',     def: 'deg', options: [['deg', '度', 'deg'], ['dms', '度分秒', 'dms']] },
     snapRange:     { label: '吸着の範囲',     def: 'm',   options: [['s', '狭い', 0.6], ['m', '標準', 1], ['l', '広い', 1.6], ['xl', '最大', 2.4]] },
+    lineTouch:     { label: '線分のタッチ',   def: 'confirm', options: [['confirm', '☑確定で引く', 'confirm'], ['now', '離したらすぐ', 'now']] }, // cad-line.js
     btnSize:       { label: 'ボタンの大きさ', def: 'm',   options: [['s', '小', 0.85], ['m', '中', 1], ['l', '大', 1.25], ['xl', '特大', 1.5]] },
     outdoor:       { label: '屋外モード',     def: 'off', options: [['off', '切', false], ['on', '入', true]] },
     motion:        { label: 'UIの動き（試用）', def: 'off', options: [['off', '切', false], ['on', '入', true]] }, // cad-motion.js
@@ -339,6 +340,7 @@ function displayPrefsSectionHtml() {
             <div id="opt-unit-note" style="color:#888;font-size:10px;">${_unitNoteText()}</div>
             <div style="color:#888;font-size:10px;">座標の桁「標準」は、ステータスバーが整数、ルーペが小数2桁（mm のときは整数）です。寸法の桁「自動」は、m なら小数3桁まで（末尾の0は省く）、mm なら整数です（どちらも 1mm まで）</div>
             <div style="color:#888;font-size:10px;">角度の表示: 度は 45.5°、度分秒は 45°30′00″（角度寸法・回転・UCS。測量計算・杭打ちは、これまでどおり度分秒）</div>
+            <div style="color:#888;font-size:10px;">線分のタッチ: 「☑確定で引く」は、指を離した所を仮の点（緑の輪）にし、☑確定 で線を引きます（画面に触れてしまっても線が引かれません。タップし直すと仮の点が動きます）。「離したらすぐ」は、指を離した所ですぐ引きます。どちらでも ↶ 1つ戻す で最後の線を消せます</div>
             <div style="color:#888;font-size:10px;">ボタンの大きさ: 上・左・下のバー、選んだときのバー、☑確定のバー、お気に入り、右下の ？・コマンドのボタンを大きくします（手袋のままでも押しやすく）。屋外モード: 図形・寸法の線を太く、文字を太字にして縁取り、背景との明るさの差を広げ、パネルを不透明にします（日なたでは背景色を白にするのも効果があります）</div>
             <div style="color:#888;font-size:10px;">UIの動き（試用）: ボタンを押したときの波紋と沈み込み、切り替えボタンの印の移動、パネル・別窓の出入りと ▁・□、スナップの輪、長押しの輪、保存の ✓ などに短い動きを付けます（押した結果は、動きを待たずにすぐ変わります。端末の「動きを減らす」が入のときは動きません${(typeof motionReducedByDevice === 'function' && motionReducedByDevice()) ? '。この端末はいま「動きを減らす」が入です' : ''}）</div>
             <button class="prop-btn btn-sub" onclick="resetDisplayPrefs()">表示・操作を初期値に戻す</button>

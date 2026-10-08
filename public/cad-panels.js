@@ -214,6 +214,9 @@ function updateSelectionBar() {
         else if(n > 1) { gbtn.style.display = ''; gbtn.textContent = '🧩 グループ化'; gbtn.dataset.action = 'group'; }
         else gbtn.style.display = 'none';
     }
+    // 選んだ中に文字があれば「🔠 文字」（文字の大きさをまとめて変える。cad-textsize.js）
+    const tbtn = document.getElementById('sel-textsize-btn');
+    if(tbtn) tbtn.style.display = idxs.some(i => entities[i] && entities[i].type === 'TEXT') ? '' : 'none';
     bar.style.display = 'flex';
 }
 window.toggleGroupOfSelection = function() {

@@ -37,6 +37,7 @@ const FAV_CATALOG = [
     { id: 'BREAK', label: '分割', icon: '÷', color: '#ffff00', cat: 'edit' },
     { id: 'JOIN', label: '結合', icon: '⋈', color: '#ffff00', cat: 'edit' },
     { id: 'FILLET', label: '角処理', icon: '╭', color: '#ffff00', cat: 'edit' },
+    { id: 'TEXTSIZE', label: '文字の大きさ', icon: '🔠', cat: 'edit', panel: '🔠 文字の大きさ', run: () => showTextSizePanel() },
     { id: 'UNDO', label: '戻す', icon: '↩', cat: 'edit', run: () => undo() },
     { id: 'REDO', label: 'やり直し', icon: '↪', cat: 'edit', run: () => redo() },
     { id: 'DIMLINEAR', label: '平行', icon: '↔', color: '#00ffff', cat: 'dim' },

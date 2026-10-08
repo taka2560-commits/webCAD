@@ -575,6 +575,19 @@
         .opt-pref-label { flex:0 0 84px; font-size:11px; color:#ddd; }
         .opt-pref-seg { flex:1; display:flex; gap:4px; min-width:0; }
         .opt-pref-seg .prop-btn { flex:1; min-width:0; margin-top:0; padding:6px 0; font-size:11px; font-weight:600; border-radius:6px; white-space:nowrap; }
+        /* 文字の大きさ（cad-textsize.js）: 種類・今の高さの切り替えボタンの並び */
+        .tsz-chips { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0; }
+        .tsz-chips .prop-btn { flex:0 0 auto; margin-top:0; min-height:30px; padding:2px 10px; font-size:11px; border-radius:15px; }
+        /* モデル｜レイアウトのタブ（cad-layout.js）: 状態バーの上の左。レイアウトがある図面だけ出す */
+        #space-tabs { position:absolute; left:8px; bottom:calc(14px + 38px * var(--btn-k, 1)); z-index:29; display:none; gap:4px; padding:3px; border-radius:var(--r-pill); max-width:calc(100% - 150px); overflow-x:auto; scrollbar-width:none; }
+        #space-tabs button { flex:0 0 auto; min-height:30px; padding:0 12px; border-radius:15px; border:1px solid var(--border-3); background:var(--btn-fill); color:#e0e0e0; font-size:12px; white-space:nowrap; cursor:pointer; }
+        #space-tabs button.active { border-color:var(--brand); color:var(--brand); background:rgba(var(--brand-rgb),0.12); font-weight:700; }
+        body.fullscreen-mode #space-tabs { display:none !important; }
+        /* レイアウトの画面は見るだけ: 作図の道具・コマンド・お気に入り・選んだときのバー・スナップの切り替えを隠す */
+        body.layout-mode #toolbar, body.layout-mode #fav-bar, body.layout-mode #command-line-area, body.layout-mode #sel-actionbar,
+        body.layout-mode #fs-dim-actionbar, body.layout-mode #btn-coordread, body.layout-mode #btn-area-select, body.layout-mode #btn-ortho,
+        body.layout-mode #btn-osnap, body.layout-mode #btn-osnap-panel, body.layout-mode #snap-indicator { display:none !important; }
+        body.layout-mode #status-bar .paper-space-label { display:inline !important; opacity:1 !important; color:var(--brand); font-weight:700; }
         /* デザイン色の見本（cad-prefs.js の _themeSwatchRowHtml）: 3色の帯・名前・言葉を3列に並べ、選んでいるものに ✓ */
         .opt-theme-row { flex-wrap:wrap; }
         .opt-theme-row .opt-pref-label, .opt-theme-grid, .opt-theme-note { flex:1 0 100%; }
@@ -980,6 +993,7 @@
                 <button class="menu-item-btn" data-fav="ZOOMORIGIN" onclick="zoomToOrigin(); toggleTopMenu();">🔍 原点へズーム</button>
                 <button class="menu-item-btn" data-fav="OPTIONS" onclick="showOptionsPanel(); toggleTopMenu();">⚙ オプション</button>
                 <button class="menu-item-btn" data-fav="BLOCKS" onclick="showBlockManagerPanel(); toggleTopMenu();">🧩 ブロック管理</button>
+                <button class="menu-item-btn" data-fav="TEXTSIZE" onclick="showTextSizePanel(); toggleTopMenu();" title="文字の高さをまとめて変える（選んだ文字・画層・すべて。点名・寸法の値・今の高さで絞れる）">🔠 文字の大きさ</button>
                 <button class="menu-item-btn" data-fav="MAP" onclick="showUnderlayPanel(); toggleTopMenu();" title="国土地理院の地図・下絵の画像を図面の下に表示">🗺 地図・下絵</button>
                 <button class="menu-item-btn" onclick="showFavPanel(); toggleTopMenu();" title="よく使うコマンドを、画面に浮かぶボタンに登録（ボタンの長押しでも登録）">⭐ お気に入り</button>
             </div>
@@ -1215,6 +1229,7 @@
         <button id="dim-dir-toggle" onclick="dimToggleDir()" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⚙ 自動 (X/Y)</button>
         <button id="dim-snap-cycle" onclick="cycleSnapCandidate()" title="重なったスナップの候補を切り替え" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⇄</button>
         <button id="pline-close-btn" onclick="plineCloseFromBar()" title="始点に戻って閉じた形にする" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⭘ 閉じる</button>
+        <button id="line-undo-btn" onclick="lineUndoStep()" title="最後に引いた線を消して、その始点から引き直す（線が無ければ始点を取り消す）" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">↶ 1つ戻す</button>
         <button id="dim-meas-write" onclick="measureWriteDims()" style="display:none; background:#00ff88; color:#000; border:none; padding:8px 16px; border-radius:16px; font-weight:bold; font-size:14px;">📐 記入</button>
         <button id="dim-meas-base" onclick="measureSetBase()" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">📍 基点</button>
         <button id="dim-cancel-btn" onclick="issueCommand('CANCEL')" style="background:transparent; color:#ff6b6b; border:1px solid #ff6b6b; padding:6px 12px; border-radius:12px; font-size:12px;">❌ 終了</button>
@@ -1232,6 +1247,7 @@
         <button class="sel-btn" onclick="issueCommand('JOIN')" title="選択した線をつないで1本にする">⋈ 結合</button>
         <button class="sel-btn warn" onclick="issueCommand('ERASE')" title="選択図形を削除">✖ 削除</button>
         <button class="sel-btn" onclick="hideSelectedEntities()" title="選択図形を非表示">🚫 隠す</button>
+        <button id="sel-textsize-btn" class="sel-btn" onclick="showTextSizePanel('sel')" title="選んだ文字の大きさをまとめて変える" style="display:none;">🔠 文字</button>
         <button id="sel-group-btn" class="sel-btn green" onclick="toggleGroupOfSelection()">🧩 グループ化</button>
         <button class="sel-btn" onclick="zoomToSelection()" title="選択図形へズーム">🔍</button>
         <button class="sel-btn" onclick="clearSelection(); render();" title="選択解除">✕</button>
@@ -1276,6 +1292,7 @@
     <script src="cad-snap.js"></script>
     <script src="cad-render.js"></script>
     <script src="cad-command.js"></script>
+    <script src="cad-line.js"></script>
     <script src="cad-input.js"></script>
     <script src="cad-panels.js"></script>
     <script src="cad-survey.js"></script>
@@ -1283,6 +1300,9 @@
     <script src="cad-cogo.js"></script>
     <script src="cad-cogo-ui.js"></script>
     <script src="cad-point.js"></script>
+    <script src="cad-textsize.js"></script>
+    <script src="cad-export-preview.js"></script>
+    <script src="cad-layout.js"></script>
     <script src="cad-sdr.js"></script>
     <script src="cad-ts.js"></script>
     <script src="cad-stake.js"></script>

@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.34（2026年10月9日リリース）**
+**現在のバージョン: v5.38（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（714件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（755件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -231,6 +231,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
   | `cad-snap.js` | オブジェクトスナップ（点の収集・選択・記号）、次の1点だけの指定、候補の切り替え、2点の中点、相対入力 |
   | `cad-render.js` | 描画の呼び出し管理、描画キャッシュ、ルーペ、図形・軸・補助表示の描画 |
   | `cad-command.js` | 点入力の補正と各コマンドの処理、オフセット・回転・トリム・延長、コマンド解釈 |
+  | `cad-line.js` | 線分の点の入れ方（タッチは仮の点と ☑確定、↶ 1つ戻す、長さ0の線を作らない） |
+  | `cad-textsize.js` | 文字の大きさをまとめて変える、座標一覧の点名の大きさ（自動・指定） |
+  | `cad-export-preview.js` | SIMA・座標CSV・SDR33 を書き出す前の確認（表・ファイルの中身・気づいたこと） |
+  | `cad-layout.js` | DWG・DXF のレイアウト（ペーパー空間）を別の画面で見る（タブ・ビューポートの写し方・保存） |
   | `cad-input.js` | マウス・タッチ・キーボードのイベント、パン/ピンチ/範囲選択 |
   | `cad-panels.js` | ブロック管理、画層の一括管理、プロパティパネル、選択アクションバー |
   | `cad-survey.js` | 測量（SIMA・座標CSV、座標一覧、現在地GNSS） |
@@ -261,6 +265,20 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.38（レイアウトを別の画面で見る）** 📄
+  * cad-layout.js（新）: cadLayouts（[{ name, order, sheet, ents, vps }]）。dxfLayoutObjectsFromText（OBJECTS の LAYOUT: AcDbLayout の 1・71・10/20・11/21・330・331）・dxfViewportFromTags（VIEWPORT）・dxfLayoutsFromImport（今のレイアウトは ENTITIES の 67=1、ほかは *Paper_SpaceN のブロック）・dwgLayoutViewport（読込エンジンの LAYOUT と BLOCK_RECORD）・makeImportedLayout（用紙は LIMMIN/LIMMAX、小さければ広がり。枠・切った・真上でないビューポートを除く）。ビューポートは 用紙 = 中心 + k・R(t)・(モデル − c)、c = 注視点 + R(−t)・表示の中心（ezdxf の get_transformation_matrix と同じ）。
+  * 描画は drawLayoutSheet（drawEntities に list・plain・cull・hideLayers を足した）。layoutShow / layoutShowModel（表示の位置はモデル・レイアウトごと）、layoutBeforeCommand・layoutBeforePanel（モデルに戻る）、タブ #space-tabs、body.layout-mode。保存（_buildSaveData・applyProjectData）・.webcad（sanitizeLayouts・_wcEntity）・↩ の履歴（_undoSnapshot の lay は同じ配列を指す）。cad-io.js は図形の並びの変換を _dxfConvertList に分けた。tests/layout.test.cjs・import-paper-space.test.cjs。
+
+* **2026-10-09: バージョン5.37（書き出す前の確認）** 📄
+  * cad-export-preview.js（新）: showExportPreview（表・ファイルの中身・気づいたこと・📤 書き出す・やめる。開く前のパネルに戻る）・surveyExportNotes・sjisBadChars・sjisRoundTrip。exportSima・exportCoordCsv（_surveyExportPoints が numMode・unnamed、_prepareExport が lotAdded を返す）・exportSdr33・helmExportSima を通す。tests/export-preview.test.cjs。
+
+* **2026-10-09: バージョン5.36（文字の大きさ・点名の大きさ）** 🔠
+  * cad-textsize.js（新）: showTextSizePanel（対象・種類・今の高さで絞る、高さの指定・倍率）・textSizeSetHeights（点名は点の右上に置き直す）・ptLabelSetting / ptLabelFixedHeight（cad_pt_label_h。m で覚える）・ptLabelControlHtml（座標一覧・座標CSV の画面）。addSurveyData・cogoAddSurveyPoint が指定の高さを使う。選んだときのバーの #sel-textsize-btn。tests/textsize.test.cjs。
+
+* **2026-10-09: バージョン5.35（線分のタッチの誤爆を防ぐ）** 👆
+  * cad-line.js（新）: lineStart・lineTouchCandidate（指を離した所を cmdState.lineCand に）・lineConfirmCandidate（☑確定 → handlePointInput）・lineSetStart・lineAddSegment（長さ0と、タッチの画面で 3px 未満は作らない。引いた線の ID を cmdState.lineIds に）・lineUndoStep（↶ 1つ戻す・U）・drawLineCandidate・lineRubberEnd。オプション lineTouch（confirm / now）。
+  * cad-input.js の touchend（線分は仮の点）と touchState.down、cad-command.js（LINE の点・U・dimConfirmPoint）、下のバーの #line-undo-btn。tests/line-touch.test.cjs。
 
 * **2026-10-09: バージョン5.34（JWW の直接取り込み）** 📐
   * cad-jww.js（新）: parseJwwBuffer（jwdatafmt.txt のヘッダーを版の条件どおりに読み、CTypedPtrList と CArchive の WriteObject（0xFFFF＋スキーマ＋名前・0x8000|番号・0x7FFF＋DWORD、番号は クラスと図形で通し）で図形のリストとブロックの定義を読む。CString は 1/2/4 バイトの長さと 0xFF・0xFFFE の UTF-16。ヘッダーがずれたら最初の "CData" の印を探す。ブロックの定義の CTime は 4/8 バイトを並びで見分ける）。

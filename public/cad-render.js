@@ -98,6 +98,7 @@ function _drawFrame(overlayOnly) {
         ctx.setTransform(ck || 1, 0, 0, ck || 1, 0, 0); ctx.setLineDash([]); ctx.globalAlpha = 1;
         if(ck) {
             ctx.fillStyle = canvasBg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            if(layoutActive()) { drawLayoutSheet(); return; } // レイアウトの画面（cad-layout.js）
             if(typeof drawUnderlays === 'function') drawUnderlays();
             drawEntities(); drawDimensions();
             if(typeof drawPhotoPins === 'function') drawPhotoPins();
@@ -111,17 +112,22 @@ function _drawFrame(overlayOnly) {
             const fc = _frameCache, k = view.scale / fc.scale;
             ctx.fillStyle=canvasBg; ctx.fillRect(0,0,canvas.width,canvas.height);
             ctx.drawImage(fc.canvas, view.x - fc.x * k, view.y - fc.y * k, canvas.width * k, canvas.height * k);
-            drawAxes();
+            if(!layoutActive()) drawAxes();
         } else {
         ctx.fillStyle=canvasBg; ctx.fillRect(0,0,canvas.width,canvas.height);
         const _t0 = performance.now();
+        if(layoutActive()) drawLayoutSheet(); // レイアウトの画面: 用紙・ビューポート（モデル）・図枠（cad-layout.js）
+        else {
         if(typeof drawUnderlays === 'function') drawUnderlays(); // 背景の地図・下絵（図形の下）
         drawAxes(); drawEntities(); drawDimensions();
+        }
         _lastBaseMs = performance.now() - _t0;
         if(_lastBaseMs >= GESTURE_CACHE_MIN_MS) _saveFrameCache();
         else if(_frameCache) _frameCache = null; // 軽い図面ではキャッシュ用のメモリを持たない
         }
+        if(layoutActive()) { if(window.updateZoomSlider) window.updateZoomSlider(); return; } // レイアウトは見るだけ（カーソル・スナップ・測量の印などは重ねない）
         drawRubberBand(); drawSnapMarker(); drawCrosshair();
+        drawLineCandidate(); // 線分の仮の点（☑確定 で決まる点。cad-line.js）
         if(typeof drawSurveyOverlays === 'function') drawSurveyOverlays(); // 現在地（GNSS）・一覧で選んだ点の目印
         if(typeof drawMeasureOverlay === 'function') drawMeasureOverlay(); // 基点測定（基点からのX・Y・直線距離）
         if(typeof drawCogoOverlay === 'function') drawCogoOverlay(); // 測量計算（指定した点・補助線・計算した点）
@@ -391,15 +397,19 @@ function _approxTextWidth(text, px) {
     for(let k = 0; k < text.length; k++) w += text.charCodeAt(k) > 0xff ? 1.0 : 0.6;
     return w * px;
 }
-function drawEntities() {
+// opts（レイアウトの画面。cad-layout.js）: list 描く図形（無ければ図面の図形）、plain 選択・強調・うっすら表示・タッチ非表示の候補の色を付けない、
+//   cull 描く範囲（図面の座標。ビューポートの枠）、hideLayers 描かない画層（ビューポートで凍結した画層）
+function drawEntities(opts) {
+    const list = (opts && opts.list) || entities;
+    const plain = !!(opts && opts.plain), hideLayers = (opts && opts.hideLayers) || null, cull = (opts && opts.cull) || null;
     ctx.save();
     ctx.lineWidth = lineWidthPx(1); // 屋外モードでは2倍
     const fontWeight = outdoorFontWeight(); // 屋外モードでは文字を太字にして縁取る
-    const selSet = new Set(cmdState.selectedIndices || []);
-    const hlIdx = cmdState.highlightIdx;
-    const ghost = !!window.ghostLayerMode;
+    const selSet = new Set(plain ? [] : (cmdState.selectedIndices || []));
+    const hlIdx = plain ? -1 : cmdState.highlightIdx;
+    const ghost = !plain && !!window.ghostLayerMode;
     const ghostAlpha = ghost ? ghostLayerAlpha() : 0; // うっすら表示の濃さ（画層一括管理のスライダー）
-    const layoffPick = layoffPickSet(); // タッチ非表示で消す候補にした画層（赤く描く）
+    const layoffPick = plain ? null : layoffPickSet(); // タッチ非表示で消す候補にした画層（赤く描く）
     const baseTransform = ctx.getTransform();
 
     // カリング用の画面の表示範囲 (WCS座標)。100ピクセルずつ余裕をもたせる
@@ -407,10 +417,10 @@ function drawEntities() {
     const tr = screenToWcs(canvas.width + 100, -100);
     const bl = screenToWcs(-100, canvas.height + 100);
     const br = screenToWcs(canvas.width + 100, canvas.height + 100);
-    const viewMinX = Math.min(tl.x, tr.x, bl.x, br.x);
-    const viewMaxX = Math.max(tl.x, tr.x, bl.x, br.x);
-    const viewMinY = Math.min(tl.y, tr.y, bl.y, br.y);
-    const viewMaxY = Math.max(tl.y, tr.y, bl.y, br.y);
+    const viewMinX = cull ? cull.minX : Math.min(tl.x, tr.x, bl.x, br.x);
+    const viewMaxX = cull ? cull.maxX : Math.max(tl.x, tr.x, bl.x, br.x);
+    const viewMinY = cull ? cull.minY : Math.min(tl.y, tr.y, bl.y, br.y);
+    const viewMaxY = cull ? cull.maxY : Math.max(tl.y, tr.y, bl.y, br.y);
 
     // WCS→画面の変換（wcsToScreen と同じ式。頂点の多いポリライン用にオブジェクトを作らず計算する）
     const sc = view.scale, vx = view.x, vy = view.y;
@@ -437,10 +447,11 @@ function drawEntities() {
     };
     let lastFont = null, lastAlign = null, lastBaseline = null;
 
-    const n = entities.length;
+    const n = list.length;
     for(let i = 0; i < n; i++) {
-        const e = entities[i];
+        const e = list[i];
         if(!e || e.hidden) continue;
+        if(hideLayers && hideLayers.has(e.layer)) continue;
         const lyrVisible = e.layer === undefined || !layers[e.layer] || layers[e.layer].visible;
         if(!lyrVisible && !ghost) continue; // ghostLayerModeがOFFで画層非表示なら描画をスキップ
         if(e.type === 'DIMENSION') continue;
@@ -561,7 +572,7 @@ function drawDimensions() { if(typeof drawAllDimensions==='function') drawAllDim
 function drawRubberBand() {
     ctx.save(); ctx.strokeStyle=isLightCanvasBg()?'rgba(0,0,0,0.5)':'rgba(255,255,255,0.5)'; ctx.setLineDash([6,4]); ctx.lineWidth=lineWidthPx(1, 1.5);
     const m=cmdState.mode, sw=cmdState.startWcs, mp={x:mouse.wcsX,y:mouse.wcsY};
-    if(m==='WAITING_LINE_P2'&&sw) { const a=wcsToScreen(sw.x,sw.y),b=wcsToScreen(mp.x,mp.y); ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke(); }
+    if(m==='WAITING_LINE_P2'&&sw) { const q=lineRubberEnd(mp); const a=wcsToScreen(sw.x,sw.y),b=wcsToScreen(q.x,q.y); ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke(); } // タッチの仮の点があればそこまで（cad-line.js）
     else if(m==='WAITING_CIRCLE_RADIUS'&&sw) { 
         const pt = cmdState.lastInputWcs || mp;
         const c=wcsToScreen(sw.x,sw.y), r=dist(sw.x,sw.y,pt.x,pt.y)*view.scale; 

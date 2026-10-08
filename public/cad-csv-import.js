@@ -153,6 +153,7 @@ function _csvRender() {
         h += '</tr>';
     });
     h += '</tbody></table></div>';
+    h += `<div style="margin:6px 0;">${ptLabelControlHtml()}</div>`; // 点名の大きさ（座標一覧と同じ設定。cad-textsize.js）
     if(err) h += `<div class="cogo-note" style="color:#ff6b6b;">${escapeHtml(err)}</div>`;
     else {
         const ex = res.points.slice(0, 3).map(p => `${escapeHtml(p.name || p.num || '（名前なし）')}\u3000X ${p.X.toFixed(3)}\u3000Y ${p.Y.toFixed(3)}${p.z !== null ? `\u3000標高 ${p.z.toFixed(3)}` : ''}`).join('<br>');

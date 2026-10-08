@@ -5,6 +5,7 @@
 // ===== DWG読み込み（libredwg-web ラッパークラス版） =====
 async function loadDwgFile(file) {
     busyStart('DWG を読み込み中…');
+    const appendMode = (typeof _importMode !== 'undefined' && _importMode === 'append'); // レイアウトを足すか置き換えるか
     addCommandLog(`DWGファイルを解析中: ${file.name}...`);
     addCommandLog('  libredwg-web を初期化しています...');
 
@@ -65,7 +66,7 @@ async function loadDwgFile(file) {
         // エンティティ変換
         const importResult = convertDwgDatabaseToApp(db);
 
-        if(importResult.entities.length === 0) {
+        if(importResult.entities.length === 0 && !(importResult.layouts || []).length) {
             addCommandLog('注意: 対応する図形が見つかりませんでした。');
             if(typeof _restoreAfterFailedImport === 'function') _restoreAfterFailedImport(); // 置き換えで消した図面を戻す
             if(typeof showToast === 'function') showToast(importResult.paperSkipped ? paperOnlyNote(importResult.paperSkipped) : 'DWG内に表示できる図形が見つかりませんでした', { kind: 'error', ms: 5000 });
@@ -75,6 +76,10 @@ async function loadDwgFile(file) {
         // エンティティをインポート（画層は変換時に layers へ直接追加済み）
         initLayers();
         importResult.entities.forEach(e => entities.push(e));
+        // レイアウト（図枠・表題欄・ビューポート）は別の画面に（cad-layout.js）
+        const layoutCount = (typeof layoutsFromImport === 'function') ? layoutsFromImport(importResult.layouts, appendMode) : 0;
+        const layoutNote = (typeof layoutImportNote === 'function') ? layoutImportNote(layoutCount) : '';
+        if(layoutNote) addCommandLog('  ' + layoutNote);
         if(typeof ensureEntityIds === 'function') ensureEntityIds();
         if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
         setDrawingName(file.name);
@@ -89,7 +94,11 @@ async function loadDwgFile(file) {
         if(unitNote) addCommandLog('-> ' + unitNote);
         zoomExtents(); render();
         const skipNote = importResultNote(importResult.skipStats, importResult.hiddenFills) + (importResult.warnings.length ? `\n（読めなかったものが ${importResult.warnings.length}件あります。詳しくはコマンド欄）` : '');
-        if(typeof showToast === 'function') showToast(`読み込み完了: ${importResult.entities.length}個の図形` + (unitNote ? '\n' + unitNote : '') + skipNote, { kind: (importResult.warnings.length || Object.keys(importResult.skipStats || {}).length) ? 'warn' : 'success', ms: (unitNote || skipNote) ? 7000 : 4000 });
+        if(importResult.entities.length === 0 && layoutCount > 0) {
+            // モデルに図形が無く、レイアウトだけある: そのレイアウトを出す
+            layoutShow(cadLayouts.length - layoutCount);
+            if(typeof showToast === 'function') showToast(`モデル空間に図形がありません。レイアウト「${cadLayouts[cadLayouts.length - layoutCount].name}」を出しました（画面の下のタブで切り替え）`, { kind: 'warn', ms: 6000 });
+        } else if(typeof showToast === 'function') showToast(`読み込み完了: ${importResult.entities.length}個の図形` + (unitNote ? '\n' + unitNote : '') + skipNote + (layoutNote ? '\n' + layoutNote : ''), { kind: (importResult.warnings.length || Object.keys(importResult.skipStats || {}).length) ? 'warn' : 'success', ms: (unitNote || skipNote || layoutNote) ? 7000 : 4000 });
         if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 
     } catch(err) {
@@ -369,7 +378,7 @@ function convertDwgDatabaseToApp(db) {
     }
 
     if (db.entities && Array.isArray(db.entities)) {
-        const isPaper = dwgPaperSpaceTester(db); // レイアウト（ペーパー空間）は取り込まない。モデル空間だけ
+        const isPaper = dwgPaperSpaceTester(db); // レイアウト（ペーパー空間）はモデルに入れない（下で別の画面のレイアウトにする）
         const inInsert = new Set();
         db.entities.forEach(ent => { if (ent && ent.type === 'INSERT') (ent.attribs || ent.attributes || []).forEach(a => inInsert.add(a)); });
         db.entities.forEach(ent => { if(isPaper(ent)) { result.paperSkipped++; return; } if (inInsert.has(ent)) return; processDwgEntity(ent, 0, 0, 0, 1, 1, 0, null, null); });
@@ -378,9 +387,32 @@ function convertDwgDatabaseToApp(db) {
         addCommandLog(`  変換完了: ${importCount}個 / 取り込めなかった図形: ${skipTotal}個`);
         if (skipTotal > 0) addCommandLog(`  取り込めなかった図形: ${importSkipText(skipStats, true)}`);
         if (result.hiddenFills > 0) addCommandLog(`  塗りつぶし ${result.hiddenFills}個は非表示にしました（画層管理の「塗りつぶしを表示」で表示。オプションで初めから表示にもできます）`);
-        if (result.paperSkipped > 0) addCommandLog(`  ${PAPER_SPACE_LABEL}の図形 ${result.paperSkipped}個は取り込みません（モデル空間だけ）`);
+        if (result.paperSkipped > 0) addCommandLog(`  ${PAPER_SPACE_LABEL}の図形 ${result.paperSkipped}個は、モデルには入れません`);
     } else {
         result.warnings.push('DwgDatabase に entities が見つかりませんでした。');
+    }
+
+    // ===== レイアウト（ペーパー空間）: 図枠・表題欄・ビューポートを、モデルとは別に変える（別の画面で見る。cad-layout.js） =====
+    result.layouts = [];
+    if (typeof makeImportedLayout === 'function') {
+        const los = (db.objects && db.objects.LAYOUT) || [];
+        ((db.tables && db.tables.BLOCK_RECORD && db.tables.BLOCK_RECORD.entries) || []).forEach(br => {
+            if (!br || !PAPER_SPACE_RE.test(br.name || '')) return;
+            const lo = los.find(l => l && l.paperSpaceTableId !== undefined && String(l.paperSpaceTableId).toUpperCase() === String(br.handle).toUpperCase()) || null;
+            const raw = (br.entities || []).filter(Boolean);
+            const own = new Set();
+            raw.forEach(en => { if (en.type === 'INSERT') (en.attribs || en.attributes || []).forEach(a => own.add(a)); });
+            // 変えた図形はレイアウトの入れ物へ（モデルの数・入れ物には入れない）
+            const saved = result.entities, n0 = importCount, list = [];
+            result.entities = list;
+            raw.forEach(en => { if (en.type !== 'VIEWPORT' && !own.has(en)) processDwgEntity(en, 0, 0, 0, 1, 1, 0, null, null); });
+            result.entities = saved; importCount = n0;
+            const mainVp = lo && lo.viewportId !== undefined ? String(lo.viewportId).toUpperCase() : null;
+            const vps = raw.filter(en => en.type === 'VIEWPORT').map(v => dwgLayoutViewport(v, mainVp, layerIndexOf));
+            const lim = (lo && lo.minLimit && lo.maxLimit) ? { x0: lo.minLimit.x, y0: lo.minLimit.y, x1: lo.maxLimit.x, y1: lo.maxLimit.y } : null;
+            const lay = makeImportedLayout({ name: lo && lo.layoutName ? lo.layoutName : br.name.replace(/^\*/, ''), order: lo ? lo.tabOrder : 99, lim, ents: list, vps });
+            if (lay) result.layouts.push(lay);
+        });
     }
 
     return result;

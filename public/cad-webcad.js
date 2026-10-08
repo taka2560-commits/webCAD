@@ -126,20 +126,7 @@ function sanitizeWebcadProject(p) {
     });
     if(!lay.length) lay.push({ name: '0', color: '#ffffff', visible: true });
     const ents = [];
-    (Array.isArray(p.entities) ? p.entities : []).forEach(e0 => {
-        const e = _wcClean(e0, '', 0);
-        if(!e || typeof e !== 'object' || Array.isArray(e) || !_WC_TYPES.has(e.type)) return;
-        delete e.bbox; delete e._hits;
-        if(typeof e.id !== 'number') delete e.id;
-        e.layer = (Number.isInteger(e.layer) && e.layer >= 0 && e.layer < lay.length) ? e.layer : 0;
-        if(e.color !== undefined && e.color !== null && !_WC_COLOR.test(e.color)) delete e.color;
-        if(e.type === 'PIN') {
-            e.photos = (Array.isArray(e0.photos) ? e0.photos : []).filter(k => typeof k === 'string' && _WC_PHOTO_KEY.test(k));
-            e.x = num(e.x, 0); e.y = num(e.y, 0);
-        }
-        if(e.type === 'HATCH' && (!e.target || typeof e.target !== 'object' || !_WC_TYPES.has(e.target.type))) return;
-        ents.push(e);
-    });
+    (Array.isArray(p.entities) ? p.entities : []).forEach(e0 => { const e = _wcEntity(e0, lay.length); if(e) ents.push(e); });
     const ucs = _wcClean(p.ucs, '', 0) || {};
     const lineTypes = {};
     if(p.lineTypes && typeof p.lineTypes === 'object') Object.keys(p.lineTypes).slice(0, 500).forEach(k => {
@@ -157,7 +144,25 @@ function sanitizeWebcadProject(p) {
             .filter(u => u && typeof u === 'object' && typeof u.name === 'string').map(u => ({ name: u.name.slice(0, 100), originX: num(u.originX, 0), originY: num(u.originY, 0), angle: num(u.angle, 0) })),
         surveyUnit: (p.surveyUnit === 'm' || p.surveyUnit === 'mm') ? p.surveyUnit : undefined,
         lineTypes, ltscale: num(p.ltscale, 0) > 0 ? p.ltscale : null,
+        // レイアウト（cad-layout.js）。図形は図面の図形と同じ確かめ方（ピンは入れない）
+        layouts: (typeof sanitizeLayouts === 'function') ? sanitizeLayouts(p.layouts, (e0) => { const e = _wcEntity(e0, lay.length); return e && e.type !== 'PIN' ? e : null; }) : [],
     };
+}
+// 図形1つを確かめて、使える形にする（使えなければ null）。layerCount: 画層の数
+function _wcEntity(e0, layerCount) {
+    const num = (v, d) => (typeof v === 'number' && Number.isFinite(v)) ? v : d;
+    const e = _wcClean(e0, '', 0);
+    if(!e || typeof e !== 'object' || Array.isArray(e) || !_WC_TYPES.has(e.type)) return null;
+    delete e.bbox; delete e._hits;
+    if(typeof e.id !== 'number') delete e.id;
+    e.layer = (Number.isInteger(e.layer) && e.layer >= 0 && e.layer < layerCount) ? e.layer : 0;
+    if(e.color !== undefined && e.color !== null && !_WC_COLOR.test(e.color)) delete e.color;
+    if(e.type === 'PIN') {
+        e.photos = (Array.isArray(e0.photos) ? e0.photos : []).filter(k => typeof k === 'string' && _WC_PHOTO_KEY.test(k));
+        e.x = num(e.x, 0); e.y = num(e.y, 0);
+    }
+    if(e.type === 'HATCH' && (!e.target || typeof e.target !== 'object' || !_WC_TYPES.has(e.target.type))) return null;
+    return e;
 }
 // 画像（写真・下絵）の記録を確かめる。使えなければ null
 function _wcImage(r) {

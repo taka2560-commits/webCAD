@@ -558,6 +558,7 @@ function resetCommand() {
     const actionbar = document.getElementById('fs-dim-actionbar');
     if(actionbar) {
         const plineClose = document.getElementById('pline-close-btn'); if (plineClose) plineClose.style.display = 'none';
+        const lineUndo = document.getElementById('line-undo-btn'); if (lineUndo) lineUndo.style.display = 'none';
         actionbar.style.display = 'none';
         const confirmBtn = actionbar.querySelector('button[onclick="dimConfirmPoint()"]');
         if (confirmBtn) { confirmBtn.style.display = ''; confirmBtn.textContent = '☑️ 確定'; } // タッチ非表示では「☑️ 確定（数）」にしている
@@ -606,6 +607,7 @@ function updateCommandPill() {
     nameEl.textContent = active ? activeCommandName : 'READY';
     if (pEl) pEl.textContent = (promptText && promptText !== 'コマンド:') ? promptText : 'コマンド入力';
     if (typeof favUpdateActive === 'function') favUpdateActive(); // お気に入りのバー: 使っているコマンドのボタンを光らせる
+    if (typeof layoutTabsUpdate === 'function') layoutTabsUpdate(); // モデル｜レイアウトのタブ（コマンドの途中は隠す。cad-layout.js）
 }
 
 // ===== プロパティパネル制御 =====
@@ -618,6 +620,7 @@ function hidePropertyPanel() {
 function showPropertyPanel(title, htmlContent) {
     const p = document.getElementById('property-panel');
     if(!p) return;
+    if(typeof layoutBeforePanel === 'function') layoutBeforePanel(title); // レイアウトを見ていたら、モデルを使うパネルはモデルに戻ってから開く（cad-layout.js）
     const t = document.getElementById('property-panel-title');
     const opening = p.style.display !== 'flex';
     // ▁ たたむ・□ 画面いっぱいは、同じパネルの描き直し（タブの切り替えなど）では続ける。別のパネルにしたら元に戻す。
@@ -792,8 +795,9 @@ function showActionbarControls(options = {}) {
     if(confirmBtn) confirmBtn.style.display = options.hideConfirm ? 'none' : '';
     if(modeToggle) modeToggle.style.display = options.showMode ? '' : 'none';
     if(dirToggle) dirToggle.style.display = options.showDir ? '' : 'none';
-    // 基点測定・ポリラインのボタンは他のコマンドでは出さない
+    // 基点測定・ポリライン・線分のボタンは他のコマンドでは出さない
     const plineClose = document.getElementById('pline-close-btn'); if(plineClose) plineClose.style.display = 'none';
+    const lineUndo = document.getElementById('line-undo-btn'); if(lineUndo) lineUndo.style.display = 'none';
     const writeBtn = document.getElementById('dim-meas-write'); if(writeBtn) writeBtn.style.display = 'none';
     const measBaseBtn = document.getElementById('dim-meas-base'); if(measBaseBtn) measBaseBtn.style.display = 'none';
 }
@@ -855,6 +859,7 @@ function closeDrawing() {
 function _closeDrawingNow() {
     saveUndo();
     entities.length = 0;
+    if(typeof layoutsClear === 'function') layoutsClear(); // レイアウトも閉じる（↩ で戻せる）
     layers.splice(0, layers.length, {name:'0', color:'#00ffff', visible:true});
     currentLayerIndex = 0;
     initLayers();
@@ -979,7 +984,8 @@ function _undoSnapshot() {
         ids[i] = e.id; strs[i] = s; next.set(e.id, s);
     }
     _undoStrCache = next;
-    return { v: 2, ids, strs, layers: JSON.stringify(layers) };
+    // レイアウト（cad-layout.js）は取り込みのたびに作り直し、中を書き換えないので、同じ配列を指すだけでよい
+    return { v: 2, ids, strs, layers: JSON.stringify(layers), lay: (typeof cadLayouts !== 'undefined') ? cadLayouts : undefined };
 }
 function _applyUndoSnapshot(s) {
     if(Array.isArray(s)) { entities = s; } // 旧形式（entities配列のみ）との互換
@@ -999,6 +1005,7 @@ function _applyUndoSnapshot(s) {
         entities = next;
         layers = JSON.parse(s.layers);
         _undoStrCache = cache;
+        if(s.lay !== undefined && typeof layoutsRestoreRef === 'function') layoutsRestoreRef(s.lay);
     }
     else { entities = s.entities; layers = s.layers; }
     // 選択はIDで保持しているため、戻した後も同じ図形を指す（存在しなくなった図形は自動で外れる）
@@ -1019,5 +1026,5 @@ function saveUndo() {
     // 自動保存トリガー
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
-function undo() { if(typeof guideNotify === 'function') guideNotify('undo'); if(!undoStack.length){notify('元に戻す操作がありません', 1800);return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
-function redo() { if(!redoStack.length){notify('やり直す操作がありません', 1800);return;} _bumpGeomEpoch(); undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
+function undo() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); if(typeof guideNotify === 'function') guideNotify('undo'); if(!undoStack.length){notify('元に戻す操作がありません', 1800);return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
+function redo() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); if(!redoStack.length){notify('やり直す操作がありません', 1800);return;} _bumpGeomEpoch(); undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }

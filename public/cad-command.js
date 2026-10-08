@@ -99,8 +99,8 @@ function _handlePointInputCore(wcs, fromMouse) {
         render();
         return;
     }
-    if(m==='WAITING_LINE_P1') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_LINE_P2'; setPrompt('次の点:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 1点目: ${coordPairText(u.x, u.y)}`); render(); return; }
-    if(m==='WAITING_LINE_P2') { saveUndo(); entities.push({type:'LINE',layer:currentLayerIndex,color:null,x1:cmdState.startWcs.x,y1:cmdState.startWcs.y,x2:wcs.x,y2:wcs.y}); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 線分作成 終点: ${coordPairText(u.x, u.y)}`); cmdState.startWcs={x:wcs.x,y:wcs.y}; render(); return; }
+    if(m==='WAITING_LINE_P1') { lineSetStart(wcs); return; } // 線分（cad-line.js）
+    if(m==='WAITING_LINE_P2') { lineAddSegment(wcs, fromMouse); return; } // 長さ0の線は作らない
     if(m==='WAITING_CIRCLE_CENTER') {
         const isAuto = lastParams.circleMode === 'auto';
         cmdState.startWcs = {x: wcs.x, y: wcs.y};
@@ -617,6 +617,7 @@ function processCommand(cmdText) {
     // 全角の数字・記号（日本語入力のまま打った「１２．５，３０」など）は半角にする（かな・漢字を含む入力はそのまま）
     if(typeof cogoHalfWidth === 'function' && !/[぀-ヿ一-鿿]/.test(cmdText)) cmdText = cogoHalfWidth(cmdText);
     const cmd = cmdText.toUpperCase().trim();
+    if(typeof layoutBeforeCommand === 'function') layoutBeforeCommand(cmd); // レイアウトを見ていたら、モデルに戻ってから始める（cad-layout.js）
     const coordMatch = cmd.match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
     // 「X,Y」の順（画面の座標表示と同じ。X＝北、Y＝東）。以前は「東,北」の順で、表示と逆になっていた
     // 入れた数は表示の単位（オプションの座標・長さの単位）。図面の単位に直して使う
@@ -698,7 +699,7 @@ function processCommand(cmdText) {
         setActiveTool('EXTEND');
         addCommandLog('-> 延長: 線をスワイプ（ドラッグ）して一番近い交点まで延長します');
     }
-    else if(cmd==='L'||cmd==='LINE') { cmdState.mode='WAITING_LINE_P1'; setPrompt('1点目:'); setActiveTool('LINE'); addCommandLog('-> 1点目を指定'); }
+    else if(cmd==='L'||cmd==='LINE') { cmdState.mode='WAITING_LINE_P1'; setPrompt('1点目:'); setActiveTool('LINE'); addCommandLog('-> 1点目を指定'); lineStart(); } // タッチは ☑確定 で引く・↶ 1つ戻す（cad-line.js）
     else if(cmd==='C'||cmd==='CIRCLE') {
         materializeSizeDefault('radius', 40); // 一度も変えていなければ、画面に合った半径にする
         const isAuto = lastParams.circleMode === 'auto';
@@ -821,7 +822,7 @@ function processCommand(cmdText) {
     else if(cmd==='GROUP'||cmd==='G') { window.groupSelection(); }
     else if(cmd==='UNGROUP'||cmd==='EXPLODE'||cmd==='X') { window.explodeSelection(); }
     else if(cmd==='BLOCKS'||cmd==='BLOCK') { window.showBlockManagerPanel(); }
-    else if(cmd==='U'||cmd==='UNDO') { undo(); }
+    else if(cmd==='U'||cmd==='UNDO') { if(!(cmd==='U' && lineUndoStep())) undo(); } // 線分の途中の U は、最後に引いた線だけ消す（AutoCAD と同じ）
     else if(cmd==='REDO') { redo(); }
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
     else if(cmd==='CANCEL') {
@@ -841,6 +842,8 @@ function processCommand(cmdText) {
     else if(typeof processUnderlayCommand === 'function' && processUnderlayCommand(cmd)) { /* 地図・下絵（MAP）処理済み */ }
     else if(typeof processPhotoCommand === 'function' && processPhotoCommand(cmd)) { /* 写真・メモ（PHOTO）処理済み */ }
     else if(typeof processPointCommand === 'function' && processPointCommand(cmd)) { /* 点（POINT）処理済み */ }
+    else if(typeof processTextSizeCommand === 'function' && processTextSizeCommand(cmd)) { /* 文字の大きさ（TEXTSIZE）処理済み */ }
+    else if(typeof processLayoutCommand === 'function' && processLayoutCommand(cmd)) { /* レイアウト（LAYOUT・MODEL）処理済み */ }
     else if(typeof processLtypeCommand === 'function' && processLtypeCommand(cmd)) { /* 線種の尺度（LTSCALE）・線の太さの表示（LWDISPLAY） */ }
     else if(typeof processFavCommand === 'function' && processFavCommand(cmd)) { /* お気に入りの登録（FAV）処理済み */ }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
@@ -868,6 +871,7 @@ window.plineCloseFromBar = function() {
 };
 window.dimConfirmPoint = function() {
     if(cmdState.mode === 'WAITING_LAYOFF_TOUCH') { layoffConfirm(); return; } // タッチ非表示: 消す候補の画層を非表示に（cad-panels.js）
+    if(lineConfirmCandidate()) return; // 線分: 仮の点で決める（cad-line.js）
     if(typeof editConfirm === 'function' && editConfirm()) return; // 結合・配列の確定（cad-edit.js）
     if(cmdState.mode === 'WAITING_PLINE_NEXT') { finishPline(false); return; } // ポリラインの完了
     if(cmdState.mode.startsWith('WAITING_DIM')) {
