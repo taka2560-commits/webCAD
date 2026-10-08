@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.38.2（2026年10月9日リリース）**
+**現在のバージョン: v5.38.3（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（757件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（758件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -265,6 +265,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.38.3（☰ メニューのスクロール）** 📜
+  * #top-menu-modal に max-height（100dvh − 上のバー − 余白）と overflow-y: auto。続きの印は scrollCue（cad-form.js）の more-up / more-down（toggleTopMenu と scroll で付け直す）。tests/polish.test.cjs。
 
 * **2026-10-09: バージョン5.38.2（座標一覧を大きく見やすく）** 📍
   * 座標一覧の行を .coord-row の grid（番号・点名・.cr-xyz（X・Y・H）・🗑）にし、@container coordlist（幅 560px 以上）で列をそろえた表と見出し .coord-head。.coord-list は画面いっぱいで flex 1 1 0・min-height 45vh（以前は max-height 48vh のまま、ほかの欄に押されて縮んでいた）。見出しの単位は測量の座標の m に直した。

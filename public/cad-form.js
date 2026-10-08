@@ -140,11 +140,14 @@ function scrollCue(el, axis) {
 function scrollCueAll() {
     scrollCue(document.getElementById('top-bar'), 'x');
     scrollCue(document.getElementById('toolbar'), 'y');
+    const tm = document.getElementById('top-menu-modal');
+    if(tm && tm.style.display === 'flex') scrollCue(tm, 'y');
 }
 (function() {
-    const tb = document.getElementById('top-bar'), tl = document.getElementById('toolbar');
+    const tb = document.getElementById('top-bar'), tl = document.getElementById('toolbar'), tm = document.getElementById('top-menu-modal');
     if(tb) tb.addEventListener('scroll', () => scrollCue(tb, 'x'), { passive: true });
     if(tl) tl.addEventListener('scroll', () => scrollCue(tl, 'y'), { passive: true });
+    if(tm) tm.addEventListener('scroll', () => scrollCue(tm, 'y'), { passive: true }); // ☰ メニュー（画面に収まらないときはスクロール）
     window.addEventListener('resize', scrollCueAll);
     setTimeout(scrollCueAll, 300); // 起動して並びが決まってから
 })();

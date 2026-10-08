@@ -377,8 +377,12 @@
         }
 
         /* トップメニューモーダル（案B） */
+        /* ☰ メニュー: 画面に収まらないときは中身をスクロール（v5.38.3。以前は下の「表示と設定」が画面の外に切れて押せなかった）。
+           上は上のバーの下（ボタンの大きさに合わせる）、下は画面の端から 12px まで。続きがあれば端を薄くする（cad-form.js の scrollCue） */
         #top-menu-modal {
-            display: none; position: fixed; top: 58px; right: 12px; z-index: 100005;
+            display: none; position: fixed; top: calc(14px + 44px * var(--btn-k, 1)); right: 12px; z-index: 100005;
+            max-height: calc(100vh - 52px - 44px * var(--btn-k, 1)); max-height: calc(100dvh - 52px - 44px * var(--btn-k, 1)); /* 内側の余白 12px×2・枠 1px×2 も引く */
+            overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
             width: 280px; max-width: 90vw; background: var(--panel-bg);
             backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
             border: 1px solid var(--border-color); border-radius: var(--r-card);
@@ -448,6 +452,9 @@
         #toolbar.more-down { -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 36px), transparent); mask-image:linear-gradient(to bottom, #000 calc(100% - 36px), transparent); }
         #toolbar.more-up { -webkit-mask-image:linear-gradient(to top, #000 calc(100% - 36px), transparent); mask-image:linear-gradient(to top, #000 calc(100% - 36px), transparent); }
         #toolbar.more-up.more-down { -webkit-mask-image:linear-gradient(to bottom, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image:linear-gradient(to bottom, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+        #top-menu-modal.more-down { -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 40px), rgba(0,0,0,0.25)); mask-image:linear-gradient(to bottom, #000 calc(100% - 40px), rgba(0,0,0,0.25)); }
+        #top-menu-modal.more-up { -webkit-mask-image:linear-gradient(to top, #000 calc(100% - 40px), rgba(0,0,0,0.25)); mask-image:linear-gradient(to top, #000 calc(100% - 40px), rgba(0,0,0,0.25)); }
+        #top-menu-modal.more-up.more-down { -webkit-mask-image:linear-gradient(to bottom, rgba(0,0,0,0.25), #000 40px, #000 calc(100% - 40px), rgba(0,0,0,0.25)); mask-image:linear-gradient(to bottom, rgba(0,0,0,0.25), #000 40px, #000 calc(100% - 40px), rgba(0,0,0,0.25)); }
         .gh-new .gh-new-item { text-align:left; margin-top:0; }
         /* 押せないボタン（押せるボタンと見分けられるように薄く） */
         .prop-btn:disabled, .sel-btn:disabled, .top-btn:disabled, .menu-item-btn:disabled, .status-btn:disabled { opacity:0.42; cursor:not-allowed; filter:saturate(0.5); }
@@ -1603,6 +1610,7 @@
             const m = document.getElementById('top-menu-modal');
             if(!m) return;
             m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
+            if(m.style.display === 'flex' && typeof scrollCue === 'function') scrollCue(m, 'y'); // 画面に収まらなければ、続きの印（下の端を薄く）
         }
 
         // メニュー外タップで閉じる

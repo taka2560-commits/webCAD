@@ -89,6 +89,21 @@ describe('仕上げ', () => {
         app.eval('resetCommand()');
     });
 
+    it('☰ メニューは画面に収まらないときスクロールでき、続きがある側の端を薄くする（v5.38.3）', () => {
+        const cs = app.val(`(() => { const s = getComputedStyle(document.getElementById('top-menu-modal')); return { oy: s.overflowY, mh: s.maxHeight }; })()`);
+        assert.equal(cs.oy, 'auto');
+        assert.match(cs.mh, /calc\(100d?vh - 52px - 44px \* var\(--btn-k, 1\)\)/);
+        // jsdom は大きさを測らないので、測った値を入れて印を確かめる
+        app.eval(`{ const m = document.getElementById('top-menu-modal');
+            Object.defineProperty(m, 'scrollHeight', { value: 800, configurable: true }); Object.defineProperty(m, 'clientHeight', { value: 300, configurable: true });
+            toggleTopMenu(); }`);
+        assert.match(app.eval(`document.getElementById('top-menu-modal').className`), /more-down/);
+        app.eval(`{ const m = document.getElementById('top-menu-modal'); m.scrollTop = 500; m.dispatchEvent(new Event('scroll')); }`);
+        assert.match(app.eval(`document.getElementById('top-menu-modal').className`), /more-up/);
+        assert.doesNotMatch(app.eval(`document.getElementById('top-menu-modal').className`), /more-down/);
+        app.eval(`{ const m = document.getElementById('top-menu-modal'); delete m.scrollHeight; delete m.clientHeight; m.scrollTop = 0; toggleTopMenu(); }`);
+    });
+
     it('上・左のバーは、続きがある側の端を薄くする', () => {
         const cls = (id) => app.val(`[...document.getElementById('${id}').classList].filter(c => c.startsWith('more-')).sort()`);
         const set = (id, props) => app.eval(`(el => { for (const [k, v] of Object.entries(${JSON.stringify(props)})) Object.defineProperty(el, k, { value: v, configurable: true }); })(document.getElementById('${id}'))`);
