@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.33（2026年10月8日リリース）**
+**現在のバージョン: v5.34（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（707件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（714件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -261,6 +261,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.34（JWW の直接取り込み）** 📐
+  * cad-jww.js（新）: parseJwwBuffer（jwdatafmt.txt のヘッダーを版の条件どおりに読み、CTypedPtrList と CArchive の WriteObject（0xFFFF＋スキーマ＋名前・0x8000|番号・0x7FFF＋DWORD、番号は クラスと図形で通し）で図形のリストとブロックの定義を読む。CString は 1/2/4 バイトの長さと 0xFF・0xFFFE の UTF-16。ヘッダーがずれたら最初の "CData" の印を探す。ブロックの定義の CTime は 4/8 バイトを並びで見分ける）。
+  * convertJwwToApp: 線・円・円弧（開始角＋傾き）・楕円・楕円弧（折れ線）・点・文字（高さ＝図寸×縮尺）・寸法（gid でまとめる）・ソリッド（4点・円のソリッド 101/105/106。makeImportedFill）・ブロック（変換をつないで広げる。鏡映の円弧は向きを逆に）。画層・色（線色・SXF・RGB）・線種。📁開く の .jww は _prepareImportTarget → loadJwwFile。tests/import-jww.test.cjs（テストの中で JWW を組み立てる）。
 
 * **2026-10-08: バージョン5.33（下絵のワールドファイル・PDF のページ）** 🗺
   * cad-underlay.js: ulParseWorldFile（6行の数）・ulWorldKind（平面直角座標・緯度経度・メルカトル）・ulWorldTransform（左上の画素の中心 → 角、縮める前の大きさ ow・oh で四隅を図面に移し T を作る。緯度経度・メルカトルは latLonToJprcs）。ulPickFiles（画像・PDF・ワールドファイルをいっしょに選ぶ。名前の同じ画像）・ulApplyWorldFile・ulPickWorldFile。

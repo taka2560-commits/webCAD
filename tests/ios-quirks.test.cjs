@@ -52,7 +52,7 @@ describe('iPhone・iPad 特有の不具合', () => {
         assert.equal(app.eval(`fileAcceptFor('.dxf,.dwg')`), '.dxf,.dwg');
         assert.deepEqual(grab(), ['.sim,.SIM,.txt', '.sim,.txt']);
         app.eval('setupFileIO()');
-        assert.equal(app.eval(`document.getElementById('dxf-file-input').getAttribute('accept')`), '.dxf,.dwg,.sim,.csv,.txt,.sdr,.webcad');
+        assert.equal(app.eval(`document.getElementById('dxf-file-input').getAttribute('accept')`), '.dxf,.dwg,.jww,.sim,.csv,.txt,.sdr,.webcad');
     });
 
     it('TS 連携: iPadOS の Safari（Mac と名乗る）でも「iPhone・iPad では直接つなげません」と出す（「PC は Chrome か Edge で」にしない）', () => {
