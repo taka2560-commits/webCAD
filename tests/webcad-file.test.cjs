@@ -53,7 +53,7 @@ describe('図面一式のファイル（.webcad）', () => {
             entities.push({ type: 'PIN', layer: 0, x: 5, y: 6, text: 'メモ', photos: ['phA', 'phB'], time: '2026-10-08T01:02:03.000Z', name: 'KP1' });
             ucs.originX = 100; ucs.originY = 200; ucs.angle = 0.3; savedUCSList = [{ name: '現場', originX: 1, originY: 2, angle: 0.1 }];
             drawingLineTypes = { MYLT: { d: [5, -2.5], desc: '自分の線種' } }; drawingLtscale = 250; ensureEntityIds();
-            _ul.img = { src: {}, w: 100, h: 50, T: [1, 0, 0, 1, 5, 6], opacity: 0.4, on: true, mime: 'image/png', data: new Uint8Array([9, 8, 7]).buffer, name: 'scan.png' };`);
+            _ul.img = { src: {}, w: 100, h: 50, ow: 400, oh: 200, T: [1, 0, 0, 1, 5, 6], opacity: 0.4, on: true, mime: 'image/png', data: new Uint8Array([9, 8, 7]).buffer, name: 'scan.png' };`);
         await app.eval(`(async () => {
             await photoSave('phA', { mime: 'image/jpeg', data: new Uint8Array([1, 2, 3, 255]).buffer, w: 10, h: 20, name: 'a.jpg', time: '2026-10-08T00:00:00Z' });
             await photoSave('phB', { mime: 'image/jpeg', data: new Uint8Array([4, 5]).buffer, w: 30, h: 40, name: 'b.jpg', time: '2026-10-08T00:00:01Z' }); })()`);
@@ -71,8 +71,9 @@ describe('図面一式のファイル（.webcad）', () => {
         assert.deepEqual(after0, before0);
         assert.deepEqual(await bytesOf(app, `photoLoad('phA')`), [1, 2, 3, 255]);
         assert.deepEqual(await bytesOf(app, `photoLoad('phB')`), [4, 5]);
-        assert.deepEqual(app.val(`(() => { const r = Object.assign({}, _ul.img); r.data = Array.from(new Uint8Array(r.data)); delete r.src; return r; })()`),
-            { w: 100, h: 50, T: [1, 0, 0, 1, 5, 6], opacity: 0.4, on: true, mime: 'image/png', data: [9, 8, 7], name: 'scan.png' });
+        // 下絵（縮める前の大きさも。ワールドファイルで合わせ直すときに使う）
+        assert.deepEqual(app.val(`(() => { const u = _ul.img; return { w: u.w, h: u.h, ow: u.ow, oh: u.oh, T: u.T, opacity: u.opacity, on: u.on, mime: u.mime, data: Array.from(new Uint8Array(u.data)), name: u.name }; })()`),
+            { w: 100, h: 50, ow: 400, oh: 200, T: [1, 0, 0, 1, 5, 6], opacity: 0.4, on: true, mime: 'image/png', data: [9, 8, 7], name: 'scan.png' });
         // 保存一覧の同じ名前の図面を上書きしないよう、名前は付けずに開く
         assert.equal(app.val('getProjectState().name'), null);
         assert.equal(app.val('window._drawingName'), '現場の図面');

@@ -167,9 +167,11 @@ function ulAlignTwoPoints(T, a1, a2, b1, b2) {
     const [a, b, c, d, e, f] = T, o = S(e, f);
     return { T: [cs * a - sn * b, sn * a + cs * b, cs * c - sn * d, sn * c + cs * d, o.x, o.y], k, th };
 }
-// 下絵にする（src: 描ける画像、w・h: 画像の大きさ、file: { mime, data（ArrayBuffer）, name }）
+// 下絵にする（src: 描ける画像、w・h: 画像の大きさ、file: { mime, data（ArrayBuffer）, name, ow・oh（縮める前の大きさ）, pdf・pdfName・page・pages（PDF のとき） }）
 function ulSetImage(src, w, h, file, T) {
-    _ul.img = { src, w, h, T: T || ulFitTransform(w, h), opacity: 0.6, on: true, mime: file && file.mime, data: file && file.data, name: (file && file.name) || '' };
+    const f = file || {};
+    _ul.img = { src, w, h, T: T || ulFitTransform(w, h), opacity: 0.6, on: true, mime: f.mime, data: f.data, name: f.name || '',
+        ow: f.ow || w, oh: f.oh || h, pdf: f.pdf || null, pdfName: f.pdfName || '', page: f.page || 0, pages: f.pages || 0 };
     render();
 }
 function _ulDecode(blob) {
@@ -181,68 +183,161 @@ function _ulDecode(blob) {
         img.src = url;
     });
 }
-// 大きな画像は長辺 UL_MAX_PX に縮める（端末のメモリを使いすぎないように）
+// 大きな画像は長辺 UL_MAX_PX に縮める（端末のメモリを使いすぎないように）。ow・oh は縮める前の大きさ（ワールドファイルの画素の数え方）
 async function _ulShrink(img, file) {
     const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
     const k = Math.min(1, UL_MAX_PX / Math.max(w0, h0));
-    if(k >= 1) return { src: img, w: w0, h: h0, mime: file.type || 'image/jpeg', data: await file.arrayBuffer() };
+    if(k >= 1) return { src: img, w: w0, h: h0, ow: w0, oh: h0, mime: file.type || 'image/jpeg', data: await file.arrayBuffer() };
     const cv = document.createElement('canvas');
     cv.width = Math.round(w0 * k); cv.height = Math.round(h0 * k);
     cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
     const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.9));
     const data = await blob.arrayBuffer();
-    return { src: await _ulDecode(blob), w: cv.width, h: cv.height, mime: 'image/jpeg', data };
+    return { src: await _ulDecode(blob), w: cv.width, h: cv.height, ow: w0, oh: h0, mime: 'image/jpeg', data };
 }
-async function ulLoadImageFile(file) {
+
+// ===== ワールドファイル（.jgw・.pgw・.tfw・.wld など） =====
+// 6行の数: A（1画素で東へ）・D・B・E（1画素で北へ。ふつう負）・C・F（左上の画素の中心の座標）。
+// 座標は、平面直角座標（m。x＝東・y＝北）・緯度経度（度）・ウェブメルカトル（m）を見分ける。緯度経度・メルカトルは系番号で平面直角座標に直す
+const UL_WORLD_EXT = /\.(jgw|jpgw|jpegw|pgw|pngw|tfw|tifw|tiffw|gfw|gifw|bpw|bmpw|wld)$/i;
+function ulParseWorldFile(text) {
+    const v = String(text || '').trim().split(/\s+/).slice(0, 6).map(Number);
+    if(v.length < 6 || !v.every(Number.isFinite)) return null;
+    const [A, D, B, E, C, F] = v;
+    if(Math.abs(A * E - B * D) < 1e-30) return null;
+    return { A, D, B, E, C, F };
+}
+function ulWorldKind(w) {
+    if(Math.abs(w.A) < 0.01 && Math.abs(w.E) < 0.01 && w.C > 100 && w.C < 160 && w.F > 15 && w.F < 50) return 'deg';
+    if(Math.abs(w.C) > 1e7 && Math.abs(w.C) < 2.1e7 && Math.abs(w.F) > 1e6 && Math.abs(w.F) < 1e7) return 'merc';
+    return 'plane';
+}
+// 画像（縮める前 ow×oh、下絵は w×h）の T（画像の px → 図面）。緯度経度・メルカトルで系番号が無いときは null
+function ulWorldTransform(wf, ow, oh, w, h, zone) {
+    const kind = ulWorldKind(wf);
+    if(kind !== 'plane' && !zone) return null;
+    const R = 6378137;
+    const toWcs = (x, y) => {
+        if(kind === 'plane') return surveyToWcs(y, x);
+        let lon = x, lat = y;
+        if(kind === 'merc') { lon = x / R * 180 / Math.PI; lat = (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI; }
+        const p = latLonToJprcs(lat, lon, zone);
+        return surveyToWcs(p.X, p.Y);
+    };
+    const x0 = wf.C - (wf.A + wf.B) / 2, y0 = wf.F - (wf.D + wf.E) / 2; // 左上の画素の角
+    const tl = toWcs(x0, y0), tr = toWcs(x0 + wf.A * ow, y0 + wf.D * ow), bl = toWcs(x0 + wf.B * oh, y0 + wf.E * oh);
+    return { T: [(tr.x - tl.x) / w, (tr.y - tl.y) / w, (bl.x - tl.x) / h, (bl.y - tl.y) / h, tl.x, tl.y], kind };
+}
+const UL_WORLD_KIND = { plane: '平面直角座標', deg: '緯度経度', merc: 'ウェブメルカトル' };
+// ワールドファイルを読んで、置き方を返す { T, msg } か、合わせられない理由 { err }
+async function _ulWorldOf(worldFile, ow, oh, w, h) {
+    const wf = ulParseWorldFile((await _readTextFile(worldFile)).text);
+    if(!wf) return { err: `ワールドファイル（${worldFile.name}）を読めませんでした（6行の数ではありません）` };
+    const zone = getGnssZone(), r = ulWorldTransform(wf, ow, oh, w, h, zone);
+    if(!r) return { err: `${UL_WORLD_KIND[ulWorldKind(wf)]}のワールドファイルです。🗺 地図・下絵 の「系番号」を選んでから、もう一度合わせてください` };
+    const px = Math.hypot(wf.A, wf.D);
+    return { T: r.T, msg: `ワールドファイル（${worldFile.name}・${UL_WORLD_KIND[r.kind]}${r.kind === 'plane' ? `・1画素 ${px.toPrecision(4)}m` : `・${ROMAN[zone]}系に直す`}）で位置を合わせました` };
+}
+async function ulLoadImageFile(file, worldFile) {
     try {
         const img = await _ulDecode(file);
         const r = await _ulShrink(img, file);
-        ulSetImage(r.src, r.w, r.h, { mime: r.mime, data: r.data, name: file.name });
+        const wr = worldFile ? await _ulWorldOf(worldFile, r.ow, r.oh, r.w, r.h) : null;
+        ulSetImage(r.src, r.w, r.h, { mime: r.mime, data: r.data, name: file.name, ow: r.ow, oh: r.oh }, wr && wr.T);
         await ulSaveImage();
         addCommandLog(`-> 下絵を読み込みました: ${file.name}（${r.w}×${r.h}）`);
-        showToast('下絵を読み込みました。「📍 2点で合わせる」で図面に重ねます', 3500);
+        if(wr && wr.T) { addCommandLog('-> ' + wr.msg); showToast(wr.msg, { kind: 'success', ms: 4000 }); }
+        else if(wr) { addCommandLog('注意: ' + wr.err); showToast(wr.err, { kind: 'warn', ms: 6000 }); }
+        else showToast('下絵を読み込みました。「📍 2点で合わせる」で図面に重ねます', 3500);
         if(_ulPanelOpen()) _ulRender();
     } catch(e) {
         showToast('画像を読み込めませんでした: ' + e.message, 4000);
     }
 }
+// 選んだファイル（画像・PDF・ワールドファイル。いっしょに選べる）を下絵にする。ワールドファイルは、名前の同じ画像に使う
+function ulPickFiles(files) {
+    const isWorld = (f) => UL_WORLD_EXT.test(f.name || '');
+    const isPdf = (f) => /\.pdf$/i.test(f.name || '') || f.type === 'application/pdf';
+    const base = (f) => String(f.name || '').replace(/\.[^.]+$/, '').toLowerCase();
+    const world = files.find(isWorld) || null;
+    const imgs = files.filter(f => !isWorld(f) && !isPdf(f));
+    const img = (world && imgs.find(f => base(f) === base(world))) || imgs[0];
+    if(img) return ulLoadImageFile(img, world);
+    const pdf = files.find(isPdf);
+    if(pdf) return ulLoadPdfFile(pdf);
+    if(world && _ul.img) return ulApplyWorldFile(world);
+    if(world) showToast('ワールドファイルだけでは表示できません。画像と一緒に選んでください', 4000);
+    return null;
+}
 window.ulPickImage = function() {
     const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/*,application/pdf,.pdf';
-    inp.onchange = () => {
-        const f = inp.files && inp.files[0];
-        if(!f) return;
-        if(/\.pdf$/i.test(f.name) || f.type === 'application/pdf') ulLoadPdfFile(f); else ulLoadImageFile(f);
-    };
+    inp.type = 'file'; inp.multiple = true;
+    const accept = (typeof fileAcceptFor === 'function') ? fileAcceptFor('image/*,application/pdf,.pdf,.jgw,.pgw,.tfw,.gfw,.bpw,.wld') : 'image/*,application/pdf,.pdf';
+    if(accept) inp.accept = accept;
+    inp.onchange = () => { if(inp.files && inp.files.length) ulPickFiles([...inp.files]); };
     inp.click();
 };
-// PDF の1ページを画像にして下絵にする（pdf.js。長辺 UL_MAX_PX まで。ページが複数なら聞く）
+// 今の下絵に、ワールドファイルの位置を当てる（パネルの「📐 ワールドファイル」）
+async function ulApplyWorldFile(worldFile) {
+    const u = _ul.img;
+    if(!u) return false;
+    try {
+        const wr = await _ulWorldOf(worldFile, u.ow || u.w, u.oh || u.h, u.w, u.h);
+        if(!wr.T) { addCommandLog('注意: ' + wr.err); showToast(wr.err, { kind: 'warn', ms: 6000 }); return false; }
+        u.T = wr.T; u.on = true;
+        await ulSaveImage();
+        addCommandLog('-> ' + wr.msg);
+        showToast(wr.msg, { kind: 'success', ms: 4000 });
+        if(_ulPanelOpen()) _ulRender();
+        render();
+        return true;
+    } catch(e) { showToast('ワールドファイルを読めませんでした: ' + e.message, 4000); return false; }
+}
+window.ulPickWorldFile = function() {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    const accept = (typeof fileAcceptFor === 'function') ? fileAcceptFor('.jgw,.pgw,.tfw,.gfw,.bpw,.wld') : '';
+    if(accept) inp.accept = accept;
+    inp.onchange = () => { const f = inp.files && inp.files[0]; if(f) ulApplyWorldFile(f); };
+    inp.click();
+};
+
+// ===== PDF =====
+// 1ページを画像にする（長辺 UL_MAX_PX まで。図面の線がにじまないよう PNG）
+async function _ulPdfPage(doc, pageNo) {
+    const page = await doc.getPage(pageNo);
+    const vp1 = page.getViewport({ scale: 1 });
+    const vp = page.getViewport({ scale: Math.min(6, UL_MAX_PX / Math.max(vp1.width, vp1.height)) });
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(vp.width)); cv.height = Math.max(1, Math.round(vp.height));
+    const g = cv.getContext('2d');
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, cv.width, cv.height);
+    await page.render({ canvasContext: g, viewport: vp }).promise;
+    const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
+    return { src: await _ulDecode(blob), w: cv.width, h: cv.height, data: await blob.arrayBuffer() };
+}
+function _ulAskPdfPage(pages, cur) {
+    return cadPrompt({ title: 'PDF のページ', message: `何ページ目を下絵にしますか？（1〜${pages}${cur ? `。今は ${cur}ページ` : ''}）`, value: String(cur || 1), inputmode: 'numeric', ok: 'このページ',
+        validate: (v) => { const n = parseInt(cogoHalfWidth(v), 10); return (n >= 1 && n <= pages) ? '' : `1〜${pages} の数を入れてください`; } });
+}
+// PDF の1ページを画像にして下絵にする（pdf.js。ページが複数なら聞く）。PDF は覚えておき、あとでページを選び直せる
 async function ulLoadPdfFile(file) {
     try {
         if(typeof window.loadPdfJs !== 'function') throw new Error('PDF 表示エンジンがありません');
         showToast('PDF を読み込んでいます…', 2000);
         const pdfjs = await window.loadPdfJs();
-        const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+        const bytes = await file.arrayBuffer(), keep = bytes.slice(0); // pdf.js に渡すと使えなくなるので写しを持つ
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes) }).promise;
         let pageNo = 1;
         if(doc.numPages > 1) {
-            const a = await cadPrompt({ title: 'PDF のページ', message: `何ページ目を下絵にしますか？（1〜${doc.numPages}）`, value: '1', inputmode: 'numeric', ok: 'このページ',
-                validate: (v) => { const n = parseInt(cogoHalfWidth(v), 10); return (n >= 1 && n <= doc.numPages) ? '' : `1〜${doc.numPages} の数を入れてください`; } });
+            const a = await _ulAskPdfPage(doc.numPages, 0);
             if(a === null) return false;
             pageNo = Math.min(doc.numPages, Math.max(1, parseInt(cogoHalfWidth(a), 10) || 1));
         }
-        const page = await doc.getPage(pageNo);
-        const vp1 = page.getViewport({ scale: 1 });
-        const vp = page.getViewport({ scale: Math.min(6, UL_MAX_PX / Math.max(vp1.width, vp1.height)) });
-        const cv = document.createElement('canvas');
-        cv.width = Math.max(1, Math.round(vp.width)); cv.height = Math.max(1, Math.round(vp.height));
-        const g = cv.getContext('2d');
-        g.fillStyle = '#ffffff'; g.fillRect(0, 0, cv.width, cv.height);
-        await page.render({ canvasContext: g, viewport: vp }).promise;
-        const blob = await new Promise((r) => cv.toBlob(r, 'image/png')); // 図面の線がにじまないよう PNG
-        const src = await _ulDecode(blob);
-        ulSetImage(src, cv.width, cv.height, { mime: 'image/png', data: await blob.arrayBuffer(), name: `${file.name}（${pageNo}ページ）` });
+        const r = await _ulPdfPage(doc, pageNo);
+        ulSetImage(r.src, r.w, r.h, { mime: 'image/png', data: r.data, name: `${file.name}（${pageNo}ページ）`, pdf: keep, pdfName: file.name, page: pageNo, pages: doc.numPages });
         await ulSaveImage();
-        addCommandLog(`-> PDF を下絵にしました: ${file.name} ${pageNo}ページ（${cv.width}×${cv.height}）`);
+        addCommandLog(`-> PDF を下絵にしました: ${file.name} ${pageNo}ページ（${r.w}×${r.h}）`);
         showToast('PDF を下絵にしました。「📍 2点で合わせる」で図面に重ねます', 3500);
         if(_ulPanelOpen()) _ulRender();
         return true;
@@ -251,11 +346,40 @@ async function ulLoadPdfFile(file) {
         return false;
     }
 }
+// PDF のページを選び直す（大きさが同じページなら、合わせた位置のまま）
+async function ulChangePdfPage() {
+    const u = _ul.img;
+    if(!u || !u.pdf || !(u.pages > 1)) return false;
+    const a = await _ulAskPdfPage(u.pages, u.page);
+    if(a === null) return false;
+    const pageNo = Math.min(u.pages, Math.max(1, parseInt(cogoHalfWidth(a), 10) || 1));
+    busyStart('PDF のページを画像にしています…');
+    try {
+        await busyPaint();
+        const pdfjs = await window.loadPdfJs();
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(u.pdf.slice(0)) }).promise;
+        const r = await _ulPdfPage(doc, pageNo);
+        const same = r.w === u.w && r.h === u.h, op = u.opacity;
+        ulSetImage(r.src, r.w, r.h, { mime: 'image/png', data: r.data, name: `${u.pdfName || 'PDF'}（${pageNo}ページ）`, pdf: u.pdf, pdfName: u.pdfName, page: pageNo, pages: u.pages }, same ? u.T : null);
+        _ul.img.opacity = op;
+        await ulSaveImage();
+        addCommandLog(`-> 下絵の PDF を ${pageNo}ページにしました（${r.w}×${r.h}）`);
+        showToast(same ? `${pageNo}ページにしました（位置はそのまま）` : `${pageNo}ページにしました。大きさが違うので、画面に合わせて置き直しました（「📍 2点で合わせる」で合わせます）`, { kind: same ? 'success' : 'warn', ms: same ? 2500 : 5000 });
+        if(_ulPanelOpen()) _ulRender();
+        render();
+        return true;
+    } catch(e) {
+        showToast('PDF のページを画像にできませんでした: ' + e.message, 4500);
+        return false;
+    } finally { busyEnd(); }
+}
+window.ulChangePdfPage = ulChangePdfPage;
 // 端末に保存（自動保存の領域）。消したときは空にする
 async function ulSaveImage() {
     const u = _ul.img;
     try {
-        await _dbPut(STORE_AUTOSAVE, UL_DB_KEY, u && u.data ? { mime: u.mime, data: u.data, w: u.w, h: u.h, T: u.T, opacity: u.opacity, on: u.on, name: u.name } : null);
+        await _dbPut(STORE_AUTOSAVE, UL_DB_KEY, u && u.data ? { mime: u.mime, data: u.data, w: u.w, h: u.h, T: u.T, opacity: u.opacity, on: u.on, name: u.name,
+            ow: u.ow, oh: u.oh, pdf: u.pdf || null, pdfName: u.pdfName || '', page: u.page || 0, pages: u.pages || 0 } : null);
     } catch { /* 保存できなくても表示は続ける */ }
 }
 async function ulRestore() {
@@ -263,7 +387,8 @@ async function ulRestore() {
         const r = await _dbGet(STORE_AUTOSAVE, UL_DB_KEY);
         if(!r || !r.data) return false;
         const src = await _ulDecode(new Blob([r.data], { type: r.mime }));
-        _ul.img = { src, w: r.w, h: r.h, T: r.T, opacity: r.opacity, on: r.on !== false, mime: r.mime, data: r.data, name: r.name || '' };
+        _ul.img = { src, w: r.w, h: r.h, T: r.T, opacity: r.opacity, on: r.on !== false, mime: r.mime, data: r.data, name: r.name || '',
+            ow: r.ow || r.w, oh: r.oh || r.h, pdf: r.pdf || null, pdfName: r.pdfName || '', page: r.page || 0, pages: r.pages || 0 };
         render();
         return true;
     } catch { return false; }
@@ -290,12 +415,14 @@ function _ulRender() {
         '<div class="ts-sec">下絵（画像）</div>';
     if(!u) {
         h += '<button class="prop-btn" onclick="ulPickImage()">📁 画像・PDF を読み込む</button>' +
-            _cogoNote('地積測量図・公図のスキャン（画像・PDF）や写真を図面の下に表示します。読み込んだら「2点で合わせる」で、画像の上の点を図面の同じ点に重ねます。PDF は選んだ1ページを画像にして使います（はじめて PDF を開くときは、表示エンジンの読み込みに通信があります）。');
+            _cogoNote('地積測量図・公図のスキャン（画像・PDF）や写真を図面の下に表示します。読み込んだら「2点で合わせる」で、画像の上の点を図面の同じ点に重ねます。PDF は選んだ1ページを画像にして使います（はじめて PDF を開くときは、表示エンジンの読み込みに通信があります）。ワールドファイル（.jgw・.pgw・.tfw など）があれば、画像と一緒に選ぶと、座標の位置に自動で合わせます。');
     } else {
         h += row('画像', `<div style="flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(u.name || '下絵')}（${u.w}×${u.h}）</div>`) +
             row('濃さ', range('ul-img-op', u.opacity, 'ulSetImageOpacity')) +
             `<div class="cogo-btns"><button class="prop-btn" onclick="ulStartAlign()">📍 2点で合わせる</button><button class="prop-btn btn-sub" onclick="ulToggleImage()">${u.on ? '👁 隠す' : '👁 表示'}</button></div>` +
             '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="ulFitImage()">画面に合わせて置き直す</button><button class="prop-btn btn-warn" onclick="ulRemoveImage()">🗑 下絵を消す</button></div>' +
+            (u.pdf ? (u.pages > 1 ? `<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="ulChangePdfPage()" title="PDF のほかのページを下絵にする（大きさが同じなら位置はそのまま）">📄 ページを変える（${u.page}/${u.pages}）</button></div>` : '')
+                : '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="ulPickWorldFile()" title="画像の座標が書かれたファイル（.jgw・.pgw・.tfw など）で、位置・大きさ・向きを合わせる">📐 ワールドファイルで合わせる</button></div>') +
             _cogoNote('2点で合わせる: 画像の上の点1 → 図面の点1 → 画像の点2 → 図面の点2 の順に、なぞって ☑確定（図面の点は測点に吸い付きます）。離れた2点を選ぶと正確です。');
     }
     showPropertyPanel(UL_TITLE, h);

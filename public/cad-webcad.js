@@ -69,7 +69,7 @@ async function buildWebcadDoc() {
         else missing++;
     }
     const u = (typeof _ul !== 'undefined') ? _ul.img : null;
-    const underlay = (u && u.data) ? { mime: u.mime, w: u.w, h: u.h, T: u.T, opacity: u.opacity, on: u.on !== false, name: u.name || '', data: _wcToB64(u.data) } : null;
+    const underlay = (u && u.data) ? { mime: u.mime, w: u.w, h: u.h, ow: u.ow || u.w, oh: u.oh || u.h, T: u.T, opacity: u.opacity, on: u.on !== false, name: u.name || '', data: _wcToB64(u.data) } : null;
     const zone = (typeof getGnssZone === 'function') ? getGnssZone() : null;
     const doc = { format: WEBCAD_FORMAT, version: WEBCAD_VERSION, savedAt: new Date().toISOString(), project, photos, underlay, gnssZone: zone };
     return { text: JSON.stringify(doc), name, photoCount: Object.keys(photos).length, missing, hasUnderlay: !!underlay };
@@ -186,7 +186,8 @@ async function parseWebcadBytes(buf) {
     if(u) {
         const T = Array.isArray(doc.underlay.T) && doc.underlay.T.length === 6 && doc.underlay.T.every(v => typeof v === 'number' && Number.isFinite(v)) ? doc.underlay.T : null;
         const op = doc.underlay.opacity;
-        underlay = Object.assign(u, { T, opacity: (typeof op === 'number' && op >= 0 && op <= 1) ? op : 0.6, on: doc.underlay.on !== false });
+        const dim = (v, d) => (typeof v === 'number' && Number.isFinite(v) && v > 0) ? v : d; // 縮める前の大きさ（ワールドファイルで合わせ直すとき）
+        underlay = Object.assign(u, { T, opacity: (typeof op === 'number' && op >= 0 && op <= 1) ? op : 0.6, on: doc.underlay.on !== false, ow: dim(doc.underlay.ow, u.w), oh: dim(doc.underlay.oh, u.h) });
     }
     const z = doc.gnssZone;
     return { project: sanitizeWebcadProject(doc.project), photos, underlay, gnssZone: (Number.isInteger(z) && z >= 1 && z <= 19) ? z : null, newer: Number(doc.version) > WEBCAD_VERSION };
