@@ -119,8 +119,8 @@ window.stakeExportRecords = function() {
         L.push([q(p.name || ''), cogoFix(d.X, 3), cogoFix(d.Y, 3), has ? cogoFix(r.X, 3) : '', has ? cogoFix(r.Y, 3) : '', has ? cogoFix(r.dX, 3) : '', has ? cogoFix(r.dY, 3) : '',
             has ? cogoFix(r.dist, 3) : '', has ? cogoFix(r.acc, 1) : '', q(_stakeFmtTime(r.time))].join(','));
     });
-    downloadBlob(new Blob(['\uFEFF' + L.join('\r\n') + '\r\n'], { type: 'text/csv' }), `${_baseName()}_杭打ち記録.csv`);
-    addCommandLog(`-> 杭打ちの記録を CSV に出しました（${rows.length}点）`);
+    Promise.resolve(downloadBlob(new Blob(['\uFEFF' + L.join('\r\n') + '\r\n'], { type: 'text/csv' }), `${_baseName()}_杭打ち記録.csv`))
+        .then((n) => { if(n !== null) addCommandLog(`-> 杭打ちの記録を CSV に出しました（${rows.length}点）`); });
 };
 window.stakeSetMode = function(m) {
     if(cogoIsPicking() && _cogo.pick && _cogo.pick.owner === 'stake') { _cogo.pick = null; resetCommand(); }
@@ -320,8 +320,8 @@ window.stakeExportCsv = function() {
     const q = (s) => /[",\r\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s);
     const L = [['杭打ち表', '器械点 ' + (d.s.name || ''), '後視点 ' + (d.b.name || '')].map(q).join(','), STAKE_COLS.map((c) => q(c.head)).join(',')];
     _stakeTableRows(d).forEach((r) => L.push(r.map(q).join(',')));
-    downloadBlob(new Blob(['\uFEFF' + L.join('\r\n') + '\r\n'], { type: 'text/csv' }), `${_baseName()}_杭打ち表.csv`);
-    addCommandLog(`-> 杭打ち表のCSVを出力しました（${_stake.list.length}点）`);
+    Promise.resolve(downloadBlob(new Blob(['\uFEFF' + L.join('\r\n') + '\r\n'], { type: 'text/csv' }), `${_baseName()}_杭打ち表.csv`))
+        .then((n) => { if(n !== null) addCommandLog(`-> 杭打ち表のCSVを出力しました（${_stake.list.length}点）`); });
 };
 
 // ===== 重ね表示（順番の杭・済み・いまの杭・案内の線） =====

@@ -354,6 +354,8 @@ function simaPreviewRows(text) {
 }
 
 function _baseName() {
+    const ob = (typeof outputBase === 'function') ? outputBase() : null; // 出力名を決めていればそれ（cad-outname.js）
+    if(ob) return ob;
     const n = (window._drawingName || 'webcad').replace(/\.[^.]+$/, '').trim();
     return n || 'webcad';
 }
@@ -364,11 +366,11 @@ window.exportSima = function() {
     if(!r.pointCount) { if(typeof showToast === 'function') showToast('出力できる測点がありません（点・属性付きブロック・区画）', 4000); return; }
     const name = _baseName() + '.sim', shown = sjisRoundTrip(r.text), pv = simaPreviewRows(shown); // 表・中身は Shift-JIS で書いたあとの文字（表せない文字は ?）
     showExportPreview({ kind: 'SIMA', fileName: name, encoding: 'Shift-JIS', text: shown, rows: pv.rows, lots: pv.lots,
-        notes: surveyExportNotes(r.info, { sjis: true, sima: true }), write: () => _writeSima(r, name) });
+        notes: surveyExportNotes(r.info, { sjis: true, sima: true }), write: (fname) => _writeSima(r, fname || name) });
 };
 function _writeSima(r, name) {
     const bytes = encodeShiftJis(r.text);
-    downloadBlob(new Blob([bytes], { type: 'text/plain' }), name);
+    downloadBlob(new Blob([bytes], { type: 'text/plain' }), name, undefined, { named: true }); // 名前は確認の画面で決めた
     addCommandLog(`-> SIMA出力: 測点 ${r.pointCount}点` + (r.lotCount ? `・区画 ${r.lotCount}` : '') + '（Shift-JIS）');
     if(typeof showToast === 'function') showToast(`SIMA出力: 測点 ${r.pointCount}点` + (r.lotCount ? `・区画 ${r.lotCount}` : ''), 3000);
 }
@@ -377,11 +379,11 @@ window.exportCoordCsv = function() {
     if(!r.pointCount) { if(typeof showToast === 'function') showToast('出力できる測点がありません', 4000); return; }
     const name = _baseName() + '_座標.csv';
     showExportPreview({ kind: '座標CSV', fileName: name, encoding: 'UTF-8・BOM付き（Excel で開けます）', text: r.text, rows: r.rows,
-        notes: surveyExportNotes(r.info, {}), write: () => _writeCoordCsv(r, name) });
+        notes: surveyExportNotes(r.info, {}), write: (fname) => _writeCoordCsv(r, fname || name) });
 };
 function _writeCoordCsv(r, name) {
     // Excel で文字化けしないよう UTF-8（BOM付き）で出力
-    downloadBlob(new Blob(['\uFEFF' + r.text], { type: 'text/csv' }), name);
+    downloadBlob(new Blob(['\uFEFF' + r.text], { type: 'text/csv' }), name, undefined, { named: true }); // 名前は確認の画面で決めた
     addCommandLog(`-> 座標CSV出力: ${r.pointCount}点`);
     if(typeof showToast === 'function') showToast(`座標CSV出力: ${r.pointCount}点`, 3000);
 }

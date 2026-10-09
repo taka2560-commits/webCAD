@@ -291,10 +291,10 @@ window.exportSdr33 = function() {
         const ex = r.renamed.slice(0, 5).map((x) => `${x.from || '（名前なし）'}→${x.to}`).join('、');
         notes.push({ warn: true, text: `SDR の点名に使えない（日本語・15文字以上・重なり） ${r.renamed.length}点は、P0001 などにしました（${ex}${r.renamed.length > 5 ? ' など' : ''}）` });
     }
-    showExportPreview({ kind: 'SDR33', fileName: name, encoding: '半角の英数字', text, rows, notes, write: () => _writeSdr33(text, name, pts.length, r.renamed) });
+    showExportPreview({ kind: 'SDR33', fileName: name, encoding: '半角の英数字', text, rows, notes, write: (fname) => _writeSdr33(text, fname || name, pts.length, r.renamed) });
 };
 function _writeSdr33(text, name, count, renamed) {
-    downloadBlob(new Blob([text], { type: 'text/plain' }), name);
+    downloadBlob(new Blob([text], { type: 'text/plain' }), name, undefined, { named: true }); // 名前は確認の画面で決めた
     const note = renamed.length ? `（点名を使えない ${renamed.length}点は P0001 などにしました）` : '';
     addCommandLog(`-> SDR33出力: 測点 ${count}点${note}`);
     if(typeof showToast === 'function') showToast(`SDR33出力: 測点 ${count}点${note ? '\n' + note : ''}`, 4000);

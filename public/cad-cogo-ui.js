@@ -378,8 +378,8 @@ window.cogoExportAreaCsv = function() {
     const d = _cogoAreaData();
     if(!d) return;
     const title = _cogoAreaTitle(), safe = title.replace(/[\\/:*?"<>|\s]+/g, '_');
-    downloadBlob(new Blob(['\uFEFF' + cogoAreaCsv(title, d.t, _cogo.landMode)], { type: 'text/csv' }), `${_baseName()}_求積表${safe ? '_' + safe : ''}.csv`);
-    addCommandLog(`-> 求積表のCSVを出力しました（${d.t.rows.length}点）`);
+    Promise.resolve(downloadBlob(new Blob(['\uFEFF' + cogoAreaCsv(title, d.t, _cogo.landMode)], { type: 'text/csv' }), `${_baseName()}_求積表${safe ? '_' + safe : ''}.csv`))
+        .then((n) => { if(n !== null) addCommandLog(`-> 求積表のCSVを出力しました（${d.t.rows.length}点）`); });
 };
 
 // ===== 逆計算・点の追加・交点 =====

@@ -3,7 +3,7 @@
 //   ・表: 点番号・点名・X（北）・Y（東）・標高（区画があれば区画名と点の数）。行が多いときは検索で絞る（先頭の 300 行）
 //   ・ファイルの中身: 書き出す文字そのまま（先頭の 400 行）
 //   ・気づいたこと: 点番号を振り直した・点名の無い点に名前を付けた・Shift-JIS で表せない文字（? になる）・区画の頂点に点を足した など
-//   ・「📤 書き出す」で今までと同じファイルを書き出す（スマホでは書き出したあとに「📤 送る」も出る）。「やめる」なら何も書き出さない
+//   ・「📤 書き出す」で今までと同じファイルを書き出す（名前は欄で変えられる。スマホでは書き出したあとに「📤 送る」も出る）。「やめる」なら何も書き出さない
 //   ・書き出したあと・やめたあとは、開く前のパネル（座標一覧・TS連携・測量計算の変換など）に戻る
 
 const EXPORT_PREVIEW_TITLE = '📄 書き出す前の確認';
@@ -31,7 +31,11 @@ function _xpRender() {
     if(!o) return;
     const seg = (on, tab, label) => `<button type="button" class="prop-btn opt-bg-btn${on ? ' active' : ''}" aria-pressed="${on}" onclick="exportPreviewTab('${tab}')">${label}</button>`;
     let h = `<div class="cogo-note"><b>${escapeHtml(o.kind)}</b>（${escapeHtml(o.encoding)}）を書き出します。中身を確かめてから「📤 書き出す」を押してください。</div>`;
-    h += `<div class="xp-file" style="font-size:12px;margin:4px 0;">📄 <b>${escapeHtml(o.fileName)}</b>・測点 ${o.rows.length}点${o.lots.length ? `・区画 ${o.lots.length}` : ''}</div>`;
+    // 書き出すファイルの名前（変えられる。拡張子は自動で付く。cad-outname.js）
+    const [nb, ext] = _outNameSplit(o.fileName);
+    if(o.nameBase === undefined) o.nameBase = nb;
+    h += `<div class="xp-file" style="display:flex;align-items:center;gap:4px;font-size:12px;margin:4px 0;">📄 <input id="xp-name" class="prop-val" type="text" autocomplete="off" value="${escapeHtml(o.nameBase)}" oninput="exportPreviewName(this.value)" aria-label="書き出すファイルの名前" title="書き出すファイルの名前（拡張子は自動で付きます）" style="flex:1;min-width:0;"><b>${escapeHtml(ext)}</b></div>`;
+    h += `<div class="xp-count" style="font-size:12px;margin:0 0 4px;">測点 ${o.rows.length}点${o.lots.length ? `・区画 ${o.lots.length}` : ''}</div>`;
     if(o.notes.length) {
         h += '<div class="xp-notes" style="margin:4px 0;">' + o.notes.map((n) =>
             `<div class="cogo-note" style="${n.warn ? 'color:#ffcc00;' : ''}">${n.warn ? '⚠' : 'ℹ'} ${escapeHtml(n.text)}</div>`).join('') + '</div>';
@@ -73,12 +77,13 @@ function _xpRows() {
 }
 window.exportPreviewTab = function(tab) { if(!_xp) return; _xp.tab = tab === 'text' ? 'text' : 'table'; _xpRender(); };
 window.exportPreviewSearch = function(q) { if(!_xp) return; _xp.q = String(q || ''); _xpRows(); };
+window.exportPreviewName = function(v) { if(_xp) _xp.nameBase = String(v); };
 window.exportPreviewWrite = function() {
     const o = _xp;
     if(!o) return;
     _xp = null;
     closePropertyPanel();
-    o.write();
+    o.write(outNameFinal(o.nameBase === undefined ? '' : o.nameBase, o.fileName)); // 名前の欄の名前で（空ならもとの名前）
     _xpBack(o);
 };
 window.exportPreviewCancel = function() {

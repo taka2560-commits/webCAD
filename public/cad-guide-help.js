@@ -282,7 +282,7 @@ const GUIDE_TOPICS = [
             '図面一式で開いた図面は、まだ保存一覧に入っていません。💾保存 で名前を付けると入ります。',
             'ホーム画面に追加すると、アプリのように全画面で使えます。'],
         open: { label: '📂 保存一覧を開く', run: () => showProjectList() } },
-    { id: 'export', cat: 'file', title: '書き出す・送る（DXF・SIMA・座標CSV・SDR33・画像）', keys: 'かきだし しゅつりょく えくすぽーと dxf しま csv sdr 書き出し 出力 エクスポート jw じぇいだぶ jwcad r12 しふとじす おくる きょうゆう らいん めーる がぞう png 送る 共有 画像',
+    { id: 'export', cat: 'file', title: '書き出す・送る（DXF・SIMA・座標CSV・SDR33・画像）', keys: 'かきだし しゅつりょく えくすぽーと しゅつりょくめい ふぁいるめい なまえ 出力名 ファイル名 名前 dxf しま csv sdr 書き出し 出力 エクスポート jw じぇいだぶ jwcad r12 しふとじす おくる きょうゆう らいん めーる がぞう png 送る 共有 画像',
         steps: [
             '☰ → DXF 出力: AutoCAD 向けです（寸法・塗りつぶし・線種・測点の属性も。DWG では書き出せません）。',
             '☰ → DXF（Jw_cad 向け）: Jw_cad・古い CAD 向けです（R12 形式・Shift-JIS・mm）。寸法は線・矢印・文字に、塗りつぶしはソリッドに、斜線などの模様は線に分けて書きます。',
@@ -290,6 +290,7 @@ const GUIDE_TOPICS = [
             '書き出す前の確認: SIMA・座標CSV・SDR33・変換後の SIMA は、書き出す前に中身を「表」（点番号・点名・X・Y・標高・区画）と「ファイルの中身」（書く文字そのまま）で見せます。点番号を振り直した・Shift-JIS で表せない文字（? になる）などがあれば ⚠ で知らせます。よければ「📤 書き出す」、やめるなら「やめる」。',
             '📡TS連携 → 📄 SDR33 で書き出す: 機械の既知点・杭打ち点に使います。',
             '☰ → 🖼 画面の画像: 今の画面の図を PNG にします（選択・カーソルなどの印は入れません。画面より細かく描きます）。',
+            'ファイルの名前: 保存の前に名前の欄が出ます（今の名前が入っているので、そのままなら「💾 保存」だけ。拡張子は自動で付きます）。SIMA・座標CSV・SDR33 は、書き出す前の確認の画面の名前の欄で変えます。☰ → 🏷 出力名 で、この図面の書き出しの名前のもとを決めておけます（名前を聞かないようにするのは、オプションの「書き出すときの名前」）。',
             'スマホ・タブレットでは、書き出したあとに出る「📤 送る」で、LINE・メール・AirDrop・「ファイル」に保存を選べます。図面一式は、LINE でも送れる PDF の形で送ります。',
             'Android の Chrome は DXF・SIMA・SDR を共有メニューで渡せないので、「📤 送り方」を出します。保存したファイルを、LINE のトークの ＋ →「ファイル」→「ダウンロード」から選んで送ります。',
         ],
@@ -553,7 +554,7 @@ const GUIDE_COMMANDS = [
     ['測量', [['COORDS', 'ZAHYO', '座標一覧（POINTS）'], ['COGO', 'CALC', '測量計算'], ['AREA', 'AA', '求積（KYUSEKI）'], ['INV', '-', '逆計算（INVERSE）'], ['PTADD', 'RADIATE', '点の追加'], ['INTERS', 'KOUTEN', '交点'],
         ['HELMERT', 'HENKAN', 'SIMA の変換'], ['TS', 'SOKKIA', 'TS連携（TSLINK）'], ['SDROUT', '-', 'SDR33出力'], ['STAKE', 'KUI', '杭打ち（SETOUT）'], ['PHOTO', 'MEMO', '写真・メモ（PIN）'],
         ['GNSS', 'GPS', '現在地'], ['GNSSZONE', '-', '系番号の選択'], ['SIMAOUT', '-', 'SIMA出力'], ['CSVOUT', '-', '座標CSV出力']]],
-    ['図面・表示', [['OPEN', '-', '開く（IMPORT）'], ['SAVE', '-', '保存'], ['PROJECTS', '-', '保存一覧（RESTORE）'], ['WEBCADOUT', 'PACK', '図面一式の書き出し（.webcad）'], ['EXPORTDXF', 'SAVEAS', 'DXF出力'], ['DXFJW', '-', 'DXF出力（Jw_cad 向け）'], ['PRINT', 'PDF', '印刷・PDF（PLOT）'], ['PNGOUT', 'PNG', '画面の画像（PNG）'],
+    ['図面・表示', [['OPEN', '-', '開く（IMPORT）'], ['SAVE', '-', '保存'], ['PROJECTS', '-', '保存一覧（RESTORE）'], ['WEBCADOUT', 'PACK', '図面一式の書き出し（.webcad）'], ['EXPORTDXF', 'SAVEAS', 'DXF出力'], ['DXFJW', '-', 'DXF出力（Jw_cad 向け）'], ['PRINT', 'PDF', '印刷・PDF（PLOT）'], ['PNGOUT', 'PNG', '画面の画像（PNG）'], ['OUTNAME', '-', '出力名（書き出すファイルの名前）'],
         ['MAP', 'SHITAE', '地図・下絵（UNDERLAY）'], ['LAYOUT', '-', 'レイアウトを見る（次のレイアウトへ）'], ['MODEL', '-', 'モデルに戻る'], ['ZOOM', 'ZE', '全体表示'], ['UCS', '-', 'UCS（原点）'], ['UCS2P', '2P', 'UCS（2点）'], ['WCS', '-', 'UCSを戻す'],
         ['BLOCKS', '-', 'ブロック管理'], ['LAYOFF', '-', 'タッチで画層を非表示'], ['SHOWALL', '-', '隠した図形を再表示'], ['FAV', 'OKINI', 'お気に入りの登録'], ['QR', 'SHAREAPP', 'このアプリを渡す（QR コード）'], ['UNIT', 'LENUNIT', '長さの単位を m ⇔ mm に切り替え'], ['CUNIT', 'COORDUNIT', '座標の単位を m ⇔ mm に切り替え'], ['OUTDOOR', 'SUN', '屋外モードの入・切'], ['MOTION', 'UIMOTION', 'UIの動き（試用）の入・切'], ['ERRORS', 'ERRLOG', 'エラーログ']]],
 ];

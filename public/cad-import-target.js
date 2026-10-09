@@ -44,6 +44,7 @@ function _clearForReplace() {
     }
     cmdState.highlightIdx = -1; cmdState.selectedIndices = [];
     if(typeof window.setCurrentProjectName === 'function') window.setCurrentProjectName(null);
+    if(typeof outputNameSet === 'function') outputNameSet(''); // 出力名は前の図面のもの（読めなかったら戻す）
     initLayers();
     return (_importMode = 'replace');
 }

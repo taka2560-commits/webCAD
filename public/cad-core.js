@@ -833,6 +833,7 @@ function _closeDrawingNow() {
     initLayers();
     if(typeof window.updateLayerPanel === 'function') window.updateLayerPanel();
     if(typeof window.setCurrentProjectName === 'function') window.setCurrentProjectName(null);
+    if(typeof outputNameSet === 'function') outputNameSet(''); // 出力名も外す（cad-outname.js）
     resetCommand();
     setDrawingName('新規図面');
     resetUCS();

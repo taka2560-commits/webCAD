@@ -18,7 +18,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 // index.html と同じ読み込み順（cad-errors.js・cad-theme.js は head、残りは body 末尾）
 const APP_SCRIPTS = ['cad-errors.js', 'cad-theme.js', 'cad-text-parse.js', 'cad-dimension.js', 'cad-io.js', 'cad-import-target.js', 'cad-import-shapes.js', 'cad-dwg.js', 'cad-jww.js', 'cad-ltype.js', 'cad-dxf-out.js', 'cad-dxf-r12.js', 'cad-core.js', 'cad-notify.js', 'cad-dialog.js', 'cad-form.js',
     'cad-prefs.js', 'cad-view.js', 'cad-geom.js', 'cad-snap.js', 'cad-render.js', 'cad-command.js', 'cad-line.js', 'cad-circle.js', 'cad-input.js', 'cad-panels.js',
-    'cad-survey.js', 'cad-csv-import.js', 'cad-cogo.js', 'cad-cogo-ui.js', 'cad-point.js', 'cad-textsize.js', 'cad-export-preview.js', 'cad-layout.js', 'cad-sdr.js', 'cad-ts.js', 'cad-stake.js', 'cad-print.js', 'cad-underlay.js', 'cad-photo.js', 'cad-editgeom.js', 'cad-edit.js', 'cad-grip.js', 'cad-subview.js', 'cad-helmert.js', 'cad-fav.js', 'cad-motion.js', 'cad-storage.js', 'cad-webcad.js', 'cad-share.js', 'cad-qr.js', 'cad-guide.js', 'cad-guide-tours.js', 'cad-guide-help.js', 'cad-boot.js'];
+    'cad-survey.js', 'cad-csv-import.js', 'cad-cogo.js', 'cad-cogo-ui.js', 'cad-point.js', 'cad-textsize.js', 'cad-export-preview.js', 'cad-outname.js', 'cad-layout.js', 'cad-sdr.js', 'cad-ts.js', 'cad-stake.js', 'cad-print.js', 'cad-underlay.js', 'cad-photo.js', 'cad-editgeom.js', 'cad-edit.js', 'cad-grip.js', 'cad-subview.js', 'cad-helmert.js', 'cad-fav.js', 'cad-motion.js', 'cad-storage.js', 'cad-webcad.js', 'cad-share.js', 'cad-qr.js', 'cad-guide.js', 'cad-guide-tours.js', 'cad-guide-help.js', 'cad-boot.js'];
 
 // Canvas 2D の代用品。描画命令は何もしないが、文字幅の計測（measureText）は概算値を返す。
 function fakeContext2d(canvas) {
@@ -96,6 +96,8 @@ async function loadApp(options = {}) {
     window.prompt = () => null;
     // アプリの確認画面（cad-dialog.js）は、テストでは上の confirm・prompt で答える（その場で答えが返る）
     window.__cadNativeDialogs = true;
+    // 書き出すときの名前の欄（cad-outname.js）は、テストでは出さない（出力名のテストだけ外す）
+    window.__cadNoOutNamePrompt = true;
 
     // ---- 外部ライブラリ（本番では src/vendor.js が設定するもの） ----
     window.DxfParser = require('dxf-parser');

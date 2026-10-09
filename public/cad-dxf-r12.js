@@ -233,9 +233,12 @@ function exportDxfJw() {
     try {
         const r = buildDxfR12();
         const name = exportFileName('dxf').replace(/\.dxf$/i, '_jw.dxf');
-        downloadBlob(new Blob([encodeShiftJis(r.text)], { type: 'application/dxf' }), name);
+        const saving = Promise.resolve(downloadBlob(new Blob([encodeShiftJis(r.text)], { type: 'application/dxf' }), name));
         if(r.skipped > 0) addCommandLog(`  注意: 書き出しに未対応の図形 ${r.skipped}個 を省略しました`);
-        notify('-> DXF（Jw_cad 向け: R12・Shift-JIS・mm）を書き出しました', { kind: 'success', ms: 2500 });
+        saving.then((n) => {
+            if(n === null) return; // 名前の欄で「やめる」
+            notify(`-> DXF（Jw_cad 向け: R12・Shift-JIS・mm）を書き出しました${n ? `: ${n}` : ''}`, { kind: 'success', ms: 2500 });
+        });
     } catch(err) {
         notify(`エラー: DXF（Jw_cad 向け）を書き出せませんでした - ${err.message}`, { kind: 'error', ms: 5000 });
         console.error('DXF（Jw_cad 向け）の書き出しエラー:', err);

@@ -27,7 +27,8 @@ describe('書き出す前の確認', () => {
         assert.equal(title(), '📄 書き出す前の確認');
         assert.deepEqual(downloads(), [], 'まだ書き出さない');
         assert.match(text(), /SIMA（Shift-JIS）/);
-        assert.match(text(), /genba\.sim・測点 2点/);
+        assert.equal(app.eval(`document.getElementById('xp-name').value`), 'genba', '名前の欄（拡張子は自動）');
+        assert.match(text(), /\.sim\s*測点 2点/);
         const rows = app.val(`[...document.querySelectorAll('#xp-rows tbody tr')].map(tr => [...tr.children].map(td => td.textContent))`);
         assert.deepEqual(rows, [['1', 'K1', '10.000', '20.000', '1.500'], ['2', 'K2', '30.000', '40.000', '']]);
         app.eval('exportPreviewWrite()');

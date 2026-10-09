@@ -883,8 +883,7 @@ function exportDxf() {
         });
         if(skipped > 0) addCommandLog(`  注意: 書き出しに未対応の図形 ${skipped}個 を省略しました`);
         const blob = new Blob([d.toDxfString()], {type:'application/dxf'});
-        downloadBlob(blob, exportFileName('dxf'));
-        notify('-> DXF を書き出しました', { kind: 'success', ms: 2500 });
+        Promise.resolve(downloadBlob(blob, exportFileName('dxf'))).then((n) => { if(n !== null) notify(`-> DXF を書き出しました${n ? `: ${n}` : ''}`, { kind: 'success', ms: 2500 }); }); // 名前の欄で「やめる」なら null
     } catch(err) {
         notify(`エラー: DXF を書き出せませんでした - ${err.message}`, { kind: 'error', ms: 5000 });
         console.error('DXFエクスポートエラー:', err);
@@ -901,8 +900,10 @@ async function exportDwg() {
     if(typeof showToast === 'function') showToast('DWG では書き出せないため、DXF で保存しました\n（AutoCAD・Jw_cad などで開けます）', 5000);
 }
 
-// エクスポート時のファイル名（図面名があればそれを使う）
+// エクスポート時のファイル名（出力名を決めていればそれ、無ければ図面名。cad-outname.js）
 function exportFileName(ext) {
+    const ob = (typeof outputBase === 'function') ? outputBase() : null;
+    if(ob) return ob + '.' + ext;
     let base = (window._drawingName || '').trim();
     if(!base && document.title && document.title !== 'Web CAD' && document.title !== 'WebCAD') base = document.title.replace(/ - WebCAD$/, '');
     base = (base || 'drawing').replace(/\.(dxf|dwg)$/i, '').replace(/[\\/:*?"<>|]/g, '_');
@@ -911,7 +912,18 @@ function exportFileName(ext) {
 
 // ===== ファイルダウンロード =====
 // share（任意）: 「📤 送る」で送るものを別にするとき { blob, name, note }。false なら「📤 送る」を出さない（呼んだ側が出す。cad-webcad.js・cad-share.js）
-function downloadBlob(blob, filename, share) {
+// opt（任意）: { named: true } なら名前を聞かない（書き出す前の確認の画面で決めた・送れなかった PDF の保存）
+// 保存の前に名前の欄を出す（cad-outname.js。その回だけの名前）。戻り値は保存した名前の Promise（「やめる」なら null）
+async function downloadBlob(blob, filename, share, opt) {
+    if(!(opt && opt.named) && typeof askOutputName === 'function') {
+        const busy = document.getElementById('cad-busy'), hid = !!busy && busy.classList.contains('show');
+        if(hid) busy.classList.remove('show'); // 処理中の印は、名前を聞いている間は隠す
+        let n;
+        // 聞かないとき（オプション・自動テスト）は待たずに続ける（保存はその場で）
+        try { const r = askOutputName(filename); n = (r && typeof r.then === 'function') ? await r : r; } finally { if(hid && typeof busyActive === 'function' && busyActive()) busy.classList.add('show'); }
+        if(n === null) { addCommandLog(`-> ${filename} の書き出しをやめました`); return null; }
+        filename = n;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
@@ -924,6 +936,7 @@ function downloadBlob(blob, filename, share) {
         if(share && share.blob) offerShare(share.blob, share.name || filename, { saved: filename, note: share.note });
         else offerShare(blob, filename);
     }
+    return filename;
 }
 
 // ===== ファイルコマンド（cad-core.jsから呼ばれる） =====

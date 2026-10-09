@@ -430,7 +430,7 @@ async function _printMakePdf(openIt, gotWin) {
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const name = `${_baseName()}_1-${o.scale}_${o.paper}.pdf`;
     if(win) { win.location.href = URL.createObjectURL(blob); }
-    else downloadBlob(blob, name);
+    else if(await downloadBlob(blob, name) === null) return bytes; // 名前の欄で「やめる」
     addCommandLog(`-> PDF を作りました: 1/${o.scale} ${o.paper}${o.orient === 'port' ? '縦' : '横'}（図形 ${page.count}）`);
     showToast(openIt ? 'PDF を開きました。印刷は「実際のサイズ（100%）」で' : `PDF を保存しました（1/${o.scale} ${o.paper}）`, 3500);
     return bytes;

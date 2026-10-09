@@ -333,7 +333,7 @@ async function _photoLedgerPdf() {
     }
     const title = (window._drawingName || '').replace(/\.[^.]+$/, '');
     const bytes = await pdfBuild({ pages: photoLedgerPages(entries, title) }, { title: '写真台帳 ' + title }, true);
-    downloadBlob(new Blob([bytes], { type: 'application/pdf' }), `${_baseName()}_写真台帳.pdf`);
+    if(await downloadBlob(new Blob([bytes], { type: 'application/pdf' }), `${_baseName()}_写真台帳.pdf`) === null) return bytes; // 名前の欄で「やめる」
     addCommandLog(`-> 写真台帳を作りました（${entries.length}件）`);
     showToast(`写真台帳（${entries.length}件）を保存しました`, 3000);
     return bytes;

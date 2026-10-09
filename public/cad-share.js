@@ -58,7 +58,7 @@ async function shareFile(file, saved) {
         if(err && err.name === 'AbortError') return; // 共有メニューを閉じた
         if(err && err.name === 'NotAllowedError') { // 種類・大きさなどで断られた → 保存したファイルを、アプリの側から選ぶ手順
             // 送るものを別に作っていたら（図面一式の PDF）、それも保存する（手順で選ぶファイルが無い、にならないよう）
-            if(saved && saved !== file.name && typeof downloadBlob === 'function') downloadBlob(file, file.name, false);
+            if(saved && saved !== file.name && typeof downloadBlob === 'function') downloadBlob(file, file.name, false, { named: true });
             showShareSteps(file.name, true);
             return;
         }
@@ -100,6 +100,7 @@ async function exportScreenPng() {
     }
     if(failed || !blob) { notify('エラー: 画面の画像を作れませんでした' + (failed ? ` - ${failed.message}` : ''), { kind: 'error', ms: 5000 }); return; }
     const name = `${_baseName()}_${layoutActive() ? layoutCurrent().name.replace(/[/:*?"<>|]/g, '_') : '画面'}.png`; // レイアウトを見ていればその名前（cad-layout.js）
-    downloadBlob(blob, name);
-    notify(`-> 画面の画像を保存しました: ${name}（${Math.round(w * k)}×${Math.round(h * k)}）`, { kind: 'success', ms: 2500 });
+    const saved = await downloadBlob(blob, name);
+    if(saved === null) return; // 名前の欄で「やめる」
+    notify(`-> 画面の画像を保存しました: ${saved || name}（${Math.round(w * k)}×${Math.round(h * k)}）`, { kind: 'success', ms: 2500 });
 }

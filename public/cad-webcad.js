@@ -197,10 +197,12 @@ async function exportWebcadFile() {
         await busyPaint();
         const r = await buildWebcadDoc();
         const bytes = await webcadPack(r.text);
-        const base = r.name.replace(/[\\/:*?"<>|]/g, '_'), name = base + WEBCAD_EXT;
+        const ob = (typeof outputBase === 'function') ? outputBase() : null; // 出力名を決めていればそれ（cad-outname.js）
         const pack = new Blob([bytes], { type: 'application/octet-stream' });
         const sendPdf = typeof _shareTouchDevice === 'function' && _shareTouchDevice() && !!navigator.share; // 共有メニューのある指の端末だけ PDF を作る
-        downloadBlob(pack, name, sendPdf ? false : undefined);
+        const saved = await downloadBlob(pack, (ob || r.name).replace(/[\\/:*?"<>|]/g, '_') + WEBCAD_EXT, sendPdf ? false : undefined);
+        if(saved === null) return; // 名前の欄で「やめる」
+        const name = saved || (ob || r.name).replace(/[\\/:*?"<>|]/g, '_') + WEBCAD_EXT, base = name.replace(/\.webcad$/i, ''); // 送る PDF も同じ名前
         notify(`-> 図面一式を書き出しました（${name}: 図形 ${entities.length}・写真 ${r.photoCount}枚${r.hasUnderlay ? '・下絵' : ''}、${_wcSize(bytes.length)}）`, { kind: 'success', ms: 3500 });
         if(r.missing) addCommandLog(`  注意: この端末に見つからない写真 ${r.missing}枚 は入れていません`);
         if(sendPdf) {
@@ -259,7 +261,7 @@ function sanitizeWebcadProject(p) {
         if(t && typeof t === 'object' && !Array.isArray(t)) lineTypes[k.slice(0, 200)] = t;
     });
     return {
-        name: str(p.name) || '図面', drawingName: str(p.drawingName) || null,
+        name: str(p.name) || '図面', drawingName: str(p.drawingName) || null, outputName: str(p.outputName) || null,
         entities: ents, layers: lay,
         currentLayerIndex: (Number.isInteger(p.currentLayerIndex) && p.currentLayerIndex >= 0 && p.currentLayerIndex < lay.length) ? p.currentLayerIndex : 0,
         view: { x: num(p.view && p.view.x, 0), y: num(p.view && p.view.y, 0), scale: num(p.view && p.view.scale, 1) || 1, rotation: num(p.view && p.view.rotation, 0) },

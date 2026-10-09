@@ -643,8 +643,8 @@ window.helmExportSima = function() {
     const bad = sjisBadChars(pv0.rows.map((p) => p.name).concat(pv0.lots.map((l) => l.name)).join('')); // 区画名も（座標一覧の SIMA と同じ）
     const shown = sjisRoundTrip(text), pv = simaPreviewRows(shown); // 表・中身は Shift-JIS で書いたあとの文字（表せない文字は ?）
     const notes = bad.length ? [{ warn: true, text: `Shift-JIS で表せない文字（${bad.slice(0, 10).join(' ')}）は「?」になります` }] : [];
-    showExportPreview({ kind: '変換後の SIMA', fileName: name, encoding: 'Shift-JIS', text: shown, rows: pv.rows, lots: pv.lots, notes, write: () => {
-        downloadBlob(new Blob([encodeShiftJis(text)], { type: 'text/plain' }), name);
+    showExportPreview({ kind: '変換後の SIMA', fileName: name, encoding: 'Shift-JIS', text: shown, rows: pv.rows, lots: pv.lots, notes, write: (fname) => {
+        downloadBlob(new Blob([encodeShiftJis(text)], { type: 'text/plain' }), fname || name, undefined, { named: true }); // 名前は確認の画面で決めた
         addCommandLog(`-> [変換] 変換後の SIMA を書き出しました: 点 ${r.pointCount}${r.lotCount ? '・区画 ' + r.lotCount : ''}（Shift-JIS）`);
         showToast(`変換後の SIMA: 点 ${r.pointCount}${r.lotCount ? '・区画 ' + r.lotCount : ''}`, 3000);
     } });
@@ -693,8 +693,8 @@ function helmCsvText() {
 }
 window.helmExportCsv = function() {
     if(!_helm.sol || !_helm.sol.ok) return false;
-    downloadBlob(new Blob([String.fromCharCode(0xFEFF) + helmCsvText()], { type: 'text/csv' }), `${_helmBaseName()}_変換結果.csv`); // Excel で文字化けしないように BOM を付ける
-    addCommandLog('-> [変換] 結果の CSV を書き出しました');
+    Promise.resolve(downloadBlob(new Blob([String.fromCharCode(0xFEFF) + helmCsvText()], { type: 'text/csv' }), `${_helmBaseName()}_変換結果.csv`)) // Excel で文字化けしないように BOM を付ける
+        .then((n) => { if(n !== null) addCommandLog('-> [変換] 結果の CSV を書き出しました'); });
     return true;
 };
 // 結果の表（張り合わせ点の残差と、変換の値・精度）を、変換した点の右に置く

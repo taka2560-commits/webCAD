@@ -95,6 +95,7 @@ function _buildSaveData(name) {
         name: name || '無題',
         projectName: name === AUTOSAVE_KEY ? _currentProjectName : (name || null),
         drawingName: window._drawingName || null,
+        outputName: (typeof outputNameGet === 'function') ? outputNameGet() : null, // 出力名（cad-outname.js）
         entities: cleanEntities,
         layers: JSON.parse(JSON.stringify(layers)),
         currentLayerIndex: currentLayerIndex,
@@ -150,6 +151,8 @@ function applyProjectData(data) {
 
     // レイアウト（以前の保存データには無いので、そのときは無し）
     if (typeof layoutsLoad === 'function') layoutsLoad(data.layouts);
+    // 出力名（以前の保存データには無いので、そのときは無し。cad-outname.js）
+    if (typeof outputNameSet === 'function') outputNameSet(typeof data.outputName === 'string' ? data.outputName : '');
     // 固有IDを確認（古い保存データにはIDが無いので付ける。以後の選択はIDで保持される）
     if (typeof ensureEntityIds === 'function') ensureEntityIds();
     if (typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
@@ -363,10 +366,11 @@ window.setCurrentProjectName = function(name) {
 };
 
 // 置き換えで開いたファイルが読めなかったときに、プロジェクトの名前と「保存済み」の状態を戻す（cad-import-target.js）
-window.getProjectState = function() { return { name: _currentProjectName, savedSeq: _projectSavedSeq }; };
+window.getProjectState = function() { return { name: _currentProjectName, savedSeq: _projectSavedSeq, outName: (typeof outputNameGet === 'function') ? outputNameGet() : null }; };
 window.restoreProjectState = function(s) {
     if (!s) return;
     _currentProjectName = s.name || null;
+    if (typeof outputNameSet === 'function') outputNameSet(s.outName || ''); // 読めなかったファイルで置き換えたとき、出力名も戻す
     _projectSavedSeq = s.savedSeq;
     _syncSaveMark();
     document.title = _currentProjectName ? `${_currentProjectName} - WebCAD` : 'Web CAD';

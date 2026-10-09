@@ -24,6 +24,7 @@ const DISPLAY_PREF_DEFS = {
     angleFormat:   { label: '角度の表示',     def: 'deg', options: [['deg', '度', 'deg'], ['dms', '度分秒', 'dms']] },
     snapRange:     { label: '吸着の範囲',     def: 'm',   options: [['s', '狭い', 0.6], ['m', '標準', 1], ['l', '広い', 1.6], ['xl', '最大', 2.4]] },
     lineTouch:     { label: '線分のタッチ',   def: 'confirm', options: [['confirm', '☑確定で引く', 'confirm'], ['now', '離したらすぐ', 'now']] }, // cad-line.js
+    outName:       { label: '書き出すときの名前', def: 'ask', options: [['ask', '聞く', 'ask'], ['no', '聞かない', 'no']] }, // cad-outname.js
     btnSize:       { label: 'ボタンの大きさ', def: 'm',   options: [['s', '小', 0.85], ['m', '中', 1], ['l', '大', 1.25], ['xl', '特大', 1.5]] },
     outdoor:       { label: '屋外モード',     def: 'off', options: [['off', '切', false], ['on', '入', true]] },
     motion:        { label: 'UIの動き（試用）', def: 'off', options: [['off', '切', false], ['on', '入', true]] }, // cad-motion.js

@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.40（2026年10月9日リリース）**
+**現在のバージョン: v5.41（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -31,6 +31,7 @@
 ### ✏️ 描く・直す
 - 線分・ポリライン・長方形・円・円弧・楕円・文字・塗りつぶし・点（座標一覧に入る）。
 - 移動・複写・回転・削除・オフセット・トリム・延長・鏡像・尺度変更・配列・分割・等分・結合・角の処理（フィレット・面取り）、グリップで点を動かす。
+- **出力名**（v5.41）: 書き出すときに名前の欄が出て、その回だけ名前を変えられます。☰「🏷 出力名」で図面ごとの名前のもとも決めておけます（オプションで聞かないこともできます）。
 - **円の描き方**（v5.40）: 固定半径・中心と半径に加えて、3点（円周の3点を通る）・2点（直径）・接線・接線・半径（2つの線・円に接する）。作図設定・下のバーの 🔄、コマンド欄の 3P・2P・TTR で選びます。
 - **線分のタッチ**（v5.35）: 指を離した所は仮の点（緑の輪）になり、☑確定 で線を引きます。画面に触れてしまっても線は引かれません（オプションで「離したらすぐ」にもできます）。↶ 1つ戻す（U）で最後の線を消せます。
 - **文字の大きさをまとめて変える**（v5.36）: 選んだ文字・画層・すべてを、種類（点名・寸法の値など）と今の高さで絞り、高さの指定か倍率で変えます。
@@ -172,6 +173,7 @@
 | **DXFJW** | — | DXF出力（Jw_cad 向け） |
 | **PRINT** | `PDF` | 印刷・PDF（PLOT） |
 | **PNGOUT** | `PNG` | 画面の画像（PNG） |
+| **OUTNAME** | — | 出力名（書き出すファイルの名前） |
 | **MAP** | `SHITAE` | 地図・下絵（UNDERLAY） |
 | **LAYOUT** | — | レイアウトを見る（次のレイアウトへ） |
 | **MODEL** | — | モデルに戻る |
@@ -199,7 +201,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（779件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（785件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -247,7 +249,8 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
   | `cad-cogo-ui.js` | 測量計算のパネル（🧮）、図面での点の指定（`WAITING_DIMCOGO_PT`・区画のタップ）、重ね表示 |
   | `cad-point.js` | 点のコマンド（POINT）: タップした所に測点を置き、座標一覧に入れる |
   | `cad-textsize.js` | 文字の大きさをまとめて変える、座標一覧の点名の大きさ（自動・指定） |
-  | `cad-export-preview.js` | SIMA・座標CSV・SDR33 を書き出す前の確認（表・ファイルの中身・気づいたこと） |
+  | `cad-export-preview.js` | SIMA・座標CSV・SDR33 を書き出す前の確認（表・ファイルの中身・気づいたこと・ファイルの名前） |
+  | `cad-outname.js` | 出力名（図面ごとの書き出しの名前のもと・書き出すときの名前の欄） |
   | `cad-layout.js` | DWG・DXF のレイアウト（ペーパー空間）を別の画面で見る（タブ・ビューポートの写し方・保存） |
   | `cad-sdr.js` | ソキア SDR 形式（SDR33・SDR2x）の読み込み（観測 → 座標）と SDR33 の書き出し、通信の枠（STX・ETX・チェックサム） |
   | `cad-ts.js` | TS連携のパネル（📡）、Web Serial（USB・Bluetooth）での受信・送信、取り込み前の点の重ね表示 |
@@ -279,6 +282,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.41（出力名を付ける）** 🏷
+  * cad-outname.js（新）: _outputName（図面ごと。_buildSaveData・applyProjectData・sanitizeWebcadProject・getProjectState に入れ、_closeDrawingNow・_clearForReplace で外す）、outputBase（exportFileName・_baseName・図面一式の名前のもと）、askOutputName（cadPrompt。オプション outName が no・自動テストの __cadNoOutNamePrompt なら聞かずに名前をそのまま返す）、outNameClean・outNameFinal、showOutputNamePanel（☰「🏷 出力名」・OUTNAME）。
+  * downloadBlob は async（保存の前に askOutputName。戻り値は保存した名前、やめたら null。opt.named なら聞かない）。呼ぶ側は Promise.resolve(…).then か await で、やめたら知らせを出さない。書き出す前の確認は #xp-name（exportPreviewName）で決めて write(名前) に渡す。tests/outname.test.cjs。
 
 * **2026-10-09: バージョン5.40（円の描き方を増やす）** ◯
   * cad-circle.js（新）: CIRCLE_MODES（auto・manual・3p・2p・ttr。lastParams.circleMode）、circleBeginMode（cad-command.js の CIRCLE・作図設定・🔄 から）、circleFrom3（1点目からの差で計算）・circleFrom2・circleTanShape（線・円・円弧・ポリラインと長方形はタップの近くの辺）・circleTanTanRadius（r ずらした直線と R±r の円の交点 → 接する所がタップに近いもの）、circleHandlePoint・circleConfirm・circleCommandInput（3P・2P・TTR・T・CEN、TTR の半径）・drawCirclePreview（drawRubberBand の中）、circleChooseMode（cadChoose）。getBaseWcs に 3点・2点。作図設定は .circle-modes。tests/circle.test.cjs。
