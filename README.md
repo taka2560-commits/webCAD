@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.41（2026年10月9日リリース）**
+**現在のバージョン: v5.42（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -31,6 +31,7 @@
 ### ✏️ 描く・直す
 - 線分・ポリライン・長方形・円・円弧・楕円・文字・塗りつぶし・点（座標一覧に入る）。
 - 移動・複写・回転・削除・オフセット・トリム・延長・鏡像・尺度変更・配列・分割・等分・結合・角の処理（フィレット・面取り）、グリップで点を動かす。
+- **UCS の登録・管理**（v5.42）: UCS を決めたら「＋ 登録」、今の UCS の名前を下の欄・全画面に表示、UCS 管理（切り替え・名前・上書き・消す）、数値・点・線で UCS を作る。全画面の道具箱からも登録できます。
 - **出力名**（v5.41）: 書き出すときに名前の欄が出て、その回だけ名前を変えられます。☰「🏷 出力名」で図面ごとの名前のもとも決めておけます（オプションで聞かないこともできます）。
 - **円の描き方**（v5.40）: 固定半径・中心と半径に加えて、3点（円周の3点を通る）・2点（直径）・接線・接線・半径（2つの線・円に接する）。作図設定・下のバーの 🔄、コマンド欄の 3P・2P・TTR で選びます。
 - **線分のタッチ**（v5.35）: 指を離した所は仮の点（緑の輪）になり、☑確定 で線を引きます。画面に触れてしまっても線は引かれません（オプションで「離したらすぐ」にもできます）。↶ 1つ戻す（U）で最後の線を消せます。
@@ -181,6 +182,8 @@
 | **UCS** | — | UCS（原点） |
 | **UCS2P** | `2P` | UCS（2点） |
 | **WCS** | — | UCSを戻す |
+| **UCSMAN** | `UC` | UCS 管理（登録・切り替え・数値・点・線） |
+| **UCSSAVE** | — | 今の UCS を登録 |
 | **BLOCKS** | — | ブロック管理 |
 | **LAYOFF** | — | タッチで画層を非表示 |
 | **SHOWALL** | — | 隠した図形を再表示 |
@@ -201,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（785件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（793件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -241,6 +244,7 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
   | `cad-command.js` | 点入力の補正と各コマンドの処理、オフセット・回転・トリム・延長、コマンド解釈 |
   | `cad-line.js` | 線分の点の入れ方（タッチは仮の点と ☑確定、↶ 1つ戻す、長さ0の線を作らない） |
   | `cad-circle.js` | 円の描き方（3点・2点（直径）・接線・接線・半径。仮の円と ☑確定、コマンド欄の 3P・2P・TTR） |
+  | `cad-ucs.js` | UCS の登録・管理（決めたら「＋ 登録」、今の UCS の名前、UCS 管理、数値・点・線で作る） |
   | `cad-input.js` | マウス・タッチ・キーボードのイベント、パン/ピンチ/範囲選択 |
   | `cad-panels.js` | ブロック管理、画層の一括管理、プロパティパネル、選択アクションバー |
   | `cad-survey.js` | 測量（SIMA・座標CSV、座標一覧、現在地GNSS） |
@@ -282,6 +286,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.42（UCS の登録・管理）** 🎯
+  * cad-ucs.js（新）: ucsCurrentName（保存の ucsName）、ucsStatusUpdate（#ucs-label・全画面の #fs-hud-ucs・UCS読込の欄）、ucsRegister・ucsOfferRegister（原点移動・2点の確定のあとのスナップバー）、showUcsManager（UCSMAN・UC。ucsUse・ucsRename・ucsOverwrite・ucsDeleteAt）、ucsApplyForm（数値）、ucsStartMatch・ucsStartLine（WAITING_UCS_MATCH・WAITING_UCS_LINE。線は circleTanShape）、ucsEntry（以前の originX・originY の形も読む）。setUCS(x, y, 角度, 名前)。
+  * 図面一式の sanitizeWebcadProject は登録した UCS を { name, x, y, angle } で返す（以前は originX・originY にしていて、アプリの x・y が消えていた）。deleteUCS は WCS に戻さない。全画面の道具箱は「＋ 登録・🗂 管理・🗑」。tests/ucs.test.cjs。
 
 * **2026-10-09: バージョン5.41（出力名を付ける）** 🏷
   * cad-outname.js（新）: _outputName（図面ごと。_buildSaveData・applyProjectData・sanitizeWebcadProject・getProjectState に入れ、_closeDrawingNow・_clearForReplace で外す）、outputBase（exportFileName・_baseName・図面一式の名前のもと）、askOutputName（cadPrompt。オプション outName が no・自動テストの __cadNoOutNamePrompt なら聞かずに名前をそのまま返す）、outNameClean・outNameFinal、showOutputNamePanel（☰「🏷 出力名」・OUTNAME）。

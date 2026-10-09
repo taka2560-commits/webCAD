@@ -51,7 +51,7 @@ describe('図面一式のファイル（.webcad）', () => {
                 pat: { name: 'ANSI31', lines: [{ a: 0.785, bx: 0, by: 0, ox: -0.1, oy: 0.1, d: [1, -0.5] }] } });
             entities.push({ type: 'LINE', layer: 1, color: null, x1: 0, y1: 0, x2: 9, y2: 9, lt: 'CENTER', lw: 35, ltScale: 2 });
             entities.push({ type: 'PIN', layer: 0, x: 5, y: 6, text: 'メモ', photos: ['phA', 'phB'], time: '2026-10-08T01:02:03.000Z', name: 'KP1' });
-            ucs.originX = 100; ucs.originY = 200; ucs.angle = 0.3; savedUCSList = [{ name: '現場', originX: 1, originY: 2, angle: 0.1 }];
+            ucs.originX = 100; ucs.originY = 200; ucs.angle = 0.3; savedUCSList = [{ name: '現場', x: 1, y: 2, angle: 0.1 }];
             drawingLineTypes = { MYLT: { d: [5, -2.5], desc: '自分の線種' } }; drawingLtscale = 250; ensureEntityIds();
             _ul.img = { src: {}, w: 100, h: 50, ow: 400, oh: 200, T: [1, 0, 0, 1, 5, 6], opacity: 0.4, on: true, mime: 'image/png', data: new Uint8Array([9, 8, 7]).buffer, name: 'scan.png' };`);
         await app.eval(`(async () => {
@@ -134,7 +134,7 @@ describe('図面一式のファイル（.webcad）', () => {
         assert.equal(p.layers[0].color, '#ffffff');
         assert.deepEqual(Object.keys(p.lineTypes), ['DASHED']);
         assert.deepEqual(p.lineTypes.DASHED, { d: [1, -1], desc: 'd' });
-        assert.deepEqual(p.savedUCSList, [{ name: 'u', originX: 0, originY: 2, angle: 0 }]);
+        assert.deepEqual(p.savedUCSList, [{ name: 'u', x: 0, y: 2, angle: 0 }], '登録した UCS は { name, x, y, angle }（以前の形 originX・originY も読む）');
         assert.equal(p.currentLayerIndex, 0);
         assert.equal(p.surveyUnit, undefined);
         assert.equal(p.ltscale, null);

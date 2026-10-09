@@ -592,7 +592,9 @@ const GUIDE_HINTS = [
     { key: 'UCS', title: '🎯 UCS', prefix: 'WAITING_UCS_', steps: [
         { modes: ['ORIGIN'], text: '新しい原点をタップ' },
         { modes: ['2P_ORIGIN', '2P_ORIGIN_PREVIEW'], text: '原点にしたい点までなぞって ☑確定' },
-        { modes: ['2P_XDIR', '2P_XDIR_PREVIEW'], text: '向きを決める2点目までなぞって ☑確定（原点→この点の向きが横軸になります）' }] },
+        { modes: ['2P_XDIR', '2P_XDIR_PREVIEW'], text: '向きを決める2点目までなぞって ☑確定（原点→この点の向きが横軸になります）' },
+        { modes: ['MATCH'], text: '座標を決めたい点をタップ（測点に吸い付きます）。そのあと、その点の座標を入れます' },
+        { modes: ['LINE'], text: '向きにする線をタップ（タップした側の端が原点、線の向きが横軸になります）' }] },
     // 図面で点を指定する（測量計算・変換・杭打ち・写真のピン・下絵）: 機能ごとに言葉を変える（match: どの機能の指定か）
     { key: 'HELMPICK', title: '🧮 変換: 図面の点', prefix: 'WAITING_DIMCOGO_', match: () => _guidePickOwner() === 'helm', steps: [
         { modes: ['PT'], text: { touch: '別窓で選んだ点と同じ点を、図面でなぞって（緑の記号＝スナップ）☑確定。やめるときは ❌終了', pc: '別窓で選んだ点と同じ点を、図面でクリック（測点に吸い付きます）。やめるときは Esc' } }] },

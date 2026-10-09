@@ -102,6 +102,7 @@ function _buildSaveData(name) {
         view: (({ x, y, scale, rotation }) => ({ x, y, scale, rotation }))((typeof layoutModelViewForSave === 'function') ? layoutModelViewForSave() : view), // レイアウトを見ていてもモデルの位置
         ucs: { originX: ucs.originX, originY: ucs.originY, angle: ucs.angle },
         savedUCSList: JSON.parse(JSON.stringify(savedUCSList)),
+        ucsName: (typeof ucsCurrentName !== 'undefined') ? ucsCurrentName : null, // 今の UCS の名前（cad-ucs.js）
         // 図面の1単位（m / mm）。DWG・DXF を開くとファイルの単位に合わせるので、図面ごとに覚えて開いたときに戻す
         surveyUnit: (typeof getSurveyUnit === 'function') ? getSurveyUnit() : undefined,
         // 線種表（取り込んだファイルの線種）と線種の尺度（LTSCALE）。cad-ltype.js
@@ -140,8 +141,9 @@ function applyProjectData(data) {
         ucs.angle = data.ucs.angle || 0;
     }
     // 保存済みUCSリスト
-    if (data.savedUCSList) savedUCSList = data.savedUCSList;
+    if (data.savedUCSList) savedUCSList = (typeof ucsEntry === 'function') ? data.savedUCSList.map(ucsEntry) : data.savedUCSList; // 以前の形（originX・originY）もそろえる
     else savedUCSList = [];
+    if (typeof ucsCurrentName !== 'undefined') ucsCurrentName = (typeof data.ucsName === 'string' && data.ucsName) ? data.ucsName : null;
     // 線種表と線種の尺度（以前の保存データには無いので、そのときは標準の線種・既定の尺度）
     if (typeof drawingLineTypes !== 'undefined') drawingLineTypes = (data.lineTypes && typeof data.lineTypes === 'object') ? data.lineTypes : {};
     if (typeof drawingLtscale !== 'undefined') drawingLtscale = (data.ltscale > 0) ? data.ltscale : null;
@@ -182,6 +184,7 @@ function applyProjectData(data) {
 
 // 復元したUCS状態をステータスバーのラベル表示に反映する
 function _syncUcsLabels() {
+    if (typeof ucsStatusUpdate === 'function') { ucsStatusUpdate(); return; } // UCS の名前も（cad-ucs.js）
     const isWcs = ucs.originX === 0 && ucs.originY === 0 && ucs.angle === 0;
     const text = isWcs ? 'WCS' : 'UCS';
     const color = isWcs ? 'var(--coord-color)' : 'var(--ucs-color)';

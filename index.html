@@ -193,6 +193,22 @@
         }
         #fs-hud-coords .hud-label { color: #888; font-size: calc(11px * var(--coord-scale, 1)); font-weight: 700; margin-right: 2px; }
         #fs-hud-coords .hud-val { color: #00ff88; font-size: calc(17px * var(--coord-scale, 1)); font-weight: 700; letter-spacing: 0.02em; }
+        #fs-hud-coords .hud-ucs { pointer-events: auto; cursor: pointer; background: transparent; border: 1px solid rgba(255,255,255,0.25); border-radius: 12px; padding: 2px 8px; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; color: var(--coord-color); font: 700 calc(11px * var(--coord-scale, 1)) 'Segoe UI', sans-serif; }
+        #fs-hud-coords .hud-ucs.on { color: var(--ucs-color); border-color: var(--ucs-color); }
+        .ucs-label-btn { cursor: pointer; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 6px; padding: 1px 4px; }
+        .ucs-label-btn:hover, .ucs-label-btn:focus-visible { background: rgba(255,255,255,0.08); }
+        /* UCS 管理（cad-ucs.js） */
+        .ucs-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 6px; max-height: 40vh; overflow: auto; }
+        .ucs-row { display: flex; gap: 4px; align-items: stretch; }
+        .ucs-row .ucs-use { flex: 1; min-width: 0; min-height: 40px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding: 4px 10px; border-radius: var(--r-sub); border: 1px solid var(--border-3); background: var(--btn-fill); color: #e0e0e0; text-align: left; cursor: pointer; }
+        .ucs-row.on .ucs-use { border-color: var(--ucs-color); background: rgba(255,255,255,0.06); }
+        .ucs-row .ucs-name { font-size: 13px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ucs-row.on .ucs-name { color: var(--ucs-color); }
+        .ucs-row .ucs-desc { font-size: 11px; color: var(--dim); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ucs-row .ucs-act { flex: 0 0 40px; min-height: 40px; border-radius: var(--r-sub); border: 1px solid var(--border-3); background: var(--btn-fill); color: #e0e0e0; font-size: 15px; cursor: pointer; }
+        .ucs-row .ucs-act.danger { color: #ff6b6b; }
+        .ucs-make { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin-top: 4px; }
+        .ucs-make .prop-btn { margin-top: 0; }
         #fs-hud-coords .hud-snap { color: #ffcc00; font-size: calc(11px * var(--coord-scale, 1)); font-weight: 600; padding-left: 8px; border-left: 1px solid rgba(255,255,255,0.2); }
 
         /* フローティング座標ツールチップ (指追従) */
@@ -1033,10 +1049,11 @@
                 <button class="menu-item-btn" data-fav="UCS2P" onclick="issueCommand('UCS2P'); toggleTopMenu();">📈 2点UCS</button>
                 <button class="menu-item-btn" data-fav="PLAN" onclick="togglePlanView(); toggleTopMenu();">🧭 PLAN表示</button>
                 <button class="menu-item-btn" data-fav="WCS" onclick="issueCommand('WCS'); toggleTopMenu();">↩ WCSリセット</button>
+                <button class="menu-item-btn" data-fav="UCSMAN" onclick="toggleTopMenu(); showUcsManager();" title="登録した UCS の切り替え・名前の変更・上書き・消す。数値・点・線で UCS を作る">🗂 UCS管理</button>
             </div>
             <div style="display:flex; gap:6px; margin-top:4px;">
                 <select id="ucs-select" style="flex:1;font-size:11px;padding:4px;border-radius:var(--r-sub);background:rgba(0,0,0,0.3);color:#fff;border:1px solid var(--border-3);" onchange="loadUCS(this.value); toggleTopMenu();"><option value="">-- UCS読込 --</option></select>
-                <button class="menu-item-btn" onclick="saveUCS(); toggleTopMenu();">💾 UCS保存</button>
+                <button class="menu-item-btn" data-fav="UCSSAVE" onclick="toggleTopMenu(); processUcsCommand('UCSSAVE');" title="今の UCS に名前を付けて登録します（あとで UCS読込・UCS管理 で切り替え）">＋ UCS登録</button>
             </div>
         </div>
 
@@ -1096,7 +1113,7 @@
     <!-- ステータスバー (案B: 整理＆座標表示) -->
     <div id="status-bar" class="glass-panel">
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-            <span id="ucs-label" style="color:var(--coord-color);font-weight:bold;">WCS</span>
+            <span id="ucs-label" class="ucs-label-btn" role="button" tabindex="0" onclick="showUcsManager()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showUcsManager();}" title="WCS（押すと UCS 管理）" style="color:var(--coord-color);font-weight:bold;">WCS</span>
             <span class="paper-space-label" style="opacity:0.6;font-size:0.85em;">モデル</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
@@ -1174,6 +1191,7 @@
     <div id="fs-overlay">
         <!-- 案C: 上部固定HUDバー -->
         <div id="fs-hud-coords">
+            <button id="fs-hud-ucs" type="button" class="hud-ucs" onclick="showUcsManager()" title="今の座標系（押すと UCS 管理）">WCS</button>
             <span class="hud-label">X</span><span id="fs-hud-x" class="hud-val">0.000</span>
             <span class="hud-label">Y</span><span id="fs-hud-y" class="hud-val">0.000</span>
             <span id="fs-hud-snap" class="hud-snap" style="display:none;"></span>
@@ -1231,6 +1249,11 @@
                         <button class="fsd-btn flex" onclick="issueCommand('WCS'); autoCloseDrawer();">↩ WCS</button>
                     </div>
                     <select id="fs-ucs-select" class="fsd-sel" onchange="loadUCS(this.value); autoCloseDrawer();"><option value="">－ UCS読込 －</option></select>
+                    <div class="fsd-row">
+                        <button class="fsd-btn flex blue" onclick="autoCloseDrawer(); processUcsCommand('UCSSAVE');" title="今の UCS に名前を付けて登録します">＋ 登録</button>
+                        <button class="fsd-btn flex" onclick="autoCloseDrawer(); showUcsManager();" title="登録した UCS の切り替え・名前の変更・上書き・消す。数値・点・線で作る">🗂 管理</button>
+                        <button class="fsd-btn red" style="flex:0 0 42px; padding:0; justify-content:center;" onclick="deleteUCS(); autoCloseDrawer();" title="上で選んでいる UCS を消す" aria-label="選んでいる UCS を消す">🗑</button>
+                    </div>
                     <select id="fs-layer-select" class="fsd-sel" title="現在の画層" onchange="changeCurrentLayer(this.value); autoCloseDrawer();"><option value="">－ 画層 －</option></select>
                     <div class="fsd-row">
                         <button class="fsd-btn flex green" onclick="toggleLayerPanel(); autoCloseDrawer();">👁 画層管理</button>
@@ -1241,10 +1264,7 @@
                         <button class="fsd-btn flex" onclick="showCoordListPanel(); autoCloseDrawer();">📍 座標一覧</button>
                         <button class="fsd-btn flex blue" onclick="toggleGnss(); autoCloseDrawer();">🛰 現在地</button>
                     </div>
-                    <div class="fsd-row">
-                        <button class="fsd-btn flex" onclick="saveUCS(); autoCloseDrawer();">💾 保存</button>
-                        <button class="fsd-btn flex red" onclick="deleteUCS(); autoCloseDrawer();">🗑 消去</button>
-                    </div>
+
                 </div>
 
                 <!-- グループ3: 図面 -->
@@ -1348,6 +1368,7 @@
     <script src="cad-command.js"></script>
     <script src="cad-line.js"></script>
     <script src="cad-circle.js"></script>
+    <script src="cad-ucs.js"></script>
     <script src="cad-input.js"></script>
     <script src="cad-panels.js"></script>
     <script src="cad-survey.js"></script>

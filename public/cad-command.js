@@ -47,7 +47,8 @@ function _handlePointInputCore(wcs, fromMouse) {
         layoffPickAt(mouse.screenX, mouse.screenY);
         return;
     }
-    if(m==='WAITING_UCS_ORIGIN') { setUCS(wcs.x, wcs.y, 0); return; }
+    if(ucsHandlePoint(wcs)) return; // 点を決めた座標に・線の向きで UCS（cad-ucs.js）
+    if(m==='WAITING_UCS_ORIGIN') { setUCS(wcs.x, wcs.y, 0); ucsOfferRegister(); return; } // 決めたら「＋ 登録」（cad-ucs.js）
     if(m==='WAITING_UCS_2P_ORIGIN') { 
         cmdState.startWcs={x:wcs.x,y:wcs.y}; 
         if(fromMouse) {
@@ -80,6 +81,7 @@ function _handlePointInputCore(wcs, fromMouse) {
             const ox = cmdState.startWcs.x, oy = cmdState.startWcs.y;
             const angle = Math.atan2(wcs.y - oy, wcs.x - ox);
             setUCS(ox, oy, angle);
+            ucsOfferRegister();
             const ab = document.getElementById('fs-dim-actionbar');
             if(ab) ab.style.display = 'none';
         } else {
@@ -835,6 +837,7 @@ function processCommand(cmdText) {
     else if(typeof processLayoutCommand === 'function' && processLayoutCommand(cmd)) { /* レイアウト（LAYOUT・MODEL）処理済み */ }
     else if(typeof processShareAppCommand === 'function' && processShareAppCommand(cmd)) { /* このアプリを渡す（QR・SHAREAPP）処理済み */ }
     else if(typeof processOutputNameCommand === 'function' && processOutputNameCommand(cmd)) { /* 出力名（OUTNAME）処理済み */ }
+    else if(typeof processUcsCommand === 'function' && processUcsCommand(cmd)) { /* UCS 管理（UCSMAN・UC・UCSSAVE）処理済み */ }
     else if(typeof processLtypeCommand === 'function' && processLtypeCommand(cmd)) { /* 線種の尺度（LTSCALE）・線の太さの表示（LWDISPLAY） */ }
     else if(typeof processFavCommand === 'function' && processFavCommand(cmd)) { /* お気に入りの登録（FAV）処理済み */ }
     else if(typeof processStorageCommand === 'function' && processStorageCommand(cmd)) { /* ストレージコマンド処理済み */ }
@@ -927,6 +930,7 @@ window.dimConfirmPoint = function() {
         const ox = cmdState.startWcs.x, oy = cmdState.startWcs.y;
         const angle = Math.atan2(pt.y - oy, pt.x - ox);
         setUCS(ox, oy, angle);
+        ucsOfferRegister();
         const ab = document.getElementById('fs-dim-actionbar');
         if(ab) ab.style.display = 'none';
     }

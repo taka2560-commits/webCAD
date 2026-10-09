@@ -267,7 +267,9 @@ function sanitizeWebcadProject(p) {
         view: { x: num(p.view && p.view.x, 0), y: num(p.view && p.view.y, 0), scale: num(p.view && p.view.scale, 1) || 1, rotation: num(p.view && p.view.rotation, 0) },
         ucs: { originX: num(ucs.originX, 0), originY: num(ucs.originY, 0), angle: num(ucs.angle, 0) },
         savedUCSList: (Array.isArray(p.savedUCSList) ? p.savedUCSList : []).map(u => _wcClean(u, '', 0))
-            .filter(u => u && typeof u === 'object' && typeof u.name === 'string').map(u => ({ name: u.name.slice(0, 100), originX: num(u.originX, 0), originY: num(u.originY, 0), angle: num(u.angle, 0) })),
+            // 登録した UCS は { name, x, y, angle }（以前はここで originX・originY にしていて、原点が消えていた）
+            .filter(u => u && typeof u === 'object' && typeof u.name === 'string').map(u => ({ name: u.name.slice(0, 100), x: num(u.x !== undefined ? u.x : u.originX, 0), y: num(u.y !== undefined ? u.y : u.originY, 0), angle: num(u.angle, 0) })),
+        ucsName: str(p.ucsName) || null,
         surveyUnit: (p.surveyUnit === 'm' || p.surveyUnit === 'mm') ? p.surveyUnit : undefined,
         lineTypes, ltscale: num(p.ltscale, 0) > 0 ? p.ltscale : null,
         // レイアウト（cad-layout.js）。図形は図面の図形と同じ確かめ方（ピンは入れない）

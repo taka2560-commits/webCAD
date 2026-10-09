@@ -52,10 +52,10 @@ function ucsVector(dx, dy) {
 }
 
 // ===== UCS管理 =====
-function setUCS(wx, wy, angle) {
+// name: 登録した UCS を使うときの名前（下の欄・全画面に出す。cad-ucs.js）。新しく決めたときは無し
+function setUCS(wx, wy, angle, name) {
     ucs.originX = wx; ucs.originY = wy; ucs.angle = angle || 0;
-    if(ucsStatusDisplay) { ucsStatusDisplay.textContent = 'UCS'; ucsStatusDisplay.style.color = 'var(--ucs-color)'; }
-    if(ucsLabel) { ucsLabel.textContent = 'UCS'; ucsLabel.style.color = 'var(--ucs-color)'; }
+    if(typeof ucsSetCurrentName === 'function') ucsSetCurrentName(name || null);
     const degStr = ucs.angle !== 0 ? ` ∠${angleText(ucs.angle * 180 / Math.PI)}` : '';
     addCommandLog(`-> 原点設定: ${coordPairText(wx, wy)}（WCS）${degStr}`);
     resetCommand();
@@ -63,53 +63,34 @@ function setUCS(wx, wy, angle) {
 }
 function resetUCS() {
     ucs.originX = 0; ucs.originY = 0; ucs.angle = 0;
-    if(ucsStatusDisplay) { ucsStatusDisplay.textContent = 'WCS'; ucsStatusDisplay.style.color = 'var(--coord-color)'; }
-    if(ucsLabel) { ucsLabel.textContent = 'WCS'; ucsLabel.style.color = 'var(--coord-color)'; }
+    if(typeof ucsSetCurrentName === 'function') ucsSetCurrentName(null);
     resetCommand();
     addCommandLog('-> WCSにリセット');
     render();
 }
 
-// ===== UCS保存・読込処理 =====
-function saveUCS() {
-    cadPrompt({ title: 'UCS を保存', message: '今の UCS に名前を付けて保存します', value: `UCS_${savedUCSList.length + 1}`, ok: '保存' }, (raw) => {
-        const name = raw === null ? '' : String(raw).trim();
-        if(!name) return;
-        savedUCSList.push({ name: name, x: ucs.originX, y: ucs.originY, angle: ucs.angle });
-        updateUCSDropdowns();
-        addCommandLog(`-> UCS保存: ${name}`);
-    });
-}
+// ===== UCS保存・読込処理（登録・管理の画面は cad-ucs.js） =====
+function saveUCS() { ucsRegister(); } // ☰・全画面の「＋ 登録」
 
+// 「UCS読込」の欄で選んでいる（今の）UCS を消す。今の座標系はそのまま（以前は WCS に戻っていた）
 function deleteUCS() {
     if(navigator.vibrate) navigator.vibrate([20, 20, 20]);
     const fsSel = document.getElementById('fs-ucs-select');
     const ucsSel = document.getElementById('ucs-select');
     // 全画面のセレクトボックス、または通常のセレクトボックスから値を取得
     const idxStr = (fsSel && fsSel.value !== '') ? fsSel.value : (ucsSel && ucsSel.value !== '' ? ucsSel.value : '');
-    
     if(idxStr === '') {
-        showToast('消す UCS を、上の一覧から選んでください', { kind: 'warn', ms: 3000 });
+        showToast('消す UCS を、上の一覧から選んでください（UCS 管理でも消せます）', { kind: 'warn', ms: 3000 });
         return;
     }
-    const idx = parseInt(idxStr);
-    const u = savedUCSList[idx];
-    if(!u) return;
-    cadConfirm({ title: 'UCS を消す', message: `保存した UCS「${u.name}」を消しますか？`, ok: '消す', danger: true }, (ok) => {
-        const i = savedUCSList.indexOf(u);
-        if(!ok || i < 0) return;
-        savedUCSList.splice(i, 1);
-        updateUCSDropdowns();
-        resetUCS(); // 消去した場合は元のWCSにリセット
-        addCommandLog('-> UCS消去完了');
-    });
+    ucsDeleteAt(parseInt(idxStr));
 }
 function loadUCS(indexStr) {
     if(indexStr === '') return;
     const idx = parseInt(indexStr);
     if(savedUCSList[idx]) {
-        const u = savedUCSList[idx];
-        setUCS(u.x, u.y, u.angle);
+        const u = ucsEntry(savedUCSList[idx]); // 以前の図面一式の形（originX・originY）も読む
+        setUCS(u.x, u.y, u.angle, u.name);
         addCommandLog(`-> UCS読込: ${u.name}`);
         // もしPLAN機能がON（view.rotationが0以外）なら、自動的に新しいUCSに合わせる
         if(view.rotation !== 0) {
@@ -130,6 +111,7 @@ function updateUCSDropdowns() {
             sel.appendChild(opt);
         });
     });
+    if(typeof ucsStatusUpdate === 'function') ucsStatusUpdate(); // 今の UCS を選んだ状態に
 }
 
 // ===== 画面方向合わせ (PLAN) =====

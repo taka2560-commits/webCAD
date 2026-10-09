@@ -103,10 +103,10 @@ describe('お知らせと確認画面', () => {
         app.eval(`document.querySelector('#cad-dialog .cd-input').value = '現場の原点'`);
         clickBtn('保存'); await p;
         assert.equal(app.eval('window.__r'), '現場の原点');
-        // saveUCS も同じ画面
+        // saveUCS（UCS の登録）も同じ画面
         app.eval(`savedUCSList.length = 0; saveUCS()`);
         assert.equal(app.eval(`document.querySelector('#cad-dialog .cd-input').value`), 'UCS_1');
-        clickBtn('保存'); await tick();
+        clickBtn('登録'); await tick();
         assert.deepEqual(app.val('savedUCSList.map(u => u.name)'), ['UCS_1']);
     });
 

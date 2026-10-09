@@ -353,9 +353,11 @@ const GUIDE_TOPICS = [
             '☰ → 🎯原点移動: 好きな点を原点（0,0）にします。',
             '☰ → 📈2点UCS: 原点 → 向きを決める点。その向きが X（進行方向）になります（現場の通り芯など）。',
             '☰ → 🧭PLAN表示: UCS の向きを画面の上にして表示します（現場の向きと合わせる）。',
-            '☰ → ↩WCSリセット: 本来の座標に戻します。💾UCS保存・UCS読込 で名前を付けて使い分けます。',
+            '☰ → ↩WCSリセット: 本来の座標に戻します。',
+            '登録: UCS を決めると、画面の下に「＋ 登録」が出ます。押して名前を付けると、あとで「UCS読込」の欄や UCS 管理で切り替えられます（全画面の道具箱の「＋ 登録」も同じ）。',
+            '☰ → 🗂UCS管理（コマンド UCSMAN・UC）: 登録した UCS を押して切り替え、名前の変更（✏）・今の UCS で上書き（⤓）・消す（🗑）。UCS を作る: 原点をタップ・2点・🔢数値で（原点の座標と回転角）・📍点を決めた座標に（その点が入れた座標になるよう原点を動かす）・／線の向きで。',
         ],
-        tips: ['下のステータスバーの左に、今の座標系（WCS・UCS）が出ます。', 'SIMA・座標CSV・測量計算は、UCS を設定していても図面の本来の座標（WCS）で扱います。'] },
+        tips: ['下のステータスバーの左と、全画面の上の座標の左に、今の座標系（WCS・UCS・UCS: 名前）が出ます。押すと UCS 管理を開きます。', '登録した UCS は、保存・図面一式にも入ります。', 'SIMA・座標CSV・測量計算は、UCS を設定していても図面の本来の座標（WCS）で扱います。'] },
     { id: 'shareapp', cat: 'setting', title: 'このアプリを人に渡す（QR コード）', where: '☰ メニュー → 📱 このアプリを渡す（コマンド QR）', keys: 'きゅーあーる qr こーど わたす しょうかい りんく いんすとーる ほーむがめん ついか きょうゆう QRコード 渡す 紹介 リンク インストール ホーム画面 共有',
         lead: 'このアプリのリンクを大きな QR コードで出します。相手がスマホのカメラで読み取ると、Web CAD が開きます。',
         steps: [
@@ -555,7 +557,7 @@ const GUIDE_COMMANDS = [
         ['HELMERT', 'HENKAN', 'SIMA の変換'], ['TS', 'SOKKIA', 'TS連携（TSLINK）'], ['SDROUT', '-', 'SDR33出力'], ['STAKE', 'KUI', '杭打ち（SETOUT）'], ['PHOTO', 'MEMO', '写真・メモ（PIN）'],
         ['GNSS', 'GPS', '現在地'], ['GNSSZONE', '-', '系番号の選択'], ['SIMAOUT', '-', 'SIMA出力'], ['CSVOUT', '-', '座標CSV出力']]],
     ['図面・表示', [['OPEN', '-', '開く（IMPORT）'], ['SAVE', '-', '保存'], ['PROJECTS', '-', '保存一覧（RESTORE）'], ['WEBCADOUT', 'PACK', '図面一式の書き出し（.webcad）'], ['EXPORTDXF', 'SAVEAS', 'DXF出力'], ['DXFJW', '-', 'DXF出力（Jw_cad 向け）'], ['PRINT', 'PDF', '印刷・PDF（PLOT）'], ['PNGOUT', 'PNG', '画面の画像（PNG）'], ['OUTNAME', '-', '出力名（書き出すファイルの名前）'],
-        ['MAP', 'SHITAE', '地図・下絵（UNDERLAY）'], ['LAYOUT', '-', 'レイアウトを見る（次のレイアウトへ）'], ['MODEL', '-', 'モデルに戻る'], ['ZOOM', 'ZE', '全体表示'], ['UCS', '-', 'UCS（原点）'], ['UCS2P', '2P', 'UCS（2点）'], ['WCS', '-', 'UCSを戻す'],
+        ['MAP', 'SHITAE', '地図・下絵（UNDERLAY）'], ['LAYOUT', '-', 'レイアウトを見る（次のレイアウトへ）'], ['MODEL', '-', 'モデルに戻る'], ['ZOOM', 'ZE', '全体表示'], ['UCS', '-', 'UCS（原点）'], ['UCS2P', '2P', 'UCS（2点）'], ['WCS', '-', 'UCSを戻す'], ['UCSMAN', 'UC', 'UCS 管理（登録・切り替え・数値・点・線）'], ['UCSSAVE', '-', '今の UCS を登録'],
         ['BLOCKS', '-', 'ブロック管理'], ['LAYOFF', '-', 'タッチで画層を非表示'], ['SHOWALL', '-', '隠した図形を再表示'], ['FAV', 'OKINI', 'お気に入りの登録'], ['QR', 'SHAREAPP', 'このアプリを渡す（QR コード）'], ['UNIT', 'LENUNIT', '長さの単位を m ⇔ mm に切り替え'], ['CUNIT', 'COORDUNIT', '座標の単位を m ⇔ mm に切り替え'], ['OUTDOOR', 'SUN', '屋外モードの入・切'], ['MOTION', 'UIMOTION', 'UIの動き（試用）の入・切'], ['ERRORS', 'ERRLOG', 'エラーログ']]],
 ];
 
@@ -575,6 +577,7 @@ const GUIDE_PANEL_HELP = {
     'ブロック管理': { topic: 'blocks', back: () => showBlockManagerPanel() },
     '⭐ お気に入り': { topic: 'fav', back: () => showFavPanel() },
     '📱 このアプリを渡す': { topic: 'shareapp', back: () => showShareAppPanel() },
+    '🎯 UCS 管理': { topic: 'ucs', back: () => showUcsManager() },
 };
 
 // ===== 探す =====

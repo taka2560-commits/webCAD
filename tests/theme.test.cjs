@@ -176,7 +176,7 @@ describe('デザイン色', () => {
             ['border: 1px solid var(--brand); border-radius: 6px; background: rgba(var(--brand-rgb),0.16);', 'border: 1px solid #00ff88; border-radius: 6px; background: rgba(0,255,136,0.16);'],
             ['.mo-shape { position: fixed; pointer-events: none; box-sizing: border-box; background: var(--shape-bg);', '.mo-shape { position: fixed; pointer-events: none; box-sizing: border-box; background: rgba(28,32,38,0.92);'],
             ['#guide-spot { position:fixed; z-index:1000001; pointer-events:none; display:none; border:2px solid var(--brand);', '#guide-spot { position:fixed; z-index:1000001; pointer-events:none; display:none; border:2px solid #00ff88;'],
-            ['<span id="ucs-label" style="color:var(--coord-color);font-weight:bold;">WCS</span>', '<span id="ucs-label" style="color:#528bff;font-weight:bold;">WCS</span>'],
+            ['title="WCS（押すと UCS 管理）" style="color:var(--coord-color);font-weight:bold;">WCS</span>', 'title="WCS（押すと UCS 管理）" style="color:#528bff;font-weight:bold;">WCS</span>'], // 下の欄の UCS の見出し（v5.42 で押すと UCS 管理）
         ];
         const text = html.replace(/\r\n/g, '\n');
         for (const [now, before] of pairs) {

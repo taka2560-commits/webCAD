@@ -80,6 +80,8 @@ const FAV_CATALOG = [
     { id: 'UCS2P', label: '2点UCS', icon: '📈', color: '#528bff', cat: 'view' },
     { id: 'PLAN', label: 'PLAN', icon: '🧭', color: '#528bff', cat: 'view', run: () => togglePlanView() },
     { id: 'WCS', label: 'WCS', icon: '↩', color: '#528bff', cat: 'view', run: () => issueCommand('WCS') },
+    { id: 'UCSMAN', label: 'UCS管理', icon: '🗂', color: '#528bff', cat: 'view', run: () => showUcsManager() },
+    { id: 'UCSSAVE', label: 'UCS登録', icon: '＋', color: '#528bff', cat: 'view', run: () => processUcsCommand('UCSSAVE') },
     { id: 'OPTIONS', label: 'オプション', icon: '⚙', cat: 'view', panel: 'オプション', run: () => showOptionsPanel() },
     { id: 'HELP', label: 'ヘルプ', icon: '❓', cat: 'view', panel: '❓ ヘルプ・操作ガイド', run: () => showGuideHelp() },
     { id: 'SHAREAPP', label: 'アプリを渡す', icon: '📱', cat: 'view', panel: '📱 このアプリを渡す', run: () => showShareAppPanel() },
