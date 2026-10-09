@@ -5,9 +5,29 @@
 //               ・☰「🖼 画面の画像」（コマンド PNGOUT）: 今の画面の図を PNG にする。選択・カーソル・スナップ・軸・補助の印は入れず、
 //                 背景の地図（出典つき）・下絵・図形・寸法・写真のピンを、画面の 2〜3 倍の細かさで描く
 
-// 共有メニューで送れるファイルか（ブラウザが種類で断ることがある。Android の Chrome は DXF などを送れない）
+// 共有メニューで送れるファイルか（ブラウザが答えられる範囲。種類で断るかは shareTypeOk で見る）
 function canShareFile(file) {
     try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch { return false; }
+}
+// Chromium（Android の Chrome・Edge など）が共有メニューで渡せるファイルの種類。拡張子と MIME の両方が合うものだけ渡せ、
+// ほかの種類（.dxf・.sim・.sdr など）は navigator.canShare が true でも、送るときに「Permission denied」で断られる（v5.39.2）
+const SHARE_OK_EXT = ['avif', 'bmp', 'csv', 'gif', 'htm', 'html', 'jfif', 'jpeg', 'jpg', 'pdf', 'png', 'svg', 'text', 'tif', 'tiff', 'txt', 'webp'];
+const SHARE_OK_MIME = ['application/pdf', 'image/avif', 'image/bmp', 'image/gif', 'image/jpeg', 'image/png', 'image/svg+xml', 'image/tiff', 'image/webp', 'text/csv', 'text/html', 'text/plain'];
+// 種類で断られないか。iPhone・iPad（WebKit。iPad の Chrome も）は種類で断らない
+function shareTypeOk(file) {
+    if(typeof isAppleTouchDevice === 'function' && isAppleTouchDevice()) return true;
+    const ext = (/\.([^.]+)$/.exec(file.name || '') || [])[1];
+    const mime = String(file.type || '').split(';')[0].trim().toLowerCase();
+    return !!ext && SHARE_OK_EXT.includes(ext.toLowerCase()) && SHARE_OK_MIME.includes(mime);
+}
+// 共有メニューで渡せないファイルの送り方: 保存したファイルを、LINE などのアプリの側から選ぶ（v5.39.2）。denied: 送ろうとして断られた
+function showShareSteps(name, denied) {
+    const ext = (/\.([^.]+)$/.exec(name || '') || [])[1];
+    const why = denied || !ext ? 'このファイルは、共有メニューで渡せませんでした。'
+        : `この端末のブラウザ（Android の Chrome など）は、「.${ext}」のファイルを共有メニューで渡せません（渡せるのは画像・PDF・テキストなどだけ）。`;
+    cadAlert({ title: '📤 LINE などで送るには', ok: 'わかった', message: `${why}\n保存したファイルを、LINE の側から選んで送ります。\n\n`
+        + `1. LINE で送りたいトークを開く\n2. 入力欄の左の ＋ →「ファイル」\n3. 「ダウンロード」（Download）フォルダの「${name}」を選ぶ\n\n`
+        + 'メール・Google ドライブなども、添付（ファイルを選ぶ）から同じように選べます。同じ名前のファイルがあると、名前に (1) などが付いていることがあります。' });
 }
 // スマホ・タブレット（指で操作する端末）か
 function _shareTouchDevice() {
@@ -15,12 +35,18 @@ function _shareTouchDevice() {
     return (typeof isAppleTouchDevice === 'function') && isAppleTouchDevice();
 }
 // 書き出したあとに「📤 送る」を出す（押すと共有メニュー）。opt: { saved（保存したファイルの名前。送るものと違うとき）, note（ひとこと） }
+// 種類で断られるファイル（Android の DXF・SIMA・SDR など）は、代わりに「📤 送り方」（LINE などの側から選ぶ手順）を出す
 function offerShare(blob, filename, opt) {
-    if(!blob || !_shareTouchDevice() || typeof File !== 'function') return false;
-    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-    if(!canShareFile(file)) return false;
+    if(!blob || !_shareTouchDevice() || typeof File !== 'function' || !navigator.share) return false;
+    const file = new File([blob], filename, { type: (blob.type || 'application/octet-stream').split(';')[0] });
     const o = opt || {};
-    showSnack(`${o.saved || filename} を保存しました${o.note ? `（${o.note}）` : ''}`, { kind: 'success', ms: 9000, action: { label: '📤 送る', run: () => shareFile(file) } });
+    const msg = `${o.saved || filename} を保存しました${o.note ? `（${o.note}）` : ''}`;
+    if(!shareTypeOk(file)) {
+        showSnack(msg, { kind: 'success', ms: 9000, action: { label: '📤 送り方', run: () => showShareSteps(o.saved || filename) } });
+        return true;
+    }
+    if(!canShareFile(file)) return false;
+    showSnack(msg, { kind: 'success', ms: 9000, action: { label: '📤 送る', run: () => shareFile(file) } });
     return true;
 }
 async function shareFile(file) {
@@ -29,6 +55,7 @@ async function shareFile(file) {
         addCommandLog(`-> 共有メニューで送りました: ${file.name}`);
     } catch(err) {
         if(err && err.name === 'AbortError') return; // 共有メニューを閉じた
+        if(err && err.name === 'NotAllowedError') { showShareSteps(file.name, true); return; } // 種類などで断られた → アプリの側から選ぶ手順
         showToast('送れませんでした: ' + ((err && err.message) || err), { kind: 'error', ms: 4000 });
     }
 }

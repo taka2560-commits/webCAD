@@ -21,11 +21,11 @@ describe('共有メニューで送る・画面の画像（PNG）', () => {
         // 書き出しはすべて downloadBlob を通る（保存のあとに出す）
         app.eval(`window.__oc = window.HTMLAnchorElement.prototype.click; window.HTMLAnchorElement.prototype.click = function () {};
             window.URL.createObjectURL = () => 'blob:test'; window.URL.revokeObjectURL = () => {};`);
-        try { app.eval(`downloadBlob(new Blob(['A01,1,KP1'], { type: 'text/plain' }), '現場.sim')`); } finally { app.eval('window.HTMLAnchorElement.prototype.click = window.__oc;'); }
-        assert.deepEqual(snack(), { show: true, msg: '現場.sim を保存しました', act: '📤 送る' });
+        try { app.eval(`downloadBlob(new Blob(['1,KP1,10,20'], { type: 'text/csv' }), '現場.csv')`); } finally { app.eval('window.HTMLAnchorElement.prototype.click = window.__oc;'); }
+        assert.deepEqual(snack(), { show: true, msg: '現場.csv を保存しました', act: '📤 送る' });
         app.eval(`document.querySelector('#cad-snack .sn-act').click()`);
         await new Promise((r) => setTimeout(r, 0));
-        assert.deepEqual(app.val('window.__shared'), [['現場.sim']]);
+        assert.deepEqual(app.val('window.__shared'), [['現場.csv']]);
         assert.equal(snack().show, false, '押したら閉じる');
     });
 
@@ -34,10 +34,57 @@ describe('共有メニューで送る・画面の画像（PNG）', () => {
         assert.equal(app.val(`offerShare(new Blob(['x']), 'a.dxf')`), false);
         assert.equal(snack() === null || snack().show === false, true);
         app.eval('window.__coarse = true; navigator.canShare = () => false;');
-        assert.equal(app.val(`offerShare(new Blob(['x']), 'a.dxf')`), false);
+        assert.equal(app.val(`offerShare(new Blob(['x'], { type: 'application/pdf' }), 'a.pdf')`), false);
         // iPad（Mac と同じ名乗り）は指で操作する端末として扱う
         app.eval(`window.__coarse = false; navigator.canShare = () => true; window.__iat = window.isAppleTouchDevice; window.isAppleTouchDevice = () => true;`);
         try { assert.equal(app.val(`offerShare(new Blob(['x']), 'a.pdf')`), true); } finally { app.eval('window.isAppleTouchDevice = window.__iat;'); }
+    });
+
+    it('Android（Chromium）では、共有メニューが断る種類（DXF・SIMA・SDR）は「📤 送り方」を出し、押すと LINE の側から選ぶ手順（v5.39.2）', () => {
+        app.eval(`window.__oc = window.HTMLAnchorElement.prototype.click; window.HTMLAnchorElement.prototype.click = function () {};
+            window.URL.createObjectURL = () => 'blob:test'; window.URL.revokeObjectURL = () => {};
+            window.__cf = window.confirm; window.__asked = []; window.confirm = (m) => { window.__asked.push(m); return true; };`);
+        try {
+            app.eval(`downloadBlob(new Blob(['0'], { type: 'application/dxf' }), '現場.dxf')`);
+            assert.deepEqual(snack(), { show: true, msg: '現場.dxf を保存しました', act: '📤 送り方' });
+            app.eval(`document.querySelector('#cad-snack .sn-act').click()`);
+            const asked = app.val('window.__asked');
+            assert.equal(asked.length, 1);
+            assert.match(asked[0], /LINE などで送るには/);
+            assert.match(asked[0], /「\.dxf」のファイルを共有メニューで渡せません/);
+            assert.match(asked[0], /＋ →「ファイル」/);
+            assert.match(asked[0], /「ダウンロード」（Download）フォルダの「現場\.dxf」/);
+            assert.deepEqual(app.val('window.__shared'), [], '共有メニューは呼ばない（呼ぶと Permission denied）');
+            // 種類ごとの見分け（拡張子と MIME の両方が合うものだけ「📤 送る」）
+            const kind = (name, type) => app.val(`shareTypeOk(new File(['x'], ${JSON.stringify(name)}, { type: ${JSON.stringify(type)} }))`);
+            assert.equal(kind('現場.sim', 'text/plain'), false);
+            assert.equal(kind('機械.sdr', 'text/plain'), false);
+            assert.equal(kind('図面.webcad', 'application/octet-stream'), false);
+            assert.equal(kind('図面_図面一式.pdf', 'application/pdf'), true);
+            assert.equal(kind('座標.csv', 'text/csv'), true);
+            assert.equal(kind('画面.png', 'image/png'), true);
+            assert.equal(kind('x.txt', 'application/dxf'), false, 'MIME も合わないと断られる');
+            // iPhone・iPad は種類で断らないので、DXF も「📤 送る」
+            app.eval('window.__iat = window.isAppleTouchDevice; window.isAppleTouchDevice = () => true;');
+            try {
+                app.eval(`downloadBlob(new Blob(['0'], { type: 'application/dxf' }), '現場.dxf')`);
+                assert.equal(snack().act, '📤 送る');
+            } finally { app.eval('window.isAppleTouchDevice = window.__iat;'); }
+        } finally { app.eval('window.HTMLAnchorElement.prototype.click = window.__oc; window.confirm = window.__cf;'); }
+    });
+
+    it('送ろうとして断られた（NotAllowedError）ときは、エラーの代わりに LINE の側から選ぶ手順を出す（v5.39.2）', async () => {
+        app.eval(`window.__shareErr = Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+            document.getElementById('cad-toast') && document.getElementById('cad-toast').classList.remove('show');
+            window.__cf = window.confirm; window.__asked = []; window.confirm = (m) => { window.__asked.push(m); return true; };`);
+        try {
+            await app.eval(`shareFile(new File(['x'], '現場.pdf', { type: 'application/pdf' }))`);
+            const asked = app.val('window.__asked');
+            assert.equal(asked.length, 1);
+            assert.match(asked[0], /共有メニューで渡せませんでした/);
+            assert.match(asked[0], /「現場\.pdf」を選ぶ/);
+            assert.equal(app.val(`!!(document.getElementById('cad-toast') && document.getElementById('cad-toast').classList.contains('show'))`), false, 'Permission denied のエラーは出さない');
+        } finally { app.eval('window.confirm = window.__cf;'); }
     });
 
     it('共有メニューを閉じたときは何も言わず、送れなかったときは知らせる', async () => {

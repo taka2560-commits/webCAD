@@ -2,7 +2,8 @@
 // cad-dialog.js - ブラウザの confirm・prompt の代わり。大きなボタン・デザイン色・危ない操作は赤いボタンで、
 //                 読み込みの「置き換える／追加する／やめる」のように3つ以上から選ぶこともできる
 //
-// ・cadConfirm(opts, cb) → Promise<true|false>、cadPrompt(opts, cb) → Promise<文字|null>、cadChoose(opts, cb) → Promise<値|null>
+// ・cadConfirm(opts, cb) → Promise<true|false>、cadPrompt(opts, cb) → Promise<文字|null>、cadChoose(opts, cb) → Promise<値|null>、
+//   cadAlert(opts, cb)（知らせるだけ。ボタン1つ）
 //   cb を渡すと答えで呼ぶ（Promise と同じ答え）。一度に1つだけ（新しく出すと前のものは「やめる」で閉じる）
 // ・Esc・「やめる」で閉じる。Enter は選んでいるボタン（入力欄では「OK」）。背景を押しても閉じない（押し間違いで決めない）
 // ・出しているあいだは、図面の操作・Esc・Ctrl+Z などを止める（cad-input.js が cadDialogOpen() を見る）
@@ -133,6 +134,12 @@ function cadConfirm(opts, cb) {
     return _dlgAsk({ kind: 'confirm', title: opts.title, message: opts.message, cancel: false, buttons: [
         { label: opts.cancel || 'やめる', value: false, kind: 'sub', focus: !!opts.danger },
         { label: opts.ok || 'OK', value: true, kind: opts.danger ? 'danger' : 'primary', focus: !opts.danger },
+    ] }, cb);
+}
+// 知らせるだけ（ボタン1つ。Esc でも閉じる）。opts: { title, message, ok: 'OK' の文字 }
+function cadAlert(opts, cb) {
+    return _dlgAsk({ kind: 'confirm', title: opts.title, message: opts.message, cancel: true, buttons: [
+        { label: opts.ok || 'OK', value: true, kind: 'primary', focus: true },
     ] }, cb);
 }
 // 文字を入れる。opts: { title, message, value, placeholder, inputmode, ok, validate(v) → 知らせる文 or '' }。やめたら null
