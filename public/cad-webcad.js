@@ -72,10 +72,118 @@ async function buildWebcadDoc() {
     const underlay = (u && u.data) ? { mime: u.mime, w: u.w, h: u.h, ow: u.ow || u.w, oh: u.oh || u.h, T: u.T, opacity: u.opacity, on: u.on !== false, name: u.name || '', data: _wcToB64(u.data) } : null;
     const zone = (typeof getGnssZone === 'function') ? getGnssZone() : null;
     const doc = { format: WEBCAD_FORMAT, version: WEBCAD_VERSION, savedAt: new Date().toISOString(), project, photos, underlay, gnssZone: zone };
-    return { text: JSON.stringify(doc), name, photoCount: Object.keys(photos).length, missing, hasUnderlay: !!underlay };
+    return { text: JSON.stringify(doc), name, photoCount: Object.keys(photos).length, missing, hasUnderlay: !!underlay,
+        entityCount: entities.length, layoutCount: (typeof cadLayouts !== 'undefined') ? cadLayouts.length : 0 };
+}
+
+// ===== 図面一式の PDF（表紙＋添付ファイル） =====
+const WEBCAD_PDF_SUFFIX = '_図面一式.pdf';
+const WEBCAD_PDF_MARK = '/WebCADPack 1'; // 添付ファイルのストリームの印（開くときに探す）
+function _wcBlobBytes(blob) {
+    return new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(new Uint8Array(fr.result)); fr.onerror = () => reject(fr.error); fr.readAsArrayBuffer(blob); });
+}
+// 表紙の図: 図面全体（レイアウトを見ていればその用紙）を JPEG に。作れなければ null（表紙は文字だけ）
+async function _wcCoverImage() {
+    if(typeof captureCleanImage !== 'function' || !(canvas.width > 0 && canvas.height > 0)) return null;
+    const saved = { x: view.x, y: view.y, scale: view.scale, rotation: view.rotation };
+    try {
+        if(typeof zoomExtents === 'function') zoomExtents();
+        const r = await captureCleanImage(1, 'image/jpeg', 0.85);
+        if(!r.blob) return null;
+        const jpeg = await _wcBlobBytes(r.blob);
+        return (jpeg.length > 4 && jpeg[0] === 0xFF && jpeg[1] === 0xD8) ? { jpeg, w: r.w, h: r.h } : null; // JPEG でなければ入れない
+    } catch { return null; }
+    finally { view.x = saved.x; view.y = saved.y; view.scale = saved.scale; view.rotation = saved.rotation; render(); }
+}
+// bytes（.webcad の中身）を入れた PDF。r: buildWebcadDoc の結果
+async function webcadPdf(bytes, r) {
+    const W = 595.28, H = 841.89, M = 48; // A4 縦（pt）
+    const out = [];
+    const text = (s, x, y, size, rgb) => out.push(`${rgb || '0 0 0'} rg BT /F1 ${pdfNum(size)} Tf ${pdfNum(x)} ${pdfNum(y)} Td <${pdfHexText(s)}> Tj ET`);
+    const wrap = (s, size, maxW) => {
+        const lines = [];
+        let cur = '';
+        for(const ch of String(s)) { if(cur && pdfTextWidth(cur + ch, size) > maxW) { lines.push(cur); cur = ch; } else cur += ch; }
+        if(cur) lines.push(cur);
+        return lines;
+    };
+    const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
+    let y = H - M;
+    text('Web CAD 図面一式', M, y - 22, 22); y -= 40;
+    wrap(r.name, 15, W - M * 2).forEach((l) => { text(l, M, y - 15, 15); y -= 21; });
+    const info = `図形 ${r.entityCount}` + (r.photoCount ? `・写真 ${r.photoCount}枚` : '') + (r.hasUnderlay ? '・下絵' : '') + (r.layoutCount ? `・レイアウト ${r.layoutCount}枚` : '') +
+        ` ／ 書き出し ${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    text(info, M, y - 11, 10, '0.3 0.3 0.3'); y -= 24;
+    // 図面の絵（枠に収める）
+    const img = await _wcCoverImage();
+    const boxW = W - M * 2, boxH = 360;
+    if(img) {
+        const s = Math.min(boxW / img.w, boxH / img.h), iw = img.w * s, ih = img.h * s;
+        const ix = M + (boxW - iw) / 2, iy = y - boxH + (boxH - ih) / 2;
+        out.push(`q ${pdfNum(iw)} 0 0 ${pdfNum(ih)} ${pdfNum(ix)} ${pdfNum(iy)} cm /Im1 Do Q`);
+        out.push(`0.6 0.6 0.6 RG 0.5 w ${pdfNum(ix)} ${pdfNum(iy)} ${pdfNum(iw)} ${pdfNum(ih)} re S`);
+        y -= boxH + 22;
+    }
+    // 開き方（右に Web CAD の QR コード）
+    const url = (typeof shareAppUrl === 'function') ? shareAppUrl() : 'https://antigravity-web-cad.vercel.app/';
+    const qrSize = 108, textW = W - M * 2 - qrSize - 18;
+    const yTop = y;
+    const lines = [
+        ['この PDF には、Web CAD の図面一式（図面・測点・写真・下絵・系番号）が入っています。', 11],
+        ['開き方: Web CAD の「開く」でこの PDF を選ぶと、そのまま開けます。LINE・メールで受け取ったときは、いったん端末（「ファイル」など）に保存してから選びます。', 11],
+        ['Web CAD を使っていないときは、右の QR コードをスマホのカメラで読み取ると開けます（ホーム画面に追加するとアプリとして使えます）。', 11],
+        [url, 10],
+        [`PC の PDF 閲覧ソフトでは、添付ファイル（${r.name}${WEBCAD_EXT}）として取り出すこともできます。`, 9],
+    ];
+    lines.forEach(([s, size]) => { wrap(s, size, textW).forEach((l) => { text(l, M, y - size, size, size < 10 ? '0.35 0.35 0.35' : '0 0 0'); y -= size * 1.55; }); y -= 6; });
+    if(typeof window.qrcode === 'function') {
+        try {
+            const qr = window.qrcode(0, 'M'); qr.addData(url); qr.make();
+            const n = qr.getModuleCount(), cell = qrSize / (n + 8), x0 = W - M - qrSize, y0 = yTop - qrSize;
+            out.push(`1 1 1 rg ${pdfNum(x0)} ${pdfNum(y0)} ${pdfNum(qrSize)} ${pdfNum(qrSize)} re f 0 0 0 rg`);
+            for(let rr = 0; rr < n; rr++) for(let c = 0; c < n; c++) {
+                if(!qr.isDark(rr, c)) continue;
+                let w = 1;
+                while(c + w < n && qr.isDark(rr, c + w)) w++;
+                out.push(`${pdfNum(x0 + (c + 4) * cell)} ${pdfNum(y0 + qrSize - (rr + 5) * cell)} ${pdfNum(w * cell)} ${pdfNum(cell)} re`);
+                c += w - 1;
+            }
+            out.push('f');
+            text('Web CAD を開く', x0 + qrSize / 2 - pdfTextWidth('Web CAD を開く', 8) / 2, y0 - 11, 8, '0.3 0.3 0.3');
+        } catch { /* QR が作れなくても、表紙の文字と添付ファイルはある */ }
+    }
+    text('Web CAD で書き出しました', M, M - 20, 8, '0.5 0.5 0.5');
+    return pdfBuild({
+        pages: [{ W, H, content: out.join('\n'), images: img ? [{ name: 'Im1', w: img.w, h: img.h, jpeg: img.jpeg }] : [] }],
+        attachments: [{ name: `${r.name}${WEBCAD_EXT}`, ascii: 'drawing.webcad', desc: 'Web CAD 図面一式', data: bytes, mark: WEBCAD_PDF_MARK }],
+    }, { title: `Web CAD 図面一式 ${r.name}` }, true);
+}
+// PDF か（先頭が %PDF）
+function _wcIsPdf(u8) { return u8.length > 4 && u8[0] === 0x25 && u8[1] === 0x50 && u8[2] === 0x44 && u8[3] === 0x46; }
+// 図面一式の PDF から、添付ファイル（.webcad の中身）を取り出す。入っていなければ null
+function webcadFromPdf(u8) {
+    if(!_wcIsPdf(u8)) return null;
+    const s = new TextDecoder('windows-1252').decode(u8); // 1バイト = 1文字（位置がそのまま使える）
+    const m = /\/Length (\d+) \/Type \/EmbeddedFile \/WebCADPack 1 >>\r?\nstream\r?\n/.exec(s);
+    if(!m) return null;
+    const start = m.index + m[0].length, len = Number(m[1]);
+    return (len > 0 && start + len <= u8.length) ? u8.slice(start, start + len) : null;
+}
+// 📁開く で PDF を選んだとき: 図面一式が入っていれば開く。入っていなければ、下絵にするかを聞く
+async function openPdfFile(file) {
+    let u8;
+    try { u8 = new Uint8Array(await file.arrayBuffer()); } catch(err) { notify(`エラー: ${file.name} を読めませんでした - ${err.message}`, { kind: 'error', ms: 5000 }); return false; }
+    if(webcadFromPdf(u8)) return loadWebcadFile(file);
+    const ok = await cadConfirm({ title: 'PDF を開く', message: `「${file.name}」には、Web CAD の図面一式が入っていません。\n下絵（図面の下に敷く画像）にしますか？`, ok: '下絵にする' });
+    if(ok && typeof ulLoadPdfFile === 'function') return ulLoadPdfFile(file);
+    return false;
 }
 function _wcSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB'; }
 // ☰「📦 図面一式」・保存一覧の「書き出す」
+// 保存（ダウンロード）は .webcad のまま。スマホ・タブレットの「📤 送る」だけは PDF の形（表紙＋添付ファイルに .webcad の中身）で送る（v5.39.1）。
+// .webcad は LINE が受け取らず、Android の Chrome の共有メニューでも送れなかった（送れるのは画像・PDF・テキストなどだけ）。
+// 受け取った PDF は 📁開く で選ぶと図面一式として開く（openPdfFile）。PC の PDF 閲覧ソフトでは表紙（図面の絵・開き方・アプリの QR）が見え、添付ファイルとして .webcad も取り出せる。
+// 共有メニューは押したその場で呼ばないと断られる（iPhone）ので、PDF は「📤 送る」を出す前に作っておく
 async function exportWebcadFile() {
     if(!entities.length) { notify('図面が空なので、書き出すものがありません', { kind: 'warn', ms: 3000 }); return; }
     busyStart('図面一式を書き出しています…');
@@ -83,7 +191,13 @@ async function exportWebcadFile() {
         await busyPaint();
         const r = await buildWebcadDoc();
         const bytes = await webcadPack(r.text);
-        downloadBlob(new Blob([bytes], { type: 'application/octet-stream' }), r.name.replace(/[\\/:*?"<>|]/g, '_') + WEBCAD_EXT);
+        const base = r.name.replace(/[\\/:*?"<>|]/g, '_');
+        let share = null;
+        if(typeof _shareTouchDevice === 'function' && _shareTouchDevice()) {
+            try { share = { blob: new Blob([await webcadPdf(bytes, r)], { type: 'application/pdf' }), name: base + WEBCAD_PDF_SUFFIX, note: 'LINE などへは PDF の形で送ります' }; }
+            catch(e) { console.warn('送る用の PDF を作れませんでした:', e); } // 作れなくても保存はする
+        }
+        downloadBlob(new Blob([bytes], { type: 'application/octet-stream' }), base + WEBCAD_EXT, share);
         notify(`-> 図面一式を書き出しました（${r.name}${WEBCAD_EXT}: 図形 ${entities.length}・写真 ${r.photoCount}枚${r.hasUnderlay ? '・下絵' : ''}、${_wcSize(bytes.length)}）`, { kind: 'success', ms: 3500 });
         if(r.missing) addCommandLog(`  注意: この端末に見つからない写真 ${r.missing}枚 は入れていません`);
     } catch(err) {
@@ -218,7 +332,16 @@ async function applyWebcadDoc(d, fileName) {
 }
 async function loadWebcadFile(file) {
     let d;
-    try { d = await parseWebcadBytes(await file.arrayBuffer()); } catch(err) {
+    try {
+        let buf = await file.arrayBuffer();
+        const u8 = new Uint8Array(buf);
+        if(_wcIsPdf(u8)) { // 図面一式の PDF（v5.39.1）: 添付ファイルを取り出す
+            const pk = webcadFromPdf(u8);
+            if(!pk) throw new Error('この PDF には図面一式が入っていません');
+            buf = pk.buffer.slice(pk.byteOffset, pk.byteOffset + pk.byteLength);
+        }
+        d = await parseWebcadBytes(buf);
+    } catch(err) {
         notify(`エラー: ${file.name} を開けませんでした - ${err.message}`, { kind: 'error', ms: 5000 });
         return false;
     }
@@ -244,7 +367,7 @@ async function loadWebcadFile(file) {
 function pickWebcadFile() {
     const inp = document.createElement('input');
     inp.type = 'file';
-    const accept = (typeof fileAcceptFor === 'function') ? fileAcceptFor(WEBCAD_EXT) : WEBCAD_EXT; // iPhone・iPad は指定しない（灰色で選べなくなる）
+    const accept = (typeof fileAcceptFor === 'function') ? fileAcceptFor(WEBCAD_EXT + ',.pdf') : WEBCAD_EXT + ',.pdf'; // iPhone・iPad は指定しない（灰色で選べなくなる）
     if(accept) inp.accept = accept;
     inp.onchange = () => { const f = inp.files && inp.files[0]; if(f) { if(typeof hideProjectList === 'function') hideProjectList(); loadWebcadFile(f); } };
     inp.click();

@@ -14,12 +14,13 @@ function _shareTouchDevice() {
     try { if(typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) return true; } catch { /* 判定できなければ下で */ }
     return (typeof isAppleTouchDevice === 'function') && isAppleTouchDevice();
 }
-// 書き出したあとに「📤 送る」を出す（押すと共有メニュー）
-function offerShare(blob, filename) {
+// 書き出したあとに「📤 送る」を出す（押すと共有メニュー）。opt: { saved（保存したファイルの名前。送るものと違うとき）, note（ひとこと） }
+function offerShare(blob, filename, opt) {
     if(!blob || !_shareTouchDevice() || typeof File !== 'function') return false;
     const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
     if(!canShareFile(file)) return false;
-    showSnack(`${filename} を保存しました`, { kind: 'success', ms: 9000, action: { label: '📤 送る', run: () => shareFile(file) } });
+    const o = opt || {};
+    showSnack(`${o.saved || filename} を保存しました${o.note ? `（${o.note}）` : ''}`, { kind: 'success', ms: 9000, action: { label: '📤 送る', run: () => shareFile(file) } });
     return true;
 }
 async function shareFile(file) {
@@ -34,27 +35,35 @@ async function shareFile(file) {
 
 // ===== 画面の画像（PNG） =====
 const PNG_MAX_PIXELS = 16000000; // iPhone・iPad のキャンバスの上限（約 1600万画素）より少し小さく
-async function exportScreenPng() {
+// 今の画面の図を画像にする（選択・カーソル・スナップなどの印は入れない）。k: 画面の何倍の細かさ、type・quality: 画像の形。
+// 戻り値 { blob, w, h }（作れなければ blob は null）。図面一式の PDF の表紙にも使う（cad-webcad.js）
+async function captureCleanImage(k, type, quality) {
     const w = canvas.width, h = canvas.height;
-    if(!(w > 0 && h > 0)) return;
-    const dpr = Math.ceil(window.devicePixelRatio || 1);
-    const k = Math.max(1, Math.min(3, Math.max(2, dpr), Math.floor(Math.sqrt(PNG_MAX_PIXELS / (w * h)) * 100) / 100));
     // 選んでいる図形の色を付けずに描く（描いたあと戻す）
     const sel = { hi: cmdState.highlightIdx, si: cmdState.selectedIndices };
-    let blob = null, failed = null;
+    let blob;
     try {
         cmdState.highlightIdx = -1; cmdState.selectedIndices = [];
         canvas.width = Math.round(w * k); canvas.height = Math.round(h * k);
         drawCleanFrame(k);
-        blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png')); // 画素は呼んだときのものを写す
-    } catch(err) {
-        failed = err;
-        console.error('画面の画像の書き出しエラー:', err);
+        blob = await new Promise((resolve) => canvas.toBlob(resolve, type, quality)); // 画素は呼んだときのものを写す
     } finally {
         canvas.width = w; canvas.height = h;
         cmdState.highlightIdx = sel.hi; cmdState.selectedIndices = sel.si;
         if(typeof _frameCache !== 'undefined') _frameCache = null; // 大きさの違う画面を残さない
         render();
+    }
+    return { blob, w: Math.round(w * k), h: Math.round(h * k) };
+}
+async function exportScreenPng() {
+    const w = canvas.width, h = canvas.height;
+    if(!(w > 0 && h > 0)) return;
+    const dpr = Math.ceil(window.devicePixelRatio || 1);
+    const k = Math.max(1, Math.min(3, Math.max(2, dpr), Math.floor(Math.sqrt(PNG_MAX_PIXELS / (w * h)) * 100) / 100));
+    let blob = null, failed = null;
+    try { blob = (await captureCleanImage(k, 'image/png')).blob; } catch(err) {
+        failed = err;
+        console.error('画面の画像の書き出しエラー:', err);
     }
     if(failed || !blob) { notify('エラー: 画面の画像を作れませんでした' + (failed ? ` - ${failed.message}` : ''), { kind: 'error', ms: 5000 }); return; }
     const name = `${_baseName()}_${layoutActive() ? layoutCurrent().name.replace(/[/:*?"<>|]/g, '_') : '画面'}.png`; // レイアウトを見ていればその名前（cad-layout.js）

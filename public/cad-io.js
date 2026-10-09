@@ -910,7 +910,8 @@ function exportFileName(ext) {
 }
 
 // ===== ファイルダウンロード =====
-function downloadBlob(blob, filename) {
+// share（任意）: 「📤 送る」で送るものを別にするとき { blob, name, note }（図面一式は LINE で送れる PDF の形にする。cad-webcad.js）
+function downloadBlob(blob, filename, share) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
@@ -919,7 +920,10 @@ function downloadBlob(blob, filename) {
     // すぐ消すと、Safari（iPhone・iPad・Mac）では保存が始まる前に中身が無くなり、保存に失敗することがある
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     // スマホ・タブレットでは、共有メニュー（LINE・メール・「ファイル」に保存）で送れるよう「📤 送る」を出す（cad-share.js）
-    if(typeof offerShare === 'function') offerShare(blob, filename);
+    if(typeof offerShare === 'function') {
+        if(share && share.blob) offerShare(share.blob, share.name || filename, { saved: filename, note: share.note });
+        else offerShare(blob, filename);
+    }
 }
 
 // ===== ファイルコマンド（cad-core.jsから呼ばれる） =====
@@ -939,7 +943,7 @@ function processIOCommand(cmd) {
 // ===== ファイル入力イベント =====
 function setupFileIO() {
     const fileInput = document.getElementById('dxf-file-input');
-    const accept = fileAcceptFor('.dxf,.dwg,.jww,.sim,.csv,.txt,.sdr,.webcad'); // iPhone・iPad は指定しない（灰色で選べなくなる）
+    const accept = fileAcceptFor('.dxf,.dwg,.jww,.sim,.csv,.txt,.sdr,.webcad,.pdf'); // iPhone・iPad は指定しない（灰色で選べなくなる）
     if(accept) fileInput.setAttribute('accept', accept); else fileInput.removeAttribute('accept');
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
@@ -947,6 +951,7 @@ function setupFileIO() {
         const ext = file.name.split('.').pop().toLowerCase();
         // 置き換え／追加／やめる を決めてから読む（Undo 1回分を保存。やめたら読まない）
         if(ext === 'webcad' && typeof loadWebcadFile === 'function') loadWebcadFile(file); // 図面一式は、置き換えて開く（確かめは cad-webcad.js）
+        else if(ext === 'pdf' && typeof openPdfFile === 'function') openPdfFile(file); // 図面一式の PDF（入っていなければ下絵にするかを聞く。cad-webcad.js）
         else if(ext === 'dxf' || ext === 'dwg') _prepareImportTarget(() => { if(ext === 'dxf') loadDxfFile(file); else loadDwgFile(file); });
         else if(ext === 'jww' && typeof loadJwwFile === 'function') _prepareImportTarget(() => loadJwwFile(file)); // Jw_cad の図面（cad-jww.js）
         else if(ext === 'sim' && typeof loadSimaFile === 'function') _prepareImportTarget(() => loadSimaFile(file));
@@ -954,7 +959,7 @@ function setupFileIO() {
         else if(ext === 'sdr' && typeof loadSdrFile === 'function') _prepareImportTarget(() => loadSdrFile(file)); // トータルステーションの現場データ（SDR33・SDR2x）
         else {
             addCommandLog(`未対応の形式です: .${ext}`);
-            if(typeof showToast === 'function') showToast(`未対応の形式です（.${ext}）\nDXF・DWG・JWW・SIMA（.sim）・座標CSV・SDR（.sdr）・図面一式（.webcad）を開けます`, 4000);
+            if(typeof showToast === 'function') showToast(`未対応の形式です（.${ext}）\nDXF・DWG・JWW・SIMA（.sim）・座標CSV・SDR（.sdr）・図面一式（PDF・.webcad）を開けます`, 4000);
         }
         fileInput.value = ''; // リセット
     });

@@ -968,7 +968,7 @@
     
     <!-- トップバー (案B: 最適化レイアウト) -->
     <div id="top-bar" class="glass-panel">
-        <button class="top-btn" id="btn-load-dxf" title="ファイルを開く（DXF・DWG・JWW・SIMA（.sim）・座標CSV・SDR・図面一式（.webcad））">📁 開く</button>
+        <button class="top-btn" id="btn-load-dxf" title="ファイルを開く（DXF・DWG・JWW・SIMA（.sim）・座標CSV・SDR・図面一式（PDF・.webcad））">📁 開く</button>
         <button id="btn-save" class="top-btn primary" onclick="saveProject()" title="プロジェクト保存">💾 保存</button>
         <button id="btn-undo" class="top-btn icon-only" onclick="undo()" title="元に戻す (Ctrl+Z)">↩</button>
         <button class="top-btn icon-only" onclick="redo()" title="やり直し (Ctrl+Y)">↪</button>
@@ -998,7 +998,7 @@
             <div class="menu-section-title">図面と保存</div>
             <div class="menu-btn-grid">
                 <button class="menu-item-btn" data-fav="PROJECTS" onclick="showProjectList(); toggleTopMenu();">📂 保存一覧</button>
-                <button class="menu-item-btn" data-fav="WEBCADOUT" onclick="exportWebcadFile(); toggleTopMenu();" title="図面・測点・写真・下絵を1つのファイル（.webcad）に書き出します。別の端末の 📁開く で開くと、そのまま続きができます">📦 図面一式</button>
+                <button class="menu-item-btn" data-fav="WEBCADOUT" onclick="exportWebcadFile(); toggleTopMenu();" title="図面・測点・写真・下絵を1つのファイル（.webcad）に書き出します。スマホの「📤 送る」では LINE でも送れる PDF の形にします。別の端末の 📁開く で .webcad か受け取った PDF を選ぶと、そのまま続きができます">📦 図面一式</button>
                 <button class="menu-item-btn" data-fav="EXPORTDXF" onclick="exportDxf(); toggleTopMenu();" title="AutoCAD 向け（AutoCAD 2007 形式・UTF-8。寸法・測点の属性もそのまま。DWG では書き出せません）">DXF 出力</button>
                 <button class="menu-item-btn" data-fav="DXFJW" onclick="exportDxfJw(); toggleTopMenu();" title="Jw_cad・古い CAD 向け（R12 形式・Shift-JIS・mm。寸法・塗りつぶしは線・ソリッドに分けて書きます）">DXF（Jw_cad 向け）</button>
                 <button class="menu-item-btn" data-fav="PRINT" onclick="showPrintPanel(); toggleTopMenu();" title="用紙と縮尺を決めて PDF にする（図枠・表題欄・方位記号つき）">🖨 印刷・PDF</button>

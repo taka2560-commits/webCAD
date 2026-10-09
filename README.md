@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.39（2026年10月9日リリース）**
+**現在のバージョン: v5.39.1（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -26,7 +26,7 @@
 - **SIMA・座標CSV・SDR33**: 書き出す前に、表・ファイルの中身・気づいたこと（点番号の振り直し・Shift-JIS で表せない文字など）を確かめる画面が出ます（v5.37）。
 - **図面一式（.webcad）**: 図面・測点・写真・下絵・系番号を1つのファイルにして、別の端末へそのまま渡します（v5.30）。
 - **縮尺印刷・PDF**（A4〜A1・1/100〜1/5000、図枠・表題欄・方位記号つきのベクター PDF）・**画面の画像（PNG）**・**写真台帳 PDF**。
-- スマホでは書き出したあとに「📤 送る」（LINE・メール・「ファイル」へ。v5.31）。**このアプリ自体は QR コードで渡せます**（v5.39）。
+- スマホでは書き出したあとに「📤 送る」（LINE・メール・「ファイル」へ。v5.31）。図面一式は LINE でも送れる PDF の形で送り、受け取った PDF は 📁開く でそのまま開けます（v5.39.1）。**このアプリ自体は QR コードで渡せます**（v5.39）。
 
 ### ✏️ 描く・直す
 - 線分・ポリライン・長方形・円・円弧・楕円・文字・塗りつぶし・点（座標一覧に入る）。
@@ -198,7 +198,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（761件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（762件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -277,6 +277,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.39.1（図面一式を LINE で送る）** 📤
+  * exportWebcadFile は .webcad を保存し、スマホ・タブレットの「📤 送る」には webcadPdf の PDF（A4 の表紙＋EmbeddedFile。目印 /WebCADPack 1）を渡す（downloadBlob の3つ目の引数 share → offerShare の opt.saved・note）。PDF は送るボタンを出す前に作る（共有メニューは押したその場でないと断られるため）。pdfBuild（cad-print.js）に添付ファイル（attachments → カタログの /Names /EmbeddedFiles）、cad-share.js に captureCleanImage（表紙の絵）。📁開く・保存一覧は .pdf も受け、openPdfFile が図面一式なら loadWebcadFile、そうでなければ下絵にするか聞く。tests/webcad-file.test.cjs。
 
 * **2026-10-09: バージョン5.39（このアプリを QR コードで渡す）** 📱
   * cad-qr.js（新）: shareAppUrl（今の場所。localhost・私設の IP・file: は公開の https://antigravity-web-cad.vercel.app/）・qrSvg（qrcode-generator の isDark を SVG の四角に。余白 4 マス・誤り訂正 M）・showShareAppPanel・shareAppLink（navigator.share）・copyAppLink。依存に qrcode-generator 2.0.4（MIT・依存なし。src/vendor.js で window.qrcode）。tests/qr.test.cjs。

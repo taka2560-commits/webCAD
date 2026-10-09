@@ -89,8 +89,16 @@ async function pdfBuild(doc, info, compress) {
     let next = 11;
     for(let i = 1; i < pages.length; i++) { pageNo.push(next++); contNo.push(next++); }
     const imgNo = pages.map((pg) => (pg.images || []).map(() => next++));
+    // 添付ファイル（図面一式の PDF。cad-webcad.js）: doc.attachments = [{ name, ascii（/F の英数字の名前）, desc, data, mark（ストリームの辞書に足す印） }]
+    const atts = doc.attachments || [];
+    const attNo = atts.map(() => ({ ef: next++, fs: next++ }));
+    const names = atts.length ? ` /Names << /EmbeddedFiles << /Names [${atts.map((a, i) => `<FEFF${pdfHexText(a.name)}> ${attNo[i].fs} 0 R`).join(' ')}] >> >>` : '';
     const objs = new Array(next - 1).fill(null); // objs[番号 - 1] = 文字列、またはストリーム { dict, data }
-    objs[0] = '<< /Type /Catalog /Pages 2 0 R /ViewerPreferences << /PrintScaling /None >> >>';
+    objs[0] = `<< /Type /Catalog /Pages 2 0 R /ViewerPreferences << /PrintScaling /None >>${names} >>`;
+    atts.forEach((a, i) => {
+        objs[attNo[i].ef - 1] = { dict: ` /Type /EmbeddedFile${a.mark ? ' ' + a.mark : ''}`, data: a.data };
+        objs[attNo[i].fs - 1] = `<< /Type /Filespec /F (${String(a.ascii || 'attachment.bin').replace(/[^\x20-\x7e]|[()\\]/g, '_')}) /UF <FEFF${pdfHexText(a.name)}>${a.desc ? ` /Desc <FEFF${pdfHexText(a.desc)}>` : ''} /EF << /F ${attNo[i].ef} 0 R >> >>`;
+    });
     objs[1] = `<< /Type /Pages /Kids [${pageNo.map((n) => n + ' 0 R').join(' ')}] /Count ${pages.length} >>`;
     objs[4] = `<< /Type /Font /Subtype /Type0 /BaseFont /${font} /Encoding /UniJIS-UCS2-HW-H /DescendantFonts [6 0 R] >>`;
     objs[5] = `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /${font} /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >> /FontDescriptor 7 0 R /DW 1000 /W [231 389 500] >>`;

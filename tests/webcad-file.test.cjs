@@ -173,4 +173,54 @@ describe('図面一式のファイル（.webcad）', () => {
             assert.deepEqual(app.val('window.__calls'), ['out', 'out', 'out', 'open:現場.webcad']);
         } finally { app.eval('window.exportWebcadFile = window.__ow; window.loadWebcadFile = window.__ol;'); }
     });
+
+    it('📤 送る（v5.39.1）: 保存は .webcad のまま、送るときだけ LINE が受け取れる PDF（表紙＋添付ファイルに .webcad の中身）。PDF のまま開ける。図面一式の無い PDF は下絵にするかを聞く', async () => {
+        await app.eval(`(async () => { entities.length = 0; layers.splice(0, layers.length, { name: '0', color: '#ffffff', visible: true });
+            addSurveyData(${JSON.stringify(PTS)}, []); setDrawingName('PDF の図面.dxf'); window._currentProjectName = null; })()`);
+        const before0 = snapshot(app);
+        // スマホ・タブレット（共有メニューで送れる端末）とみなす。保存したファイルと、「📤 送る」で送るファイルを控える
+        app.eval(`window.__saved = null; window.__sent = null; window.__snack = null;
+            window.__dlo = window.downloadBlob; window.__st = _shareTouchDevice; window.__cs = canShareFile; window.__sn = window.showSnack;
+            _shareTouchDevice = () => true; canShareFile = () => true;
+            showSnack = (msg, o) => { window.__snack = { msg, label: o.action.label }; window.__snackRun = o.action.run; };
+            navigator.share = async (d) => { window.__sent = d.files[0]; };
+            window.__dlo2 = downloadBlob; downloadBlob = (b, name, share) => { window.__saved = name; offerShare(share.blob, share.name, { saved: name, note: share.note }); };`);
+        try {
+            await app.eval('exportWebcadFile()');
+            assert.match(app.val('window.__saved'), /^PDF の図面\.webcad$/, '保存は .webcad のまま');
+            assert.match(app.val('window.__snack.msg'), /PDF の図面\.webcad を保存しました（LINE などへは PDF の形で送ります）/);
+            await app.eval('window.__snackRun()');
+            assert.equal(app.val('window.__sent.name'), 'PDF の図面_図面一式.pdf');
+            assert.equal(app.val('window.__sent.type'), 'application/pdf');
+        } finally {
+            app.eval(`downloadBlob = window.__dlo2; _shareTouchDevice = window.__st; canShareFile = window.__cs; showSnack = window.__sn; delete navigator.share;`);
+        }
+        const pdf = Buffer.from(await app.eval(`new Promise(r => { const fr = new FileReader(); fr.onload = () => r(Array.from(new Uint8Array(fr.result))); fr.readAsArrayBuffer(window.__sent); })`));
+        assert.equal(pdf.slice(0, 5).toString('latin1'), '%PDF-');
+        const s = pdf.toString('latin1');
+        assert.match(s, /\/Names << \/EmbeddedFiles << \/Names \[<FEFF[0-9A-F]+> \d+ 0 R\] >> >>/, '添付ファイルの目録');
+        assert.match(s, /\/Type \/Filespec \/F \(drawing\.webcad\) \/UF <FEFF[0-9A-F]+>/);
+        assert.match(s, /\/Type \/Page /);
+        app.window.__pdf = new app.window.Uint8Array(pdf);
+        const pk = app.val('Array.from(webcadFromPdf(window.__pdf) || [])');
+        assert.deepEqual(pk.slice(0, 2), [0x1F, 0x8B], '添付ファイルは gzip の .webcad');
+        // PDF のまま開く（📁開く で PDF を選ぶ）
+        app.eval(`entities.length = 0;`);
+        app.window.__file = { name: 'PDF の図面_図面一式.pdf', arrayBuffer: async () => pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength) };
+        app.eval('window.__cc = window.cadConfirm; window.cadConfirm = async () => true;');
+        try { assert.equal(await app.eval('openPdfFile(window.__file)'), true); } finally { app.eval('window.cadConfirm = window.__cc;'); }
+        const after0 = snapshot(app);
+        assert.deepEqual(after0.entities.map((e) => [e.type, e.name || e.text]), before0.entities.map((e) => [e.type, e.name || e.text]));
+        // 図面一式の無い PDF: 下絵にするかを聞き、「下絵にする」なら下絵の読み込みへ
+        const plain = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n', 'latin1');
+        app.window.__file = { name: 'scan.pdf', arrayBuffer: async () => plain.buffer.slice(plain.byteOffset, plain.byteOffset + plain.byteLength) };
+        app.eval(`window.__asked = null; window.__cc = window.cadConfirm; window.cadConfirm = async (o) => { window.__asked = o.message; return true; };
+            window.__ul = window.ulLoadPdfFile; window.__ulCalled = null; ulLoadPdfFile = (f) => { window.__ulCalled = f.name; return true; };`);
+        try { await app.eval('openPdfFile(window.__file)'); } finally { app.eval('window.cadConfirm = window.__cc; ulLoadPdfFile = window.__ul;'); }
+        assert.match(app.val('window.__asked'), /図面一式が入っていません[\s\S]*下絵/);
+        assert.equal(app.val('window.__ulCalled'), 'scan.pdf');
+        // 📁開く の .pdf は openPdfFile へ
+        assert.match(app.val(`document.getElementById('dxf-file-input').getAttribute('accept') || ''`), /\.pdf/);
+        assert.deepEqual(app.errors(), []);
+    });
 });
