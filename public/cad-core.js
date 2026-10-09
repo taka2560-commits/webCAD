@@ -845,7 +845,7 @@ function toggleCommand(cmd) {
 
 // 図面を閉じる（全オブジェクト削除 + 新規作成）
 function closeDrawing() {
-    if(entities.length === 0) { addCommandLog('図面は空です'); return; }
+    if(entities.length === 0 && !(typeof layoutsExist === 'function' && layoutsExist())) { addCommandLog('図面は空です'); return; } // レイアウトだけの図面も閉じられる
     // 以前は確認なしで全部消していた（アプリを閉じると ↩ でも戻せない）
     const unsaved = (typeof _hasUnsavedProjectChanges === 'function') && _hasUnsavedProjectChanges();
     const msg = unsaved

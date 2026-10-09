@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.39.2（2026年10月9日リリース）**
+**現在のバージョン: v5.39.3（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -198,7 +198,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（764件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（771件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -277,6 +277,12 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.39.3（エラー・不具合の点検）** 🔍
+  * 線分: lineUndoStep が snapSetLastInput（「@」の基準）も戻す、lineSnapChanged（⇄・次の1点だけで仮の点を置き直す）、lineBeforeOtherCommand（processCommand で線分の下のバーを片付け、線分のままなら出し直す）。文字の大きさ: 選んだ文字を ID で（_tszKeepSel・_tszSelIdx）、画層の初め、textSizeLayer で種類の絞りを外す、textSizeSetHeights は高さが決まるときだけ saveUndo。
+  * 図面一式: _wcExporting、.webcad を先に保存（downloadBlob の share が false なら「📤 送る」を出さない）してから PDF、shareFile は NotAllowedError で送るファイルも保存、名前は (_図面一式)?.(webcad|pdf) を外す、zoomExtents(true) は知らせない。commaFixed、変換後の SIMA の区画名、hideSnack で onclick を外す。
+  * レイアウト: layoutModelViewForSave（_buildSaveData）、applyProjectData の初めに layoutShowModel(true)、layoutsExist（取り込み・閉じる・図面一式・自動保存の復元）、layoutShow で使えないパネルを閉じる、ulSetImage・openPdfFile はモデルで、refreshCoordDisplay はレイアウトなら layoutShowCoords、drawAllDimensions(opt)（hideLayers・plain）、ツアーで layoutTabsUpdate、body.has-space-tabs でツールバーの下を上げる。
+  * テスト: line-touch・textsize・webcad-file・export-preview・layout（2件）に足した。
 
 * **2026-10-09: バージョン5.39.2（Android で送れない種類は手順を出す）** 📤
   * Chromium の共有は拡張子と MIME の両方が許可の一覧に無いと「Permission denied」（navigator.canShare は種類を見ない）。cad-share.js に SHARE_OK_EXT・SHARE_OK_MIME・shareTypeOk（iPhone・iPad は種類を見ない）・showShareSteps（cadAlert で LINE の ＋ →「ファイル」の手順）。offerShare は渡せない種類なら「📤 送り方」、shareFile は NotAllowedError で同じ手順。cad-dialog.js に cadAlert（ボタン1つ）。tests/share-png.test.cjs。

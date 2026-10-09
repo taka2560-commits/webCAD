@@ -639,7 +639,8 @@ window.helmExportSima = function() {
     if(!_helm.sol || !_helm.sol.ok) return false;
     const r = helmSimaLines(true);
     const text = r.lines.join('\r\n') + '\r\n', name = `${_helmBaseName()}_変換.sim`;
-    const bad = sjisBadChars(simaPreviewRows(text).rows.map((p) => p.name).join(''));
+    const pv0 = simaPreviewRows(text);
+    const bad = sjisBadChars(pv0.rows.map((p) => p.name).concat(pv0.lots.map((l) => l.name)).join('')); // 区画名も（座標一覧の SIMA と同じ）
     const shown = sjisRoundTrip(text), pv = simaPreviewRows(shown); // 表・中身は Shift-JIS で書いたあとの文字（表せない文字は ?）
     const notes = bad.length ? [{ warn: true, text: `Shift-JIS で表せない文字（${bad.slice(0, 10).join(' ')}）は「?」になります` }] : [];
     showExportPreview({ kind: '変換後の SIMA', fileName: name, encoding: 'Shift-JIS', text: shown, rows: pv.rows, lots: pv.lots, notes, write: () => {

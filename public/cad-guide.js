@@ -223,7 +223,7 @@ window.startGuideTour = function(id) {
     const op = document.getElementById('osnap-panel'); if(op) op.style.display = 'none';
     if(typeof resetCommand === 'function') resetCommand();
     if(def.screen === 'normal' && _guideIsFs() && typeof window.toggleFullscreen === 'function') window.toggleFullscreen(); // index.html の関数
-    if(typeof layoutShowModel === 'function') layoutShowModel(true); // ツアーはモデルの画面で（レイアウトを見ていたら戻る。cad-layout.js）
+    if(typeof layoutShowModel === 'function') { layoutShowModel(true); layoutTabsUpdate(); } // ツアーはモデルの画面で（レイアウトを見ていたら戻る。タブも合わせる。cad-layout.js）
     _tour = { id, def, i: -1, base: null, flags: {}, backup: null, completing: false, keep: null };
     document.body.classList.add('guide-touring'); // 操作ボタン（☑確定など）は暗くしない
     // 練習用の図面の間はレイアウトのタブも出さない（控えの ↩ の記録にレイアウトも入っているので、終わると戻る）

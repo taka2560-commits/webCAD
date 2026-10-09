@@ -588,6 +588,7 @@ window.cycleSnapCandidate = function() {
     _snapCycle.index++;
     snapResult = findSnap.apply(null, _snapLastArgs);
     if(typeof refreshCoordDisplay === 'function') refreshCoordDisplay();
+    if(typeof lineSnapChanged === 'function') lineSnapChanged(); // 線分の仮の点も、選んだ候補に（cad-line.js）
     if(navigator.vibrate) navigator.vibrate(10);
     if(typeof renderOverlay === 'function') renderOverlay();
     return true;
@@ -622,6 +623,7 @@ window.setSnapOverride = function(key) {
     addCommandLog(`-> 次の1点だけ「${t.label}」に吸着します`);
     if(typeof showToast === 'function') showToast(`次の1点だけ「${t.label}」`);
     if(_snapLastArgs && cmdState.mode !== 'IDLE') snapResult = findSnap.apply(null, _snapLastArgs);
+    if(typeof lineSnapChanged === 'function') lineSnapChanged(); // 線分の仮の点も、指定した種類で（cad-line.js）
     if(typeof renderOverlay === 'function') renderOverlay();
 };
 function clearSnapOverride() {
@@ -668,6 +670,8 @@ function snapInputIntercept(wcs) {
     handlePointInput(mid, true); // 本来の入力として渡す（_m2p は解除済みなので再び受け取らない）
     return true;
 }
+// 「@X,Y」の基準の点を置き直す（線分の ↶ 1つ戻す。cad-line.js）
+function snapSetLastInput(wcs) { _lastInputWcs = wcs ? { x: wcs.x, y: wcs.y } : null; }
 // 点が入力されたあと（handlePointInput の最後）
 function afterSnapPointInput(wcs) {
     _lastInputWcs = { x: wcs.x, y: wcs.y };

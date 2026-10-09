@@ -184,10 +184,11 @@ describe('図面一式のファイル（.webcad）', () => {
             _shareTouchDevice = () => true; canShareFile = () => true;
             showSnack = (msg, o) => { window.__snack = { msg, label: o.action.label }; window.__snackRun = o.action.run; };
             navigator.share = async (d) => { window.__sent = d.files[0]; };
-            window.__dlo2 = downloadBlob; downloadBlob = (b, name, share) => { window.__saved = name; offerShare(share.blob, share.name, { saved: name, note: share.note }); };`);
+            window.__dlo2 = downloadBlob; downloadBlob = (b, name, share) => { window.__saved = name; window.__savedShare = share; };`);
         try {
             await app.eval('exportWebcadFile()');
             assert.match(app.val('window.__saved'), /^PDF の図面\.webcad$/, '保存は .webcad のまま');
+            assert.equal(app.val('window.__savedShare'), false, '.webcad は PDF を作る前に保存し、「📤 送る」は PDF ができてから出す');
             assert.match(app.val('window.__snack.msg'), /PDF の図面\.webcad を保存しました（LINE などへは PDF の形で送ります）/);
             await app.eval('window.__snackRun()');
             assert.equal(app.val('window.__sent.name'), 'PDF の図面_図面一式.pdf');
@@ -221,6 +222,49 @@ describe('図面一式のファイル（.webcad）', () => {
         assert.equal(app.val('window.__ulCalled'), 'scan.pdf');
         // 📁開く の .pdf は openPdfFile へ
         assert.match(app.val(`document.getElementById('dxf-file-input').getAttribute('accept') || ''`), /\.pdf/);
+        assert.deepEqual(app.errors(), []);
+    });
+
+    it('点検で直したこと（v5.39.3）: 送るのを断られたら PDF も保存して手順を出す・受け取った PDF の名前・続けて押しても1回・表紙の図はコマンド欄に書かない', async () => {
+        await app.eval(`(async () => { entities.length = 0; layers.splice(0, layers.length, { name: '0', color: '#ffffff', visible: true });
+            entities.push({ type: 'LINE', layer: 0, color: null, x1: 0, y1: 0, x2: 100, y2: 50 }); ensureEntityIds(); window._drawingName = undefined; window._currentProjectName = null; })()`);
+        app.eval(`window.__saved2 = []; window.__steps = null; window.__snackRun = null;
+            window.__bk = { st: _shareTouchDevice, cs: canShareFile, sn: window.showSnack, ca: window.cadAlert, dl: window.downloadBlob,
+                tb: HTMLCanvasElement.prototype.toBlob, cc: window.cadConfirm };
+            _shareTouchDevice = () => true; canShareFile = () => true;
+            showSnack = (msg, o) => { window.__snackRun = o.action && o.action.run; };
+            cadAlert = (o) => { window.__steps = o.message; };
+            // 保存は名前を控える（ほかのテストが差し替えているので、cad-io.js と同じく share が false なら「📤 送る」を出さない形で置く）
+            downloadBlob = (b, name, share) => { window.__saved2.push(name); if(share !== false) offerShare(b, name); };
+            navigator.share = async (d) => { window.__sent = d.files[0]; throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' }); };
+            HTMLCanvasElement.prototype.toBlob = function (cb, type) { const b = new Uint8Array(50); b[0] = 0xFF; b[1] = 0xD8; setTimeout(() => cb(new Blob([b], { type })), 5); };
+            view.x = 7; view.y = 9; view.scale = 3.5; view.rotation = 0.3;
+            window.__log0 = document.getElementById('command-log').children.length;`);
+        try {
+            // 続けて2回押しても書き出しは1回で、表示は元のまま（以前は2回目が、全体表示にした位置を「元」と覚えた）
+            await app.eval('Promise.all([exportWebcadFile(), exportWebcadFile()])');
+            const saved = app.val('window.__saved2');
+            assert.equal(saved.length, 1);
+            assert.match(saved[0], /\.webcad$/);
+            assert.deepEqual(app.val('({ x: view.x, y: view.y, scale: view.scale, rotation: view.rotation })'), { x: 7, y: 9, scale: 3.5, rotation: 0.3 });
+            // 表紙の図のための全体表示は、コマンド欄に「全体表示」と書かない（練習ツアーの段階も進めない）
+            assert.doesNotMatch(app.val(`Array.from(document.getElementById('command-log').children).slice(window.__log0).map(d => d.textContent).join('|')`), /全体表示/);
+            // 「📤 送る」が断られたら、送ろうとした PDF も保存し、その名前で手順を出す（以前は保存していない PDF を選ぶよう案内した）
+            await app.eval('window.__snackRun()');
+            const base = saved[0].replace(/\.webcad$/, ''), pdfName = base + '_図面一式.pdf';
+            assert.deepEqual(app.val('window.__saved2'), [saved[0], pdfName]);
+            assert.ok(app.val('window.__steps').includes(`「${pdfName}」を選ぶ`));
+            // 受け取った PDF を開くと、図面の名前は元の名前（以前は「…_図面一式.pdf」になり、DXF の名前が「…_図面一式.pdf.dxf」）
+            const pdf = Buffer.from(await app.eval(`new Promise(r => { const fr = new FileReader(); fr.onload = () => r(Array.from(new Uint8Array(fr.result))); fr.readAsArrayBuffer(window.__sent); })`));
+            app.eval(`entities.length = 0; setDrawingName('別の図面.dxf'); window.cadConfirm = async () => true;`);
+            app.window.__file = { name: pdfName, arrayBuffer: async () => pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength) };
+            assert.equal(await app.eval('openPdfFile(window.__file)'), true);
+            assert.equal(app.val('window._drawingName'), base);
+            assert.equal(app.val(`exportFileName('dxf')`), base + '.dxf');
+        } finally {
+            app.eval(`_shareTouchDevice = window.__bk.st; canShareFile = window.__bk.cs; showSnack = window.__bk.sn; cadAlert = window.__bk.ca; window.cadConfirm = window.__bk.cc;
+                downloadBlob = window.__bk.dl; HTMLCanvasElement.prototype.toBlob = window.__bk.tb; delete navigator.share;`);
+        }
         assert.deepEqual(app.errors(), []);
     });
 });

@@ -567,7 +567,7 @@ function drawEntities(opts) {
     ctx.restore();
 }
 // 寸法描画は cad-dimension.js の drawDimensions() へ委譲
-function drawDimensions() { if(typeof drawAllDimensions==='function') drawAllDimensions(); }
+function drawDimensions(opt) { if(typeof drawAllDimensions==='function') drawAllDimensions(opt); }
 
 function drawRubberBand() {
     ctx.save(); ctx.strokeStyle=isLightCanvasBg()?'rgba(0,0,0,0.5)':'rgba(255,255,255,0.5)'; ctx.setLineDash([6,4]); ctx.lineWidth=lineWidthPx(1, 1.5);

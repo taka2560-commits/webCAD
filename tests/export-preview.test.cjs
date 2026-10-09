@@ -77,6 +77,13 @@ describe('書き出す前の確認', () => {
         assert.deepEqual(downloads(), ['genba_座標.csv']);
     });
 
+    it('SIMA: 点名のカンマを空白にしたことを ⚠ で知らせる（v5.39.3。以前は知らせが出なかった）', () => {
+        add([{ num: '1', name: 'A,1', X: 10, Y: 20, z: null }, { num: '2', name: 'B', X: 11, Y: 21, z: null }]);
+        app.eval('exportSima()');
+        assert.match(text(), /点名・区画名の中のカンマ・改行は、空白にしました/);
+        app.eval('exportPreviewCancel()');
+    });
+
     it('点名・点番号で検索して表を絞る。行が多いときは先頭の 300 行（書き出すのは全部）', () => {
         add(Array.from({ length: 350 }, (_, i) => ({ num: String(i + 1), name: 'T' + (i + 1), X: i, Y: i })));
         app.eval('exportSima()');

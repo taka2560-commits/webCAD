@@ -910,7 +910,7 @@ function exportFileName(ext) {
 }
 
 // ===== ファイルダウンロード =====
-// share（任意）: 「📤 送る」で送るものを別にするとき { blob, name, note }（図面一式は LINE で送れる PDF の形にする。cad-webcad.js）
+// share（任意）: 「📤 送る」で送るものを別にするとき { blob, name, note }。false なら「📤 送る」を出さない（呼んだ側が出す。cad-webcad.js・cad-share.js）
 function downloadBlob(blob, filename, share) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -920,7 +920,7 @@ function downloadBlob(blob, filename, share) {
     // すぐ消すと、Safari（iPhone・iPad・Mac）では保存が始まる前に中身が無くなり、保存に失敗することがある
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     // スマホ・タブレットでは、共有メニュー（LINE・メール・「ファイル」に保存）で送れるよう「📤 送る」を出す（cad-share.js）
-    if(typeof offerShare === 'function') {
+    if(share !== false && typeof offerShare === 'function') {
         if(share && share.blob) offerShare(share.blob, share.name || filename, { saved: filename, note: share.note });
         else offerShare(blob, filename);
     }

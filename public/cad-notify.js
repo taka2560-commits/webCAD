@@ -41,7 +41,7 @@ function showSnack(msg, o) {
         act.style.display = '';
         act.textContent = o.action.label;
         act.onclick = () => { hideSnack(); o.action.run(); };
-    } else act.style.display = 'none';
+    } else { act.style.display = 'none'; act.onclick = null; }
     if(o.kind) s.dataset.kind = o.kind; else delete s.dataset.kind;
     s.classList.add('show');
     clearTimeout(s._timer);
@@ -52,6 +52,8 @@ function hideSnack() {
     if(!s) return;
     s.classList.remove('show');
     clearTimeout(s._timer);
+    const act = s.querySelector('.sn-act');
+    if(act) act.onclick = null; // 送るファイル（大きい PDF のことも）を持ち続けない
 }
 
 // 元に戻せる操作（↩ 1回分）のあとに「元に戻す」を出す。押すまでに別の操作をしていたら（↩ の履歴が進んでいたら）戻さない

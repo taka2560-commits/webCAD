@@ -16,7 +16,8 @@ function _prepareImportTarget(next, onCancel) {
     if(typeof layoutShowModel === 'function') layoutShowModel(); // レイアウトを見ていたらモデルに戻る（開いた図形はモデルに入る）
     saveUndo();
     _importUndo = null; _importProject = null;
-    if(entities.length === 0) { _importMode = 'fresh'; if(next) next('fresh'); return 'fresh'; }
+    // モデルが空でもレイアウトがあれば聞く（以前はレイアウトのタブが次のファイルにも残った）
+    if(entities.length === 0 && !(typeof layoutsExist === 'function' && layoutsExist())) { _importMode = 'fresh'; if(next) next('fresh'); return 'fresh'; }
     let result;
     cadChoose({ title: 'ファイルを開く', message: '今の図面があります。開くファイルをどうしますか？\n（置き換えても ↩ で今の図面に戻せます）', choices: [
         { label: '置き換える', value: 'replace', kind: 'primary' },

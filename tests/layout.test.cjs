@@ -263,4 +263,60 @@ describe('レイアウト（別の画面）', () => {
         assert.deepEqual(app.val('window.__names'), ['genba_平面図.png']);
         assert.deepEqual(app.errors(), []);
     });
+
+    it('点検で直したこと（v5.39.3）: 見ている間の保存・開く・パネル・座標の表示・下絵・寸法の凍結', () => {
+        app.eval('endGuideTour(false); zoomExtents();');
+        const mv = app.val('({ x: view.x, y: view.y, scale: view.scale })');
+        app.eval('layoutShow(0);');
+        // 保存する表示の位置はモデルの位置（以前は用紙の位置で、開き直すとモデルが画面の外）
+        const sv = app.val(`_buildSaveData('t').view`);
+        assert.deepEqual({ x: sv.x, y: sv.y, scale: sv.scale }, mv);
+        // 見ている間に開いた図面は、その図面の表示の位置（以前は前の図面のモデルの位置に戻された）
+        app.eval(`{ const d = _buildSaveData('t'); d.view = { x: 111, y: 222, scale: 3, rotation: 0 }; applyProjectData(d); }`);
+        assert.equal(app.val('layoutActive()'), false);
+        assert.deepEqual(app.val('({ x: view.x, y: view.y, scale: view.scale })'), { x: 111, y: 222, scale: 3 });
+        // レイアウトに替えると、座標一覧などのパネルは閉じる（行を押すとモデルの座標でレイアウトの表示が動いた）
+        app.eval(`addSurveyData([{ num: '1', name: 'P1', X: 500, Y: 1000, z: null }], []); showCoordListPanel(); layoutShow(0);`);
+        assert.equal(app.eval(`document.getElementById('property-panel').style.display`), 'none');
+        // 座標の表示を出し直しても（オプションの変更など）、用紙の位置をモデルの座標として出さない
+        app.eval(`{ const s = wcsToScreen(5, 5); mouse.screenX = s.x; mouse.screenY = s.y; mouse.ucsX = 5; mouse.ucsY = 5; } refreshCoordDisplay();`);
+        assert.match(app.eval(`document.getElementById('coords-display').textContent`), /X:—\s*Y:—/);
+        // 下絵は、モデルの今の画面の真ん中に置く（以前は用紙の位置に置かれた）
+        app.eval(`layoutShowModel(); window.__mc = screenToWcs(canvas.width / 2, canvas.height / 2); layoutShow(0);
+            ulSetImage('data:image/png;base64,', 1000, 800, { mime: 'image/png', name: 'x.pdf' });`);
+        assert.equal(app.val('layoutActive()'), false);
+        const T = app.val('_ul.img.T'), mc = app.val('window.__mc');
+        near(T[4] + (T[0] * 1000 + T[2] * 800) / 2, mc.x);
+        near(T[5] + (T[1] * 1000 + T[3] * 800) / 2, mc.y);
+        app.eval('_ul.img = null;');
+        // アプリの寸法も、ビューポートで凍結した画層は描かない（線と同じ）
+        app.eval(`{ const L = layers.findIndex(l => l.name === '寸法');
+            entities.push({ type: 'DIMENSION', subType: 'LINEAR', layer: L, p1: { x: 990, y: 495 }, p2: { x: 1010, y: 495 }, dimPos: { x: 1000, y: 505 }, dir: 'H' }); ensureEntityIds(); _bumpGeomEpoch(); }
+            layoutShow(1);`);
+        assert.deepEqual(app.val('cadLayouts[1].vps[0].hide'), ['寸法']);
+        const dims = app.val(`(() => { let n = 0; const o = drawDimLinear; drawDimLinear = function() { n++; return o.apply(this, arguments); };
+            try { _drawFrame(false); } finally { drawDimLinear = o; } return n; })()`);
+        assert.equal(dims, 0);
+        app.eval('layoutShowModel();');
+        assert.deepEqual(app.errors(), []);
+    });
+
+    it('点検で直したこと（v5.39.3）: レイアウトだけの図面（モデルが空）も空とせず、開く・閉じる・図面一式で扱う。タブの分ツールバーを上げる', () => {
+        app.eval('endGuideTour(false); entities.length = 0; layoutTabsUpdate();');
+        assert.equal(app.val('cadLayouts.length'), 2);
+        assert.equal(app.val(`document.body.classList.contains('has-space-tabs')`), true, 'タブがあるときはツールバーの下を上げる');
+        // 次のファイルを開くときは「置き換える／追加」を聞く（以前は聞かずに開き、前のレイアウトのタブが残った）
+        app.eval('window.__asked = 0; window.__cf0 = window.confirm; window.confirm = () => { window.__asked++; return true; };');
+        try { assert.equal(app.val('_prepareImportTarget()'), 'replace'); } finally { app.eval('window.confirm = window.__cf0;'); }
+        assert.equal(app.val('window.__asked'), 1);
+        assert.equal(app.val('cadLayouts.length'), 0, '置き換えるとレイアウトも閉じる');
+        assert.equal(app.val(`document.body.classList.contains('has-space-tabs')`), false);
+        // 閉じる・図面一式も、レイアウトがあれば「空」としない
+        load();
+        app.eval('entities.length = 0;');
+        assert.equal(app.val('layoutsExist()'), true);
+        app.eval('window.__cf0 = window.confirm; window.confirm = () => true;');
+        try { app.eval('closeDrawing();'); } finally { app.eval('window.confirm = window.__cf0;'); }
+        assert.equal(app.val('cadLayouts.length'), 0, '以前は「図面は空です」で閉じられなかった');
+    });
 });

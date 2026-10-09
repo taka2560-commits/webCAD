@@ -150,7 +150,8 @@ function togglePlanView() {
 }
 
 function zoomToOrigin() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); view.scale=1; _reanchorView(canvas.width/2, canvas.height/2, {x:ucs.originX, y:ucs.originY}); render(); addCommandLog('原点へズーム'); }
-function zoomExtents() {
+// quiet: true ならコマンド欄・練習ツアーに知らせない（図面一式の表紙の図。cad-webcad.js）
+function zoomExtents(quiet) {
     if(layoutZoomExtents()) return; // レイアウトの画面: 用紙全体（cad-layout.js）
     if(entities.length===0){zoomToOrigin();return;}
     let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
@@ -175,6 +176,8 @@ function zoomExtents() {
     view.scale=Math.min(sx,sy);
     const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
     _reanchorView(canvas.width/2, canvas.height/2, {x:cx, y:cy});
-    render(); addCommandLog('全体表示');
+    render();
+    if(quiet === true) return;
+    addCommandLog('全体表示');
     if(typeof guideNotify === 'function') guideNotify('extents');
 }

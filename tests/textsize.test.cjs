@@ -97,6 +97,29 @@ describe('文字の大きさ（一括）', () => {
         assert.deepEqual(heights(), ['A:0.25', 'B:0.25', 'C:0.25', 'P1:0.25', '12.5:0.25']);
     });
 
+    it('点検で直したこと（v5.39.3）: 選んだ文字は番号がずれても同じ文字・画層の初め・画層を替えたら種類の絞りを外す・変わらなければ ↩ の履歴を作らない', () => {
+        // 選んだ文字（A と B）。パネルを開いたまま前に図形が入って番号がずれても、A と B を変える（以前は別の文字を変えた）
+        app.eval(`cmdState.selectedIndices = [0, 1]; showTextSizePanel('sel');
+            entities.unshift({ type: 'LINE', layer: 0, color: null, x1: 0, y1: 0, x2: 1, y2: 0 }); ensureEntityIds();
+            document.getElementById('tsz-val').value = '7'; textSizeApply();`);
+        assert.deepEqual(heights(), ['A:7', 'B:7', 'C:2', 'P1:0.5', '12.5:0.5']);
+        // 画層で絞る: 今の画層に文字が無ければ、選ぶ欄の先頭（文字のある画層）にそろえる（以前は欄と対象がずれて 0個）
+        app.eval(`cmdState.selectedIndices = []; cmdState.highlightIdx = -1; layers.push({ name: '空', color: '#ffffff', visible: true }); initLayers();
+            currentLayerIndex = 2; _tsz.layer = -1; showTextSizePanel('layer');`);
+        assert.equal(app.val('_tsz.layer'), 0);
+        assert.equal(app.val(`document.getElementById('tsz-layer').value`), '0');
+        assert.match(panel(), /変える文字: 3個/);
+        // 点名で絞ってから画層を替えると、種類の絞りを外す（以前は見えない絞りで 0個）
+        app.eval(`textSizeKind('pt'); textSizeLayer('1');`);
+        assert.match(panel(), /変える文字: 2個/);
+        // 高さの無い文字を倍率で: 何も変わらないので ↩ の履歴を作らず、知らせる
+        app.eval(`entities.push({ type: 'TEXT', layer: 0, color: null, x: 0, y: 5, text: 'N' }); ensureEntityIds();
+            cmdState.selectedIndices = [entities.length - 1]; showTextSizePanel('sel'); textSizeHow('mul');
+            window.__u0 = undoStack.length; document.getElementById('tsz-val').value = '2'; textSizeApply();`);
+        assert.equal(app.val('undoStack.length'), app.val('window.__u0'));
+        assert.equal(app.val('entities[entities.length - 1].height'), undefined);
+    });
+
     it('お気に入り・ヘルプ・パネルの ？ にもある', () => {
         assert.ok(app.eval(`FAV_CATALOG.some(c => c.id === 'TEXTSIZE')`));
         assert.ok(app.eval(`!!document.querySelector('#top-menu-modal [data-fav="TEXTSIZE"]')`));

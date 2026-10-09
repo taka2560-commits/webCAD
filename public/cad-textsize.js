@@ -88,15 +88,15 @@ function textKindOf(e) {
 function _tsKey(h) { return String(+(+h).toPrecision(6)); }
 // idx の文字の高さを heightOf(e) にする（↩ の履歴を1つ作る）。変えた数を返す
 function textSizeSetHeights(idx, heightOf) {
-    const list = idx.filter((i) => entities[i] && entities[i].type === 'TEXT');
+    // 新しい高さが決まる文字だけ（高さの無い文字の倍率など、決まらなければ ↩ の履歴も作らない）
+    const list = idx.filter((i) => entities[i] && entities[i].type === 'TEXT').map((i) => [i, heightOf(entities[i])]).filter(([, h]) => h > 0 && isFinite(h));
     if(!list.length) return 0;
     saveUndo();
     const pts = new Map(); // 点名のまとまり → 点
     entities.forEach((e) => { if(e && e.type === 'POINT' && e.gid) pts.set(e.gid, e); });
     let n = 0;
-    list.forEach((i) => {
-        const e = entities[i], old = e.height || 0, h = heightOf(e);
-        if(!(h > 0) || !isFinite(h)) return;
+    list.forEach(([i, h]) => {
+        const e = entities[i], old = e.height || 0;
         const p = e.ptLabel && e.gid ? pts.get(e.gid) : null;
         // 点名は点の右上（高さの 0.5・0.3）に置いている。その位置のままなら、新しい高さの位置に置き直す
         if(p && old > 0) {
@@ -121,9 +121,12 @@ function _tszSelected() {
     const sel = (cmdState.selectedIndices && cmdState.selectedIndices.length) ? cmdState.selectedIndices : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
     return sel.filter((i) => entities[i] && entities[i].type === 'TEXT');
 }
+// 「選んだ文字」は図形の ID で覚え、使うときに今の番号に直す（パネルを開いたあとに ↩・削除で番号がずれても、同じ文字を変える）
+function _tszKeepSel(idx) { _tsz.selIds = idx.map((i) => _idOf(entities[i])); }
+function _tszSelIdx() { return (_tsz.selIds || []).map((id) => entityIndexById(id)).filter((i) => i >= 0 && entities[i].type === 'TEXT'); }
 // 対象（種類・高さで絞る前）
 function _tszBase() {
-    if(_tsz.scope === 'sel') return _tsz.selIdx || [];
+    if(_tsz.scope === 'sel') return _tszSelIdx();
     const out = [];
     entities.forEach((e, i) => { if(e && e.type === 'TEXT' && (_tsz.scope !== 'layer' || e.layer === _tsz.layer)) out.push(i); });
     return out;
@@ -140,7 +143,7 @@ function textSizeTargets() {
 // パネルを開く（scope: 'sel' 選んだ文字 / 'all' / 'layer'）
 window.showTextSizePanel = function(scope) {
     const sel = _tszSelected();
-    _tsz.selIdx = sel;
+    _tszKeepSel(sel);
     _tsz.scope = scope === 'sel' && sel.length ? 'sel' : scope === 'layer' ? 'layer' : (sel.length > 1 ? 'sel' : 'all');
     if(_tsz.layer < 0 || !layers[_tsz.layer]) _tsz.layer = currentLayerIndex;
     _tsz.kinds = null; _tsz.heights = null; _tsz.how = 'set';
@@ -149,6 +152,10 @@ window.showTextSizePanel = function(scope) {
 function _tszRender(keepVal) {
     const prevEl = document.getElementById('tsz-val');
     const prev = keepVal && prevEl ? prevEl.value : '';
+    const textLayers = new Map(); // 画層 → 文字の数
+    entities.forEach((e) => { if(e && e.type === 'TEXT') textLayers.set(e.layer, (textLayers.get(e.layer) || 0) + 1); });
+    // 画層で絞るとき、今の画層に文字が無ければ、選ぶ欄の先頭の画層にそろえる（以前は欄の表示と対象がずれて 0個になった）
+    if(_tsz.scope === 'layer' && !textLayers.get(_tsz.layer)) { const f = layers.findIndex((l, i) => textLayers.get(i)); if(f >= 0) _tsz.layer = f; }
     const base = _tszBase();
     const kindCount = {};
     base.forEach((i) => { const k = textKindOf(entities[i]); kindCount[k] = (kindCount[k] || 0) + 1; });
@@ -157,14 +164,13 @@ function _tszRender(keepVal) {
     kinded.forEach((i) => { const k = _tsKey(entities[i].height || 0); hc.set(k, (hc.get(k) || 0) + 1); });
     const targets = textSizeTargets();
     const segBtn = (on, onclick, label, title) => `<button type="button" class="prop-btn opt-bg-btn${on ? ' active' : ''}" aria-pressed="${on}" onclick="${onclick}"${title ? ` title="${escapeHtml(title)}"` : ''}>${label}</button>`;
-    const nSel = (_tsz.selIdx || []).length;
+    const nSel = _tszSelIdx().length;
     let h = `<div class="cogo-note">文字の高さをまとめて変えます（↩ で戻せます）。アプリで描いた寸法の文字は、オプションの「寸法の文字」で変えます。</div>`;
     h += '<div class="ts-sec" style="margin-top:6px;">対象</div><div class="opt-pref-seg" style="margin:4px 0;">' +
         segBtn(_tsz.scope === 'sel', "textSizeScope('sel')", `選んだ文字（${nSel}）`, nSel ? '' : '図面で文字を選んでから開くと使えます') +
         segBtn(_tsz.scope === 'layer', "textSizeScope('layer')", '画層') + segBtn(_tsz.scope === 'all', "textSizeScope('all')", 'すべて') + '</div>';
     if(_tsz.scope === 'layer') {
-        const cnt = new Map();
-        entities.forEach((e) => { if(e && e.type === 'TEXT') cnt.set(e.layer, (cnt.get(e.layer) || 0) + 1); });
+        const cnt = textLayers;
         const opts = layers.map((l, i) => cnt.get(i) ? `<option value="${i}"${i === _tsz.layer ? ' selected' : ''}>${escapeHtml(l.name)}（${cnt.get(i)}）</option>` : '').join('');
         h += opts ? `<select id="tsz-layer" class="prop-val" style="width:100%;margin-bottom:4px;" onchange="textSizeLayer(this.value)" aria-label="画層">${opts}</select>` : '<div class="cogo-note">文字のある画層がありません</div>';
     }
@@ -183,11 +189,11 @@ function _tszRender(keepVal) {
     showPropertyPanel(TEXTSIZE_TITLE, h);
 }
 window.textSizeScope = function(s) {
-    if(s === 'sel') { const now = _tszSelected(); if(now.length) _tsz.selIdx = now; } // パネルを開いたあとに選び直した文字
-    if(s === 'sel' && !(_tsz.selIdx || []).length) { showToast('図面で文字を選んでから「🔠 文字」を押すと、選んだ文字だけを変えられます', 3500); return; }
+    if(s === 'sel') { const now = _tszSelected(); if(now.length) _tszKeepSel(now); } // パネルを開いたあとに選び直した文字
+    if(s === 'sel' && !_tszSelIdx().length) { showToast('図面で文字を選んでから「🔠 文字」を押すと、選んだ文字だけを変えられます', 3500); return; }
     _tsz.scope = s; _tsz.kinds = null; _tsz.heights = null; _tszRender(true);
 };
-window.textSizeLayer = function(v) { _tsz.layer = parseInt(v, 10); _tsz.heights = null; _tszRender(true); };
+window.textSizeLayer = function(v) { _tsz.layer = parseInt(v, 10); _tsz.kinds = null; _tsz.heights = null; _tszRender(true); }; // 種類の絞りも外す（別の画層に無い種類で 0個にならないよう）
 window.textSizeKind = function(k) {
     if(!_tsz.kinds) _tsz.kinds = new Set();
     if(_tsz.kinds.has(k)) _tsz.kinds.delete(k); else _tsz.kinds.add(k);
@@ -210,10 +216,11 @@ window.textSizeApply = function() {
     if(!idx.length) { showToast('変える文字がありません', 2500); return; }
     const hNew = _tsz.how === 'set' ? fromDisplayUnit(v, 'len') : null;
     const n = textSizeSetHeights(idx, (e) => hNew !== null ? hNew : (e.height || 0) * v);
+    if(!n) { showToast('変えられる文字がありませんでした（高さの無い文字は、倍率では変えられません）', { kind: 'warn', ms: 3500 }); return; }
     const what = hNew !== null ? `高さ ${lengthText(hNew)}` : `${v}倍`;
     addCommandLog(`-> 文字 ${n}個の大きさを変えました（${what}）`);
     showUndoSnack(`文字 ${n}個の大きさを変えました（${what}）`);
-    // 選んだ文字は、変えたあとも同じ文字（配列の番号は変わらない）
+    // 選んだ文字は、変えたあとも同じ文字（ID で覚えている）
     _tsz.heights = null;
     _tszRender(true);
 };

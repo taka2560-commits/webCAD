@@ -284,8 +284,10 @@ function _surveyExportPoints(onlyIdx) {
 }
 // 書き出す前の確認（cad-export-preview.js）に出す、書き出しの様子
 function _surveyExportInfo(pts, lots, lotAdded) {
+    const names = pts.map(p => String(p.name)).concat((lots || []).map(l => String(l.name)));
     return { numMode: pts.numMode || 'kept', unnamed: pts.unnamed || 0, lotAdded: lotAdded || 0, pointCount: pts.length,
-        noZ: pts.filter(p => p.z === null || p.z === undefined).length, names: pts.map(p => String(p.name)).concat((lots || []).map(l => String(l.name))) };
+        noZ: pts.filter(p => p.z === null || p.z === undefined).length, names,
+        commaFixed: names.some(n => /[,\r\n]/.test(n)) }; // SIMA では空白にする（_simaField）。書き出す前の確認で知らせる
 }
 function _simaA01(p) { return `A01,${_simaField(p.num)},${_simaField(p.name)},${formatSurveyNumber(p.X)},${formatSurveyNumber(p.Y)},${p.z === null || p.z === undefined ? '' : formatSurveyNumber(p.z)},`; }
 // 測点だけの SIMA（座標データ）の行（機械の既知点へ送るときなど）。onlyIdx があれば、その図形の測点だけ

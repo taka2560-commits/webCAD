@@ -178,6 +178,8 @@ function setCoordsDisplay(ucsX, ucsY) {
 }
 // 設定を変えたとき、今の位置の座標をすぐ新しい桁数で出し直す
 function refreshCoordDisplay() {
+    // レイアウト: カーソルの用紙の位置から（ビューポートの中ならモデルの座標、外なら —）。以前は用紙の位置をモデルの座標として出した
+    if(typeof layoutActive === 'function' && layoutActive()) { const w = screenToWcs(mouse.screenX, mouse.screenY); layoutShowCoords(w.x, w.y); return; }
     const p = snapActive() ? wcsToUcs(snapResult.wcsX, snapResult.wcsY) : { x: mouse.ucsX, y: mouse.ucsY };
     setCoordsDisplay(p.x, p.y);
 }

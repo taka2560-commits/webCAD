@@ -98,7 +98,7 @@ function _buildSaveData(name) {
         entities: cleanEntities,
         layers: JSON.parse(JSON.stringify(layers)),
         currentLayerIndex: currentLayerIndex,
-        view: { x: view.x, y: view.y, scale: view.scale, rotation: view.rotation },
+        view: (({ x, y, scale, rotation }) => ({ x, y, scale, rotation }))((typeof layoutModelViewForSave === 'function') ? layoutModelViewForSave() : view), // レイアウトを見ていてもモデルの位置
         ucs: { originX: ucs.originX, originY: ucs.originY, angle: ucs.angle },
         savedUCSList: JSON.parse(JSON.stringify(savedUCSList)),
         // 図面の1単位（m / mm）。DWG・DXF を開くとファイルの単位に合わせるので、図面ごとに覚えて開いたときに戻す
@@ -116,6 +116,8 @@ function _buildSaveData(name) {
 // ===== 復元データの適用 =====
 function applyProjectData(data) {
     if (!data) return false;
+    // レイアウトを見ていたら、先にモデルに戻る（あとで前の図面のモデルの位置に戻され、開いた図面の表示の位置が消えていた）
+    if (typeof layoutShowModel === 'function') layoutShowModel(true);
     // エンティティ
     if (data.entities) entities = data.entities;
     else entities = [];
@@ -510,7 +512,9 @@ async function checkAutoRestore() {
     try {
         const data = await _dbGet(STORE_AUTOSAVE, AUTOSAVE_KEY);
         // 既に図面を開いている場合（起動直後にファイルを開いた等）は上書きしない
-        if (data && data.entities && data.entities.length > 0 && entities.length === 0) {
+        // モデルが空でもレイアウトがあれば、復元するかを聞く（レイアウトだけの図面）
+        const hasData = data && data.entities && (data.entities.length > 0 || (Array.isArray(data.layouts) && data.layouts.length > 0));
+        if (hasData && entities.length === 0 && !(typeof layoutsExist === 'function' && layoutsExist())) {
             const dt = new Date(data.savedAt);
             const dateStr = `${dt.getMonth()+1}/${dt.getDate()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
             const label = data.projectName ? `「${data.projectName}」` : (data.drawingName ? `「${data.drawingName}」` : '');

@@ -126,6 +126,47 @@ describe('線分のタッチ（仮の点 → ☑確定）', () => {
         assert.deepEqual(app.val('cmdState.startWcs'), { x: 0, y: 0 });
     });
 
+    it('点検で直したこと（v5.39.3）: U のあとの「@X,Y」は戻した点から・仮の点だけの U・別のコマンドに替えたら ↶ を残さない', async () => {
+        const tick = () => new Promise((r) => setTimeout(r, 0));
+        // U のあとの相対座標は、戻した始点から（以前は消した線の終点から引いた）
+        app.eval(`processCommand('LINE'); processCommand('0,0'); processCommand('0,100'); processCommand('U'); processCommand('@0,50');`);
+        assert.deepEqual(lines(), [[0, 0, 50, 0]]);
+        // 始点の前の仮の点だけで U: 仮の点を消し、☑確定・案内も戻す
+        app.eval(`resetCommand(); entities.length = 0; processCommand('LINE');`);
+        tap(400, 300);
+        assert.equal(confirmBtn(), '');
+        app.eval(`processCommand('U')`);
+        assert.equal(app.val('cmdState.lineCand'), null);
+        assert.equal(confirmBtn(), 'none');
+        assert.doesNotMatch(prompt(), /☑確定 で決める/);
+        // 途中で使うコマンド（ZE）なら、線分の ↶ はそのまま
+        app.eval(`resetCommand(); toggleCommand('LINE'); processCommand('0,0'); processCommand('ZE');`);
+        await tick();
+        assert.equal(app.eval('cmdState.mode'), 'WAITING_LINE_P2');
+        assert.equal(undoBtn(), '');
+        // 別のコマンド（円弧）に替えると、線分の ↶ と下のバーを残さない
+        app.eval(`toggleCommand('ARC')`);
+        await tick();
+        assert.equal(app.eval('cmdState.mode'), 'WAITING_ARC_P1');
+        assert.equal(undoBtn(), 'none');
+        assert.equal(app.eval(`document.getElementById('fs-dim-actionbar').style.display`), 'none');
+        app.eval('resetCommand();');
+    });
+
+    it('⇄ で候補を替えると仮の点も替わり、☑確定 ではその点を使う（v5.39.3。以前は古い仮の点が入った）', () => {
+        app.eval(`osnapState.main = true; osnapState.end = true; osnapState.mid = true;
+            entities.push({ type: 'LINE', layer: 0, color: null, x1: 0, y1: 0, x2: 6, y2: 0 }); ensureEntityIds(); processCommand('LINE');`);
+        tap(403, 300); // 中点 (3, 0) の近く。端点も 3px
+        assert.deepEqual(app.val('cmdState.lineCand'), { x: 3, y: 0 });
+        app.eval('cycleSnapCandidate()');
+        const s = app.val('({ x: snapResult.wcsX, y: snapResult.wcsY })');
+        assert.notDeepEqual(s, { x: 3, y: 0 });
+        assert.deepEqual(app.val('cmdState.lineCand'), s, '仮の点も選んだ候補に');
+        app.eval('dimConfirmPoint()');
+        assert.deepEqual(app.val('cmdState.startWcs'), s);
+        app.eval('resetCommand();');
+    });
+
     it('長さ0の線は作らない（同じ点をもう一度・指の二度押し）', () => {
         app.eval(`processCommand('LINE'); handlePointInput({ x: 0, y: 0 }, true); handlePointInput({ x: 0, y: 0 }, true);`);
         assert.deepEqual(lines(), []);

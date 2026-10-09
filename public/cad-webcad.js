@@ -87,7 +87,7 @@ async function _wcCoverImage() {
     if(typeof captureCleanImage !== 'function' || !(canvas.width > 0 && canvas.height > 0)) return null;
     const saved = { x: view.x, y: view.y, scale: view.scale, rotation: view.rotation };
     try {
-        if(typeof zoomExtents === 'function') zoomExtents();
+        if(typeof zoomExtents === 'function') zoomExtents(true); // コマンド欄・練習ツアーには知らせない
         const r = await captureCleanImage(1, 'image/jpeg', 0.85);
         if(!r.blob) return null;
         const jpeg = await _wcBlobBytes(r.blob);
@@ -163,7 +163,8 @@ function _wcIsPdf(u8) { return u8.length > 4 && u8[0] === 0x25 && u8[1] === 0x50
 // 図面一式の PDF から、添付ファイル（.webcad の中身）を取り出す。入っていなければ null
 function webcadFromPdf(u8) {
     if(!_wcIsPdf(u8)) return null;
-    const s = new TextDecoder('windows-1252').decode(u8); // 1バイト = 1文字（位置がそのまま使える）
+    let s;
+    try { s = new TextDecoder('windows-1252').decode(u8); } catch { return null; } // 1バイト = 1文字（位置がそのまま使える）。大きすぎて文字にできなければ入っていない扱い
     const m = /\/Length (\d+) \/Type \/EmbeddedFile \/WebCADPack 1 >>\r?\nstream\r?\n/.exec(s);
     if(!m) return null;
     const start = m.index + m[0].length, len = Number(m[1]);
@@ -171,6 +172,7 @@ function webcadFromPdf(u8) {
 }
 // 📁開く で PDF を選んだとき: 図面一式が入っていれば開く。入っていなければ、下絵にするかを聞く
 async function openPdfFile(file) {
+    if(typeof layoutShowModel === 'function') layoutShowModel(); // 下絵にするときはモデルに置く（レイアウトを見ていると用紙の位置に置かれた）
     let u8;
     try { u8 = new Uint8Array(await file.arrayBuffer()); } catch(err) { notify(`エラー: ${file.name} を読めませんでした - ${err.message}`, { kind: 'error', ms: 5000 }); return false; }
     if(webcadFromPdf(u8)) return loadWebcadFile(file);
@@ -183,27 +185,35 @@ function _wcSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Ma
 // 保存（ダウンロード）は .webcad のまま。スマホ・タブレットの「📤 送る」だけは PDF の形（表紙＋添付ファイルに .webcad の中身）で送る（v5.39.1）。
 // .webcad は LINE が受け取らず、Android の Chrome の共有メニューでも送れなかった（送れるのは画像・PDF・テキストなどだけ）。
 // 受け取った PDF は 📁開く で選ぶと図面一式として開く（openPdfFile）。PC の PDF 閲覧ソフトでは表紙（図面の絵・開き方・アプリの QR）が見え、添付ファイルとして .webcad も取り出せる。
-// 共有メニューは押したその場で呼ばないと断られる（iPhone）ので、PDF は「📤 送る」を出す前に作っておく
+// 共有メニューは押したその場で呼ばないと断られる（iPhone）ので、PDF は「📤 送る」を出す前に作っておく。
+// .webcad は PDF を作る前に保存する（写真の多い一式で、PDF を作る途中に端末のメモリが足りなくなっても、保存は済んでいる）
+let _wcExporting = false; // 書き出しの途中（続けて押しても1回だけ。表紙の図のために表示を動かすので、2回目が動いた表示を「元」と覚えないよう）
 async function exportWebcadFile() {
-    if(!entities.length) { notify('図面が空なので、書き出すものがありません', { kind: 'warn', ms: 3000 }); return; }
+    if(!entities.length && !(typeof layoutsExist === 'function' && layoutsExist())) { notify('図面が空なので、書き出すものがありません', { kind: 'warn', ms: 3000 }); return; }
+    if(_wcExporting) return;
+    _wcExporting = true;
     busyStart('図面一式を書き出しています…');
     try {
         await busyPaint();
         const r = await buildWebcadDoc();
         const bytes = await webcadPack(r.text);
-        const base = r.name.replace(/[\\/:*?"<>|]/g, '_');
-        let share = null;
-        if(typeof _shareTouchDevice === 'function' && _shareTouchDevice()) {
-            try { share = { blob: new Blob([await webcadPdf(bytes, r)], { type: 'application/pdf' }), name: base + WEBCAD_PDF_SUFFIX, note: 'LINE などへは PDF の形で送ります' }; }
-            catch(e) { console.warn('送る用の PDF を作れませんでした:', e); } // 作れなくても保存はする
-        }
-        downloadBlob(new Blob([bytes], { type: 'application/octet-stream' }), base + WEBCAD_EXT, share);
-        notify(`-> 図面一式を書き出しました（${r.name}${WEBCAD_EXT}: 図形 ${entities.length}・写真 ${r.photoCount}枚${r.hasUnderlay ? '・下絵' : ''}、${_wcSize(bytes.length)}）`, { kind: 'success', ms: 3500 });
+        const base = r.name.replace(/[\\/:*?"<>|]/g, '_'), name = base + WEBCAD_EXT;
+        const pack = new Blob([bytes], { type: 'application/octet-stream' });
+        const sendPdf = typeof _shareTouchDevice === 'function' && _shareTouchDevice() && !!navigator.share; // 共有メニューのある指の端末だけ PDF を作る
+        downloadBlob(pack, name, sendPdf ? false : undefined);
+        notify(`-> 図面一式を書き出しました（${name}: 図形 ${entities.length}・写真 ${r.photoCount}枚${r.hasUnderlay ? '・下絵' : ''}、${_wcSize(bytes.length)}）`, { kind: 'success', ms: 3500 });
         if(r.missing) addCommandLog(`  注意: この端末に見つからない写真 ${r.missing}枚 は入れていません`);
+        if(sendPdf) {
+            let pdf = null;
+            try { pdf = new Blob([await webcadPdf(bytes, r)], { type: 'application/pdf' }); }
+            catch(e) { console.warn('送る用の PDF を作れませんでした:', e); } // 作れなければ .webcad のまま（Android では「📤 送り方」）
+            if(pdf) offerShare(pdf, base + WEBCAD_PDF_SUFFIX, { saved: name, note: 'LINE などへは PDF の形で送ります' });
+            else offerShare(pack, name);
+        }
     } catch(err) {
         notify(`エラー: 図面一式を書き出せませんでした - ${err.message}`, { kind: 'error', ms: 5000 });
         console.error('図面一式の書き出しエラー:', err);
-    } finally { busyEnd(); }
+    } finally { busyEnd(); _wcExporting = false; }
 }
 
 // ===== 開く: 中身を確かめる =====
@@ -325,7 +335,8 @@ async function applyWebcadDoc(d, fileName) {
     applyProjectData(d.project);
     // 保存一覧の同じ名前の図面を上書きしないよう、名前は付けずに開く（💾保存で名前を付ける）
     window.setCurrentProjectName(null);
-    if(typeof setDrawingName === 'function') setDrawingName(d.project.drawingName || String(fileName || '').replace(/\.webcad$/i, '') || d.project.name);
+    // 名前の無い図面は、ファイル名から（LINE で受け取った「名前_図面一式.pdf」も「名前」に。以前は「名前_図面一式.pdf.dxf」などになった）
+    if(typeof setDrawingName === 'function') setDrawingName(d.project.drawingName || String(fileName || '').replace(/(_図面一式)?\.(webcad|pdf)$/i, '') || d.project.name);
     if(typeof zoomExtents === 'function') zoomExtents(); // 別の端末では画面の大きさが違う
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
     if(typeof render === 'function') render();

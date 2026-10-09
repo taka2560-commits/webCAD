@@ -34,6 +34,28 @@ function _lineBar() {
     else setPrompt(first ? '1点目:' : '次の点:');
 }
 
+// ほかのコマンドを始める前（processCommand）: 線分が出した下のバーを片付ける（以前は ↶・☑確定 が別のコマンドに残った）。
+// 線分のまま続くとき（ZE など途中で使うコマンド・打ち間違い）は、終わったあとに出し直す
+function lineBeforeOtherCommand() {
+    if(!_isLineMode(cmdState.mode)) return;
+    const ub = document.getElementById('line-undo-btn');
+    if(ub) ub.style.display = 'none';
+    const ab = document.getElementById('fs-dim-actionbar');
+    if(ab) {
+        ab.style.display = 'none';
+        const cb = ab.querySelector('button[onclick="dimConfirmPoint()"]');
+        if(cb) cb.style.display = '';
+    }
+    Promise.resolve().then(() => { if(_isLineMode(cmdState.mode)) _lineBar(); });
+}
+// ⇄ で候補を替えた・「次の1点だけ」を選んだとき（cad-snap.js）: 仮の点もその候補に置き直す（以前は ☑確定 で古い点が入った）
+function lineSnapChanged() {
+    if(!cmdState.lineCand || !_isLineMode(cmdState.mode)) return;
+    const pt = getInputPoint();
+    cmdState.lineCand = { x: pt.x, y: pt.y };
+    _lineBar();
+    render();
+}
 // 指を離したとき（cad-input.js）。「☑確定で引く」なら仮の点にして true（線はまだ引かない）
 function lineTouchCandidate() {
     if(!_isLineMode(cmdState.mode) || !lineTouchConfirmOn()) return false;
@@ -105,6 +127,7 @@ function lineUndoStep() {
         saveUndo();
         entities.splice(i, 1);
         cmdState.startWcs = { x: e.x1, y: e.y1 };
+        if(typeof snapSetLastInput === 'function') snapSetLastInput(cmdState.startWcs); // 「@X,Y」も戻した点から（以前は消した線の終点から）
         addCommandLog('-> 最後に引いた線を消しました（その始点から引き直せます）');
         if(typeof showToast === 'function') showToast('↶ 最後に引いた線を消しました', 1800);
         _lineBar();
@@ -120,6 +143,8 @@ function lineUndoStep() {
         return true;
     }
     if(typeof notify === 'function') notify('戻せる線はありません', 1800);
+    _lineBar(); // 仮の点を消したので、☑確定・案内も合わせる
+    render();
     return true;
 }
 window.lineUndoStep = lineUndoStep;

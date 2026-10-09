@@ -374,18 +374,21 @@ function drawDimOrdinate(e, color) {
 }
 
 // ===== 全寸法描画（cad-core.jsから呼ばれる） =====
-function drawAllDimensions() {
+// opt（レイアウトのビューポート。cad-layout.js）: { hideLayers: ビューポートで凍結した画層の番号, plain: 選択・薄い表示の色を付けない }
+function drawAllDimensions(opt) {
+    const o = opt || {};
     ctx.save();
-    const hlIdx = cmdState.highlightIdx;
-    const pick = layoffPickSet(); // タッチ非表示で消す候補にした画層（赤く描く）
+    const hlIdx = o.plain ? -1 : cmdState.highlightIdx;
+    const pick = o.plain ? null : layoffPickSet(); // タッチ非表示で消す候補にした画層（赤く描く）
     entities.forEach((e, i) => {
         if(e.type !== 'DIMENSION') return;
+        if(o.hideLayers && o.hideLayers.has(e.layer)) return;
 
         const lyrVisible = e.layer === undefined || !layers[e.layer] || layers[e.layer].visible;
         const entityVisible = !e.hidden;
 
         if (!entityVisible) return;
-        if (!lyrVisible && !window.ghostLayerMode) return; // ghostLayerModeがOFFで画層非表示なら描画をスキップ
+        if (!lyrVisible && (o.plain || !window.ghostLayerMode)) return; // ghostLayerModeがOFFで画層非表示なら描画をスキップ（レイアウトでは薄くも描かない）
 
         ctx.save();
         if (!lyrVisible) {

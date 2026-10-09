@@ -23,6 +23,10 @@ const LAYOUT_STAY_COMMANDS = new Set(['CANCEL', 'ZE', 'ZOOM', 'PNGOUT', 'PNG', '
 const LAYOUT_STAY_PANELS = new Set(['オプション', '❓ ヘルプ・操作ガイド', '画層一括管理']);
 
 function layoutActive() { return _layoutIdx >= 0 && !!cadLayouts[_layoutIdx]; }
+// 保存する表示の位置: レイアウトを見ている間は、モデルの表示の位置（以前は用紙の位置を保存し、開き直すとモデルが画面の外だった）
+function layoutModelViewForSave() { return (layoutActive() && _layoutModelView) || view; }
+// 図面にレイアウトがあるか（モデルが空でも「空の図面」とは扱わない。開く・閉じる・図面一式・自動保存）
+function layoutsExist() { return cadLayouts.length > 0; }
 function layoutCurrent() { return layoutActive() ? cadLayouts[_layoutIdx] : null; }
 
 // ===== 取り込み =====
@@ -259,6 +263,10 @@ function layoutShow(i) {
     const L = cadLayouts[i];
     if(!L || _layoutIdx === i) return;
     if(cmdState.mode !== 'IDLE') resetCommand();
+    // 開いているパネルは、レイアウトでも使えるもの（オプション・ヘルプ・画層一括管理）のほかは閉じる
+    // （以前は座標一覧などが残り、行を押すとモデルの座標でレイアウトの表示が動いた）
+    const pp = document.getElementById('property-panel'), ppt = document.getElementById('property-panel-title');
+    if(pp && pp.style.display === 'flex' && !LAYOUT_STAY_PANELS.has(ppt ? ppt.textContent : '') && typeof closePropertyPanel === 'function') closePropertyPanel();
     _layoutSaveView();
     if(_layoutIdx < 0) _layoutModelView = { x: view.x, y: view.y, scale: view.scale, rotation: view.rotation };
     _layoutIdx = i;
@@ -339,7 +347,7 @@ function layoutTabsUpdate() {
     const label = document.querySelector('#status-bar .paper-space-label');
     if(label) label.textContent = layoutActive() ? layoutCurrent().name : 'モデル';
     let el = document.getElementById('space-tabs');
-    if(!cadLayouts.length) { if(el) el.style.display = 'none'; return; }
+    if(!cadLayouts.length) { if(el) el.style.display = 'none'; document.body.classList.remove('has-space-tabs'); return; }
     el = _layoutTabsEl();
     const tab = (i, name) => {
         const on = i === _layoutIdx;
@@ -351,6 +359,7 @@ function layoutTabsUpdate() {
     const sel = document.getElementById('sel-actionbar');
     const selShown = !!sel && sel.style.display === 'flex';
     el.style.display = (layoutActive() || ((typeof cmdState === 'undefined' || cmdState.mode === 'IDLE') && !selShown)) ? 'flex' : 'none';
+    document.body.classList.toggle('has-space-tabs', el.style.display === 'flex'); // 左のツールバーの下をタブの分だけ上げる（index.html）
 }
 
 // ===== 描く =====
@@ -442,7 +451,7 @@ function _layoutDrawViewport(vp, Lv) {
     if(vp.hide && vp.hide.length) { const set = new Set(vp.hide); hide = new Set(); layers.forEach((l, i) => { if(set.has(l.name)) hide.add(i); }); }
     view = layoutVpView(vp, Lv);
     drawEntities({ cull, hideLayers: hide, plain: true });
-    drawDimensions();
+    drawDimensions({ hideLayers: hide, plain: true }); // アプリの寸法も、凍結した画層・非表示の画層は描かない（選択の色も付けない）
     view = Lv;
     ctx.restore();
     // 枠（画層が表示のときだけ。薄い線）

@@ -644,6 +644,7 @@ function processCommand(cmdText) {
         }
     }
     // WAITING_TEXT_STR was removed
+    if(cmd !== 'U' && cmd !== 'UNDO' && typeof lineBeforeOtherCommand === 'function') lineBeforeOtherCommand(); // 線分の下のバーを片付ける（cad-line.js）
     // 作図・編集のコマンド（鏡像・尺度変更・配列・分割・結合・角の処理）と、その途中で入れる数（倍率・半径など）（cad-edit.js）
     if(typeof processEditCommand === 'function' && processEditCommand(cmd)) return;
     if(cmd==='C' && cmdState.mode==='WAITING_PLINE_NEXT' && cmdState.points.length>=2) { finishPline(true); return; }

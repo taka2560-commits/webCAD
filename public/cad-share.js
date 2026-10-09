@@ -46,16 +46,22 @@ function offerShare(blob, filename, opt) {
         return true;
     }
     if(!canShareFile(file)) return false;
-    showSnack(msg, { kind: 'success', ms: 9000, action: { label: '📤 送る', run: () => shareFile(file) } });
+    showSnack(msg, { kind: 'success', ms: 9000, action: { label: '📤 送る', run: () => shareFile(file, o.saved) } });
     return true;
 }
-async function shareFile(file) {
+// saved: 保存したファイルの名前（送るものと違うとき。図面一式は .webcad を保存して PDF を送る）
+async function shareFile(file, saved) {
     try {
         await navigator.share({ files: [file], title: file.name });
         addCommandLog(`-> 共有メニューで送りました: ${file.name}`);
     } catch(err) {
         if(err && err.name === 'AbortError') return; // 共有メニューを閉じた
-        if(err && err.name === 'NotAllowedError') { showShareSteps(file.name, true); return; } // 種類などで断られた → アプリの側から選ぶ手順
+        if(err && err.name === 'NotAllowedError') { // 種類・大きさなどで断られた → 保存したファイルを、アプリの側から選ぶ手順
+            // 送るものを別に作っていたら（図面一式の PDF）、それも保存する（手順で選ぶファイルが無い、にならないよう）
+            if(saved && saved !== file.name && typeof downloadBlob === 'function') downloadBlob(file, file.name, false);
+            showShareSteps(file.name, true);
+            return;
+        }
         showToast('送れませんでした: ' + ((err && err.message) || err), { kind: 'error', ms: 4000 });
     }
 }

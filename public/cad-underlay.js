@@ -170,6 +170,7 @@ function ulAlignTwoPoints(T, a1, a2, b1, b2) {
 // 下絵にする（src: 描ける画像、w・h: 画像の大きさ、file: { mime, data（ArrayBuffer）, name, ow・oh（縮める前の大きさ）, pdf・pdfName・page・pages（PDF のとき） }）
 function ulSetImage(src, w, h, file, T) {
     const f = file || {};
+    if(!T && typeof layoutShowModel === 'function') layoutShowModel(); // 下絵はモデルの今の画面に合わせて置く（レイアウトを見ていると用紙の位置に置かれた）
     _ul.img = { src, w, h, T: T || ulFitTransform(w, h), opacity: 0.6, on: true, mime: f.mime, data: f.data, name: f.name || '',
         ow: f.ow || w, oh: f.oh || h, pdf: f.pdf || null, pdfName: f.pdfName || '', page: f.page || 0, pages: f.pages || 0 };
     render();

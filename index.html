@@ -631,6 +631,7 @@
         #space-tabs button { flex:0 0 auto; min-height:30px; padding:0 12px; border-radius:15px; border:1px solid var(--border-3); background:var(--btn-fill); color:#e0e0e0; font-size:12px; white-space:nowrap; cursor:pointer; }
         #space-tabs button.active { border-color:var(--brand); color:var(--brand); background:rgba(var(--brand-rgb),0.12); font-weight:700; }
         body.fullscreen-mode #space-tabs { display:none !important; }
+        body.has-space-tabs:not(.fullscreen-mode) #toolbar { bottom: calc(17px + 38px * var(--btn-k, 1) + 44px); } /* タブの分だけ上げる（ツールバーの下の段がタブに隠れていた） */
         /* レイアウトの画面は見るだけ: 作図の道具・コマンド・お気に入り・選んだときのバー・スナップの切り替えを隠す */
         body.layout-mode #toolbar, body.layout-mode #fav-bar, body.layout-mode #command-line-area, body.layout-mode #sel-actionbar,
         body.layout-mode #fs-dim-actionbar, body.layout-mode #btn-coordread, body.layout-mode #btn-area-select, body.layout-mode #btn-ortho,
