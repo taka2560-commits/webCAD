@@ -191,50 +191,31 @@ function saveLastParams() {
     } catch(e) {}
 }
 
-// 円モード切り替え（自動・固定半径 ⇔ 手動・2点指定）
-window.toggleCircleMode = function() {
-    lastParams.circleMode = (lastParams.circleMode === 'auto') ? 'manual' : 'auto';
-    saveLastParams();
-    if(navigator.vibrate) navigator.vibrate(15);
-    updateCircleActionBar();
-    const isAuto = lastParams.circleMode === 'auto';
-    const rVal = parseFloat(lastParams.radius) || 50;
-    if (isAuto) {
-        cmdState.presetRadius = rVal;
-        cmdState.startWcs = null;
-        setPrompt(`円 (自動・半径${lengthText(rVal)}): 中心をタップ → 「確定」`);
-        addCommandLog(`-> 円作図モード: 【固定半径 (自動)】 半径=${lengthText(rVal)}`);
-    } else {
-        cmdState.presetRadius = 0;
-        cmdState.startWcs = null;
-        setPrompt('円 (手動): 1点目(中心)をタップ');
-        addCommandLog('-> 円作図モード: 【手動 (2点指定)】');
-    }
-    render();
-};
+// 円の描き方を選ぶ（下のバーの 🔄。固定半径・中心と半径・3点・2点（直径）・接線・接線・半径。cad-circle.js）
+window.toggleCircleMode = function() { circleChooseMode(); };
 
 function updateCircleActionBar() {
-    const isAuto = lastParams.circleMode === 'auto';
     const modeBtn = document.getElementById('dim-mode-toggle');
-    if(modeBtn && (cmdState.mode === 'WAITING_CIRCLE_CENTER' || cmdState.mode === 'WAITING_CIRCLE_RADIUS')) {
+    if(modeBtn && String(cmdState.mode).startsWith('WAITING_CIRCLE_')) {
         modeBtn.style.display = '';
-        modeBtn.innerHTML = isAuto ? `🔄 自動 (半径:${lengthText(parseFloat(lastParams.radius) || 50)})` : '🔄 手動 (2点)';
+        modeBtn.textContent = circleModeButtonText();
         modeBtn.onclick = window.toggleCircleMode;
     }
 }
 
+// 半径の欄を使う描き方（固定半径・接線・接線・半径）
+function _circleUsesRadius(m) { return m === 'auto' || m === 'ttr'; }
 function showCirclePanel() {
-    const isAuto = lastParams.circleMode === 'auto';
+    const mode = circleMode(), useR = _circleUsesRadius(mode);
+    const radios = CIRCLE_MODES.map(([k, label, desc]) => `
+            <label title="${escapeHtml(desc)}">
+                <input type="radio" name="circle-mode-radio" value="${k}" ${k === mode ? 'checked' : ''} onchange="onCircleModeRadioChange('${k}')"> ${escapeHtml(label)}
+            </label>`).join('');
     const html = `
-        <div class="prop-row" style="gap:12px; margin-bottom:8px;">
-            <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:12px;">
-                <input type="radio" name="circle-mode-radio" value="auto" ${isAuto ? 'checked' : ''} onchange="onCircleModeRadioChange('auto')"> 固定半径 (自動)
-            </label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:12px;">
-                <input type="radio" name="circle-mode-radio" value="manual" ${!isAuto ? 'checked' : ''} onchange="onCircleModeRadioChange('manual')"> 手動 (2点)
-            </label>
+        <div class="circle-modes" role="radiogroup" aria-label="円の描き方">${radios}
         </div>
-        <div class="prop-row" id="circle-r-row" style="${isAuto ? '' : 'opacity:0.5;'}">
+        <div class="cogo-note" id="circle-mode-desc" style="margin:-2px 0 6px;">${escapeHtml(CIRCLE_MODES.find(([k]) => k === mode)[2])}</div>
+        <div class="prop-row" id="circle-r-row" style="${useR ? '' : 'opacity:0.5;'}">
             <label>半径${displayUnitTag('len')}:</label>
             <input type="number" id="prop-circle-r" value="${displayUnitNum(parseFloat(lastParams.radius) || 50, 'len')}" min="0" step="any" placeholder="半径を入力">
         </div>
@@ -246,13 +227,15 @@ function showCirclePanel() {
 window.onCircleModeRadioChange = function(mode) {
     lastParams.circleMode = mode;
     const rRow = document.getElementById('circle-r-row');
-    if (rRow) rRow.style.opacity = (mode === 'auto') ? '1' : '0.5';
+    if (rRow) rRow.style.opacity = _circleUsesRadius(mode) ? '1' : '0.5';
+    const d = document.getElementById('circle-mode-desc'), row = CIRCLE_MODES.find(([k]) => k === mode);
+    if (d && row) d.textContent = row[2];
 };
 
 // 円: 半径を確定して作図開始
 function applyCirclePreset(){
     const el=document.getElementById('prop-circle-r');
-    if(el && lastParams.circleMode === 'auto') { // 固定半径: 読めない・0 以下なら欄に理由を出して始めない（以前は黙って前の半径で始めた）
+    if(el && _circleUsesRadius(circleMode())) { // 固定半径・接線接線半径: 読めない・0 以下なら欄に理由を出して始めない（以前は黙って前の半径で始めた）
         const v = fieldNum(el, { gt: 0, what: '半径' });
         if(v === undefined) return;
         lastParams.radius=String(fromDisplayUnit(v, 'len')); // 入力は表示の単位（オプションの長さの単位）
@@ -260,22 +243,7 @@ function applyCirclePreset(){
     saveLastParams();
     hidePropertyPanel();
     
-    const isAuto = lastParams.circleMode === 'auto';
-    const rVal = parseFloat(lastParams.radius) || 50;
-    if (isAuto) {
-        cmdState.presetRadius = rVal;
-        cmdState.mode = 'WAITING_CIRCLE_CENTER';
-        setPrompt(`円 (自動・半径${lengthText(rVal)}): 中心をタップ → 「確定」`);
-        addCommandLog(`-> 半径 ${lengthText(rVal)} の固定円モード。中心を指定して「確定」`);
-    } else {
-        cmdState.presetRadius = 0;
-        cmdState.mode = 'WAITING_CIRCLE_CENTER';
-        setPrompt('円 (手動): 1点目(中心)をタップ');
-        addCommandLog('-> 手動円モード。中心を指定');
-    }
-    showActionbarControls({ showMode: true });
-    updateCircleActionBar();
-    render();
+    circleBeginMode('panel'); // cad-circle.js
 }
 // 長方形: 幅・高さを確定して1点クリックで作図
 function applyRectPreset(){

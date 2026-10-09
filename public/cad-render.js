@@ -578,6 +578,7 @@ function drawRubberBand() {
         const c=wcsToScreen(sw.x,sw.y), r=dist(sw.x,sw.y,pt.x,pt.y)*view.scale; 
         ctx.beginPath();ctx.arc(c.x,c.y,r,0,Math.PI*2);ctx.stroke(); 
     }
+    else if(typeof drawCirclePreview === 'function' && drawCirclePreview(mp)) { /* 円の 3点・2点・接線・接線・半径の仮の円（cad-circle.js） */ }
     else if(m==='WAITING_CIRCLE_CENTER' && lastParams.circleMode === 'auto') {
         const center = sw || mp;
         const c = wcsToScreen(center.x, center.y);

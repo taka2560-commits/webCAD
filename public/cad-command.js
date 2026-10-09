@@ -101,6 +101,7 @@ function _handlePointInputCore(wcs, fromMouse) {
     }
     if(m==='WAITING_LINE_P1') { lineSetStart(wcs); return; } // 線分（cad-line.js）
     if(m==='WAITING_LINE_P2') { lineAddSegment(wcs, fromMouse); return; } // 長さ0の線は作らない
+    if(circleHandlePoint(wcs)) return; // 円の 3点・2点（直径）・接線・接線・半径（cad-circle.js）
     if(m==='WAITING_CIRCLE_CENTER') {
         const isAuto = lastParams.circleMode === 'auto';
         cmdState.startWcs = {x: wcs.x, y: wcs.y};
@@ -629,6 +630,7 @@ function processCommand(cmdText) {
         if(w && cmdState.mode !== 'IDLE') handlePointInput(w, true); else addCommandLog('-> 相対座標の基準になる点がありません（先に1点を入力してください）');
         return;
     }
+    if(circleCommandInput(cmd)) return; // 円の途中の 3P・2P・TTR・CEN と、接線・接線・半径の半径（cad-circle.js）
     const numMatch = cmd.match(/^(-?\d+(\.\d+)?)$/);
     if(numMatch) {
         const val = fromDisplayUnit(parseFloat(numMatch[1]), 'len');
@@ -703,22 +705,8 @@ function processCommand(cmdText) {
     else if(cmd==='L'||cmd==='LINE') { cmdState.mode='WAITING_LINE_P1'; setPrompt('1点目:'); setActiveTool('LINE'); addCommandLog('-> 1点目を指定'); lineStart(); } // タッチは ☑確定 で引く・↶ 1つ戻す（cad-line.js）
     else if(cmd==='C'||cmd==='CIRCLE') {
         materializeSizeDefault('radius', 40); // 一度も変えていなければ、画面に合った半径にする
-        const isAuto = lastParams.circleMode === 'auto';
-        const rVal = parseFloat(lastParams.radius) || 50;
-        if (isAuto) {
-            cmdState.presetRadius = rVal;
-            cmdState.mode = 'WAITING_CIRCLE_CENTER';
-            setPrompt(`円 (自動・半径${lengthText(rVal)}): 中心を指定 → 「確定」`);
-            addCommandLog(`-> 円作図: 【固定半径 (自動: 半径${lengthText(rVal)})】 中心を指定して「確定」`);
-        } else {
-            cmdState.presetRadius = 0;
-            cmdState.mode = 'WAITING_CIRCLE_CENTER';
-            setPrompt('円 (手動): 中心を指定:');
-            addCommandLog('-> 円作図: 【手動 (2点指定)】 中心を指定');
-        }
+        circleBeginMode('start'); // 固定半径・中心と半径・3点・2点（直径）・接線・接線・半径（cad-circle.js）
         setActiveTool('CIRCLE');
-        showActionbarControls({ showMode: true });
-        updateCircleActionBar();
         showCirclePanel();
     }
     else if(cmd==='REC'||cmd==='RECTANG') {
@@ -874,6 +862,7 @@ window.plineCloseFromBar = function() {
 window.dimConfirmPoint = function() {
     if(cmdState.mode === 'WAITING_LAYOFF_TOUCH') { layoffConfirm(); return; } // タッチ非表示: 消す候補の画層を非表示に（cad-panels.js）
     if(lineConfirmCandidate()) return; // 線分: 仮の点で決める（cad-line.js）
+    if(circleConfirm()) return; // 円の 3点・2点・接線・接線・半径: 仮の円を描く（cad-circle.js）
     if(typeof editConfirm === 'function' && editConfirm()) return; // 結合・配列の確定（cad-edit.js）
     if(cmdState.mode === 'WAITING_PLINE_NEXT') { finishPline(false); return; } // ポリラインの完了
     if(cmdState.mode.startsWith('WAITING_DIM')) {

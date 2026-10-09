@@ -552,7 +552,10 @@ const GUIDE_HINTS = [
         { when: () => cmdState.points.length > 0, text: { touch: '次の点をタップ。☑確定 で完了、⭘閉じる で閉じた形に', pc: '次の点をクリック。☑確定（または Enter）で完了、⭘閉じる で閉じた形に' } }] },
     { key: 'RECT', title: '□ 長方形', prefix: 'WAITING_RECT_', steps: [{ modes: ['P1'], text: '1つ目の角をタップ' }, { modes: ['P2'], text: '反対側の角をタップ' }] },
     { key: 'CIRCLE', title: '◯ 円', prefix: 'WAITING_CIRCLE_', steps: [
-        { modes: ['CENTER'], text: '中心をタップして ☑確定（半径は最初のパネルで決めた値）' }, { modes: ['RADIUS'], text: '半径の位置をタップして ☑確定' }] },
+        { modes: ['CENTER'], text: '中心をタップして ☑確定（半径は最初のパネルで決めた値）' }, { modes: ['RADIUS'], text: '半径の位置をタップして ☑確定' },
+        { modes: ['3P'], text: '円周の点を3つタップ。3つ目のあと ☑確定（下の 🔄 で描き方を変えられます）' },
+        { modes: ['2P'], text: '直径の両端をタップ。2つ目のあと ☑確定' },
+        { modes: ['TTR'], text: '接する線・円を2つタップして ☑確定（半径は最初のパネル。コマンド欄に数を打っても変わります）' }] },
     { key: 'ARC', title: '⌒ 円弧', prefix: 'WAITING_ARC_', steps: [{ modes: ['P1'], text: '始点をタップ' }, { modes: ['P2'], text: '円弧が通る点をタップ' }, { modes: ['P3'], text: '終点をタップ' }] },
     { key: 'ELLIPSE', title: '⬭ 楕円', prefix: 'WAITING_ELLIPSE_', steps: [{ modes: ['CENTER'], text: '中心をタップ' }, { modes: ['X'], text: '横方向の端をタップ' }, { modes: ['Y'], text: '縦方向の端をタップ' }] },
     { key: 'MOVE', title: '✥ 移動', prefix: 'WAITING_MOVE_', steps: [

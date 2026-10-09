@@ -430,6 +430,8 @@ function getBaseWcs() {
     if(m === 'WAITING_LINE_P2' || m === 'WAITING_CIRCLE_RADIUS' || m === 'WAITING_RECT_P2') return cmdState.startWcs;
     if((m === 'WAITING_UCS_2P_XDIR' || m === 'WAITING_UCS_2P_XDIR_PREVIEW') && cmdState.startWcs) return cmdState.startWcs;
     if(m === 'WAITING_PLINE_NEXT' && cmdState.points.length > 0) return cmdState.points[cmdState.points.length - 1];
+    // 円の 3点・2点（直径）: 直前に指定した円周の点から（cad-circle.js）
+    if((m === 'WAITING_CIRCLE_3P' || m === 'WAITING_CIRCLE_2P') && cmdState.points && cmdState.points.length > 0) return cmdState.points[cmdState.points.length - 1];
     if(m === 'WAITING_MOVE_DEST' || m === 'WAITING_COPY_DEST') return cmdState.moveBase;
     // 3点円弧: 直前に指定した点から
     if((m === 'WAITING_ARC_P2' || m === 'WAITING_ARC_P3') && cmdState.points && cmdState.points.length > 0) return cmdState.points[cmdState.points.length - 1];

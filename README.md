@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.39.3（2026年10月9日リリース）**
+**現在のバージョン: v5.40（2026年10月9日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -31,6 +31,7 @@
 ### ✏️ 描く・直す
 - 線分・ポリライン・長方形・円・円弧・楕円・文字・塗りつぶし・点（座標一覧に入る）。
 - 移動・複写・回転・削除・オフセット・トリム・延長・鏡像・尺度変更・配列・分割・等分・結合・角の処理（フィレット・面取り）、グリップで点を動かす。
+- **円の描き方**（v5.40）: 固定半径・中心と半径に加えて、3点（円周の3点を通る）・2点（直径）・接線・接線・半径（2つの線・円に接する）。作図設定・下のバーの 🔄、コマンド欄の 3P・2P・TTR で選びます。
 - **線分のタッチ**（v5.35）: 指を離した所は仮の点（緑の輪）になり、☑確定 で線を引きます。画面に触れてしまっても線は引かれません（オプションで「離したらすぐ」にもできます）。↶ 1つ戻す（U）で最後の線を消せます。
 - **文字の大きさをまとめて変える**（v5.36）: 選んだ文字・画層・すべてを、種類（点名・寸法の値など）と今の高さで絞り、高さの指定か倍率で変えます。
 - 線種（破線・一点鎖線など）と線の太さ（画層・図形ごと）。ブロック・グループ（1回のタップでまとめて選ぶ・分解）。画層一括管理（うっすら表示・タッチで非表示・画層の色）。
@@ -93,7 +94,7 @@
 | **LINE** | `L` | 線分 |
 | **PLINE** | `PL` | ポリライン |
 | **RECTANG** | `REC` | 長方形 |
-| **CIRCLE** | `C` | 円 |
+| **CIRCLE** | `C` | 円（3P・2P・TTR） |
 | **ARC** | `A` | 円弧 |
 | **ELLIPSE** | `EL` | 楕円 |
 | **TEXT** | `T` | 文字 |
@@ -198,7 +199,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（771件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（779件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -237,6 +238,7 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
   | `cad-render.js` | 描画の呼び出し管理、描画キャッシュ、ルーペ、図形・軸・補助表示の描画 |
   | `cad-command.js` | 点入力の補正と各コマンドの処理、オフセット・回転・トリム・延長、コマンド解釈 |
   | `cad-line.js` | 線分の点の入れ方（タッチは仮の点と ☑確定、↶ 1つ戻す、長さ0の線を作らない） |
+  | `cad-circle.js` | 円の描き方（3点・2点（直径）・接線・接線・半径。仮の円と ☑確定、コマンド欄の 3P・2P・TTR） |
   | `cad-input.js` | マウス・タッチ・キーボードのイベント、パン/ピンチ/範囲選択 |
   | `cad-panels.js` | ブロック管理、画層の一括管理、プロパティパネル、選択アクションバー |
   | `cad-survey.js` | 測量（SIMA・座標CSV、座標一覧、現在地GNSS） |
@@ -277,6 +279,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-09: バージョン5.40（円の描き方を増やす）** ◯
+  * cad-circle.js（新）: CIRCLE_MODES（auto・manual・3p・2p・ttr。lastParams.circleMode）、circleBeginMode（cad-command.js の CIRCLE・作図設定・🔄 から）、circleFrom3（1点目からの差で計算）・circleFrom2・circleTanShape（線・円・円弧・ポリラインと長方形はタップの近くの辺）・circleTanTanRadius（r ずらした直線と R±r の円の交点 → 接する所がタップに近いもの）、circleHandlePoint・circleConfirm・circleCommandInput（3P・2P・TTR・T・CEN、TTR の半径）・drawCirclePreview（drawRubberBand の中）、circleChooseMode（cadChoose）。getBaseWcs に 3点・2点。作図設定は .circle-modes。tests/circle.test.cjs。
 
 * **2026-10-09: バージョン5.39.3（エラー・不具合の点検）** 🔍
   * 線分: lineUndoStep が snapSetLastInput（「@」の基準）も戻す、lineSnapChanged（⇄・次の1点だけで仮の点を置き直す）、lineBeforeOtherCommand（processCommand で線分の下のバーを片付け、線分のままなら出し直す）。文字の大きさ: 選んだ文字を ID で（_tszKeepSel・_tszSelIdx）、画層の初め、textSizeLayer で種類の絞りを外す、textSizeSetHeights は高さが決まるときだけ saveUndo。
