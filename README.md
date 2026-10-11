@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.43（2026年10月11日リリース）**
+**現在のバージョン: v5.44（2026年10月12日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（794件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（798件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -272,6 +272,7 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
   | `cad-storage.js` | 図面の保存・読込（IndexedDB）、自動保存 |
   | `cad-webcad.js` | 図面一式（.webcad）の書き出しと開く（gzip、受け取ったファイルの中身の確かめ） |
   | `cad-share.js` | 書き出したファイルをスマホの共有メニューで送る（📤 送る）、画面の画像（PNG） |
+  | `cad-launch.js` | ほかのアプリから開く（PC はファイルの関連付けの launchQueue、Android は共有で届いたファイルを sw.js のキャッシュから取り出す） |
   | `cad-qr.js` | このアプリを渡す QR コード（qrcode-generator。リンクは今の場所、手元の開発用なら公開の場所） |
   | `cad-guide.js` | 操作ガイドのしくみ（ツアーの進め方・指し示し・元の図面に戻す、手順カード、つまずいたときの一言）。他のファイルは `guideNotify('出来事')` で知らせるだけ |
   | `cad-guide-tours.js` | 機能の練習ツアー（測量計算・SIMA の変換・杭打ち・点を動かす・写真・印刷）の手順。機能の状態は `onStart` で控えて `onEnd` で戻す |
@@ -286,6 +287,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-12: バージョン5.44（ほかのアプリから開く）** 📲
+  * manifest.json に file_handlers（.dwg・.dxf・.jww・.sim・.sdr・.webcad・.csv）・launch_handler（focus-existing）・share_target（POST /share-target、multipart の file）。sw.js は共有の POST を webcad-shared キャッシュに置いて ./?shared=1 へ 303（activate で消さない）。cad-launch.js（新）が launchQueue と ?shared=1 を受けて openIncomingFile（cad-io.js の 📁開く の振り分けを関数にした）。tests/launch.test.cjs（sw.js は vm で動かす）。
 
 * **2026-10-11: バージョン5.43（保存一覧から図面一式で送る）** 📤
   * 保存一覧の行に .project-send-btn（📤）。shareProjectFromList は loadProjectFromList(name, { send: true })（開けたら true。開いていて変更が無ければ聞かない）のあと exportWebcadFile。tests/project-share.test.cjs。

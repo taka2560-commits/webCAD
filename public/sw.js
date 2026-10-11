@@ -46,7 +46,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     // 古い版のアプリ本体キャッシュを削除（旧形式 webcad-pwa-cache-vNN も含む）
     const names = await caches.keys();
-    await Promise.all(names.map((n) => (n !== SHELL_CACHE && n !== ASSET_CACHE && n !== TILE_CACHE) ? caches.delete(n) : undefined));
+    await Promise.all(names.map((n) => (n !== SHELL_CACHE && n !== ASSET_CACHE && n !== TILE_CACHE && n !== SHARED_CACHE) ? caches.delete(n) : undefined));
     // 今の版で参照しないハッシュ付きファイルを削除
     const keep = new Set([...IMMUTABLE_ASSETS, ...LAZY_ASSETS].map(scopeUrl));
     const assets = await caches.open(ASSET_CACHE);
@@ -101,8 +101,23 @@ function isImmutableUrl(url) {
     (url.pathname.includes('/assets/') || url.searchParams.has('v'));
 }
 
+// ほかのアプリの「共有」から届いたファイル（manifest.json の share_target）: キャッシュに置いて、アプリを「?shared=1」で開く（cad-launch.js が取り出す）
+const SHARED_CACHE = 'webcad-shared';
+async function receiveShare(req) {
+  try {
+    const form = await req.formData();
+    const file = form.getAll('file').find((f) => f && typeof f === 'object' && 'name' in f);
+    if (file) {
+      const cache = await caches.open(SHARED_CACHE);
+      await cache.put(scopeUrl('shared-file'), new Response(file, { headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name || 'shared') } }));
+    }
+  } catch { /* 受け取れなくてもアプリは開く（アプリが知らせる） */ }
+  return Response.redirect(scopeUrl('./?shared=1'), 303);
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
+  if (req.method === 'POST' && new URL(req.url).pathname.endsWith('/share-target')) { event.respondWith(receiveShare(req)); return; }
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 

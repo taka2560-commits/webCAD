@@ -56,7 +56,7 @@ export default [
         // Service Worker はグローバルが異なる
         files: ["public/sw.js"],
         languageOptions: {
-            globals: { self: "readonly", caches: "readonly", fetch: "readonly", console: "readonly", URL: "readonly", Promise: "readonly", Request: "readonly", setTimeout: "readonly" }
+            globals: { self: "readonly", caches: "readonly", fetch: "readonly", console: "readonly", URL: "readonly", Promise: "readonly", Request: "readonly", Response: "readonly", setTimeout: "readonly" }
         }
     },
     {
@@ -81,7 +81,7 @@ export default [
             sourceType: "commonjs",
             globals: {
                 require: "readonly", module: "writable", __dirname: "readonly", process: "readonly",
-                console: "readonly", setTimeout: "readonly", structuredClone: "readonly",
+                console: "readonly", setTimeout: "readonly", structuredClone: "readonly", Response: "readonly", Request: "readonly", URL: "readonly", FormData: "readonly", File: "readonly", Blob: "readonly",
                 TextEncoder: "readonly", TextDecoder: "readonly", Uint8ClampedArray: "readonly",
                 CompressionStream: "readonly", DecompressionStream: "readonly"
             }

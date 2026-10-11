@@ -961,25 +961,29 @@ function setupFileIO() {
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if(!file) return;
-        const ext = file.name.split('.').pop().toLowerCase();
-        // 置き換え／追加／やめる を決めてから読む（Undo 1回分を保存。やめたら読まない）
-        if(ext === 'webcad' && typeof loadWebcadFile === 'function') loadWebcadFile(file); // 図面一式は、置き換えて開く（確かめは cad-webcad.js）
-        else if(ext === 'pdf' && typeof openPdfFile === 'function') openPdfFile(file); // 図面一式の PDF（入っていなければ下絵にするかを聞く。cad-webcad.js）
-        else if(ext === 'dxf' || ext === 'dwg') _prepareImportTarget(() => { if(ext === 'dxf') loadDxfFile(file); else loadDwgFile(file); });
-        else if(ext === 'jww' && typeof loadJwwFile === 'function') _prepareImportTarget(() => loadJwwFile(file)); // Jw_cad の図面（cad-jww.js）
-        else if(ext === 'sim' && typeof loadSimaFile === 'function') _prepareImportTarget(() => loadSimaFile(file));
-        else if((ext === 'csv' || ext === 'txt') && typeof loadCoordCsvFile === 'function') loadCoordCsvFile(file); // 列を選んで「取り込む」を押してから、置き換え・追加を聞く（cad-csv-import.js）
-        else if(ext === 'sdr' && typeof loadSdrFile === 'function') _prepareImportTarget(() => loadSdrFile(file)); // トータルステーションの現場データ（SDR33・SDR2x）
-        else {
-            addCommandLog(`未対応の形式です: .${ext}`);
-            if(typeof showToast === 'function') showToast(`未対応の形式です（.${ext}）\nDXF・DWG・JWW・SIMA（.sim）・座標CSV・SDR（.sdr）・図面一式（PDF・.webcad）を開けます`, 4000);
-        }
+        openIncomingFile(file);
         fileInput.value = ''; // リセット
     });
     // DXFボタンにイベント
     document.getElementById('btn-load-dxf').addEventListener('click', () => {
         fileInput.click();
     });
+}
+// ファイルを形式ごとに開く（📁開く・ほかのアプリから開いた・共有で届いた。cad-launch.js）
+function openIncomingFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    // 置き換え／追加／やめる を決めてから読む（Undo 1回分を保存。やめたら読まない）
+    if(ext === 'webcad' && typeof loadWebcadFile === 'function') loadWebcadFile(file); // 図面一式は、置き換えて開く（確かめは cad-webcad.js）
+    else if(ext === 'pdf' && typeof openPdfFile === 'function') openPdfFile(file); // 図面一式の PDF（入っていなければ下絵にするかを聞く。cad-webcad.js）
+    else if(ext === 'dxf' || ext === 'dwg') _prepareImportTarget(() => { if(ext === 'dxf') loadDxfFile(file); else loadDwgFile(file); });
+    else if(ext === 'jww' && typeof loadJwwFile === 'function') _prepareImportTarget(() => loadJwwFile(file)); // Jw_cad の図面（cad-jww.js）
+    else if(ext === 'sim' && typeof loadSimaFile === 'function') _prepareImportTarget(() => loadSimaFile(file));
+    else if((ext === 'csv' || ext === 'txt') && typeof loadCoordCsvFile === 'function') loadCoordCsvFile(file); // 列を選んで「取り込む」を押してから、置き換え・追加を聞く（cad-csv-import.js）
+    else if(ext === 'sdr' && typeof loadSdrFile === 'function') _prepareImportTarget(() => loadSdrFile(file)); // トータルステーションの現場データ（SDR33・SDR2x）
+    else {
+        addCommandLog(`未対応の形式です: .${ext}`);
+        if(typeof showToast === 'function') showToast(`未対応の形式です（.${ext}）\nDXF・DWG・JWW・SIMA（.sim）・座標CSV・SDR（.sdr）・図面一式（PDF・.webcad）を開けます`, 4000);
+    }
 }
 
 // 初期化
