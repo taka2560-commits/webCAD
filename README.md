@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.42（2026年10月9日リリース）**
+**現在のバージョン: v5.43（2026年10月11日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（793件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（794件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -286,6 +286,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-11: バージョン5.43（保存一覧から図面一式で送る）** 📤
+  * 保存一覧の行に .project-send-btn（📤）。shareProjectFromList は loadProjectFromList(name, { send: true })（開けたら true。開いていて変更が無ければ聞かない）のあと exportWebcadFile。tests/project-share.test.cjs。
 
 * **2026-10-09: バージョン5.42（UCS の登録・管理）** 🎯
   * cad-ucs.js（新）: ucsCurrentName（保存の ucsName）、ucsStatusUpdate（#ucs-label・全画面の #fs-hud-ucs・UCS読込の欄）、ucsRegister・ucsOfferRegister（原点移動・2点の確定のあとのスナップバー）、showUcsManager（UCSMAN・UC。ucsUse・ucsRename・ucsOverwrite・ucsDeleteAt）、ucsApplyForm（数値）、ucsStartMatch・ucsStartLine（WAITING_UCS_MATCH・WAITING_UCS_LINE。線は circleTanShape）、ucsEntry（以前の originX・originY の形も読む）。setUCS(x, y, 角度, 名前)。

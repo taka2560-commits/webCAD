@@ -445,6 +445,14 @@ window.showProjectList = async function() {
                 metaEl.className = 'project-meta';
                 metaEl.textContent = `${dateStr} | ${p.entityCount || 0}図形`;
 
+                // 📤: この図面を開いて、図面一式（スマホでは LINE でも送れる PDF）にする（v5.43）
+                const sendBtn = document.createElement('button');
+                sendBtn.className = 'project-send-btn';
+                sendBtn.title = 'この図面を開いて、図面一式にして送る（LINE・メールなど）';
+                sendBtn.setAttribute('aria-label', `「${p.name}」を図面一式にして送る`);
+                sendBtn.textContent = '📤';
+                sendBtn.addEventListener('click', (ev) => { ev.stopPropagation(); window.shareProjectFromList(p.name); });
+
                 const delBtn = document.createElement('button');
                 delBtn.className = 'project-delete-btn';
                 delBtn.title = '削除';
@@ -453,6 +461,7 @@ window.showProjectList = async function() {
 
                 item.appendChild(nameEl);
                 item.appendChild(metaEl);
+                item.appendChild(sendBtn);
                 item.appendChild(delBtn);
                 listEl.appendChild(item);
             });
@@ -469,11 +478,17 @@ window.hideProjectList = function() {
     if (panel) panel.style.display = 'none';
 };
 
-window.loadProjectFromList = async function(name) {
+// 開けたら true（📤 送る から続けて使う）。opt.send: 送るために開く（確認の文を変える）
+window.loadProjectFromList = async function(name, opt) {
+    const send = !!(opt && opt.send);
     const warn = _hasUnsavedProjectChanges()
         ? '\n\n⚠ 現在の図面には名前を付けて保存していない変更があります。読み込むと失われます（必要なら先に「保存」してください）。'
         : '';
-    if (!(await cadConfirm({ title: 'プロジェクトを開く', message: `プロジェクト「${name}」を読み込みますか？${warn}`, ok: '読み込む', danger: !!warn }))) return;
+    // 送る図面がもう開いていて変更も無ければ、聞かずにそのまま
+    if (!(send && _currentProjectName === name && !warn)) {
+        const msg = send ? `「${name}」を開いて、図面一式（スマホでは LINE でも送れる PDF）にします。${warn}` : `プロジェクト「${name}」を読み込みますか？${warn}`;
+        if (!(await cadConfirm({ title: send ? '📤 図面一式で送る' : 'プロジェクトを開く', message: msg, ok: send ? '開いて送る' : '読み込む', danger: !!warn }))) return false;
+    } else { window.hideProjectList(); return true; }
 
     try {
         const data = await _dbGet(STORE_PROJECTS, name);
@@ -485,6 +500,7 @@ window.loadProjectFromList = async function(name) {
             document.title = `${name} - WebCAD`;
             notify(`-> プロジェクト「${name}」を開きました (${entities.length}図形)`, { kind: 'success', ms: 2500 });
             window.hideProjectList();
+            return true;
         } else {
             notify('エラー: プロジェクトのデータが見つかりません', { kind: 'error', ms: 4000 });
         }
@@ -492,6 +508,13 @@ window.loadProjectFromList = async function(name) {
         console.error('プロジェクト読込エラー:', err);
         notify('エラー: プロジェクトを開けませんでした', { kind: 'error', ms: 4000 });
     }
+    return false;
+};
+// 一覧の 📤: 開いて図面一式に（保存は .webcad、スマホでは画面の下に「📤 送る」→ LINE などへ PDF で。cad-webcad.js）
+window.shareProjectFromList = async function(name) {
+    if (!(await window.loadProjectFromList(name, { send: true }))) return false;
+    if (typeof exportWebcadFile === 'function') await exportWebcadFile();
+    return true;
 };
 
 window.deleteProjectFromList = async function(name) {

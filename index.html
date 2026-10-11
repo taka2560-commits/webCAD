@@ -536,6 +536,8 @@
         .project-meta { color:#888; font-size:11px; white-space:nowrap; }
         .project-delete-btn { background:none; border:none; color:#ff6b6b; font-size:14px; cursor:pointer; padding:2px 6px; }
         .project-delete-btn:hover { color:#ff4444; }
+        .project-send-btn { background:none; border:1px solid var(--border-3); border-radius:8px; color:#e0e0e0; font-size:15px; cursor:pointer; min-width:40px; min-height:34px; padding:0 6px; }
+        .project-send-btn:hover { background:rgba(255,255,255,0.08); }
 
         /* フローティング・プロパティダイアログパネル */
         #property-panel {
@@ -1336,7 +1338,7 @@
             </div>
             <div style="font-size:10px; color:#888; margin-bottom:8px;">&#x26a0; ブラウザの「閲覧データの消去」で削除されます。重要な図面は「📦 図面一式」（.webcad。写真・下絵も入る）か DXF でも保存してください。</div>
             <div style="display:flex; gap:6px; margin-bottom:8px;">
-                <button class="prop-btn" style="flex:1; margin-top:0;" onclick="hideProjectList(); exportWebcadFile();" title="今の図面を、写真・下絵と一緒に1つのファイル（.webcad）に書き出します">📦 一式を書き出す</button>
+                <button class="prop-btn" style="flex:1; margin-top:0;" onclick="hideProjectList(); exportWebcadFile();" title="今開いている図面を、写真・下絵と一緒に1つのファイル（.webcad）に書き出します。一覧の図面を送るときは、その行の 📤 を押します">📦 今の図面を一式で書き出す</button>
                 <button class="prop-btn btn-sub" style="flex:1; margin-top:0;" onclick="pickWebcadFile()" title="書き出した図面一式（.webcad）を開きます">📂 一式を開く</button>
             </div>
             <div id="project-list-items" style="overflow-y:auto; flex:1; min-height:100px;"></div>
