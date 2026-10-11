@@ -13,24 +13,82 @@
     {
       "action": "/",
       "accept": {
-        "application/acad": [".dwg"],
-        "image/vnd.dxf": [".dxf"],
-        "application/x-jww": [".jww"],
-        "application/x-sima": [".sim"],
-        "application/x-sdr": [".sdr"],
-        "application/x-webcad": [".webcad"],
-        "text/csv": [".csv"]
+        "image/vnd.dwg": [
+          ".dwg"
+        ],
+        "application/acad": [
+          ".dwg"
+        ],
+        "application/x-acad": [
+          ".dwg"
+        ],
+        "application/dwg": [
+          ".dwg"
+        ],
+        "application/x-dwg": [
+          ".dwg"
+        ],
+        "image/vnd.dxf": [
+          ".dxf"
+        ],
+        "application/dxf": [
+          ".dxf"
+        ],
+        "application/x-dxf": [
+          ".dxf"
+        ],
+        "image/x-dxf": [
+          ".dxf"
+        ],
+        "application/x-jww": [
+          ".jww"
+        ],
+        "application/x-sima": [
+          ".sim"
+        ],
+        "application/x-sdr": [
+          ".sdr"
+        ],
+        "application/x-webcad": [
+          ".webcad"
+        ],
+        "text/csv": [
+          ".csv"
+        ],
+        "application/octet-stream": [
+          ".dwg",
+          ".dxf",
+          ".jww",
+          ".sim",
+          ".sdr",
+          ".webcad"
+        ]
       }
     }
   ],
-  "launch_handler": { "client_mode": "focus-existing" },
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
   "share_target": {
     "action": "/share-target",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
       "files": [
-        { "name": "file", "accept": ["*/*", ".dwg", ".dxf", ".jww", ".sim", ".sdr", ".webcad", ".csv", ".pdf"] }
+        {
+          "name": "file",
+          "accept": [
+            "*/*",
+            ".dwg",
+            ".dxf",
+            ".jww",
+            ".sim",
+            ".sdr",
+            ".webcad",
+            ".csv",
+            ".pdf"
+          ]
+        }
       ]
     }
   },
