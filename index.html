@@ -928,6 +928,22 @@
         /* パネルの中の薄い灰色の説明（style で色を決めているもの）も明るくする */
         body.outdoor-mode [style*="color:#888"], body.outdoor-mode [style*="color:#999"], body.outdoor-mode [style*="color:#aaa"], body.outdoor-mode [style*="color:#777"] { color: #e6e6e6 !important; }
 
+        /* スナップのシート（cad-snapsheet.js）: 画面の下からバネで上がる。transform は JS が動かす */
+        #snap-sheet { display:none; position:fixed; left:50%; bottom:0; transform:translate(-50%, 105%); z-index:1000004; width:min(560px, 100vw); box-sizing:border-box;
+            padding:6px 14px calc(14px + env(safe-area-inset-bottom)); border-radius:18px 18px 0 0; background:var(--panel-bg); border:1px solid var(--border-color); border-bottom:none;
+            box-shadow:0 -10px 40px rgba(0,0,0,0.55); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); touch-action:none; user-select:none; -webkit-user-select:none; }
+        #snap-sheet .ss-handle { width:40px; height:4px; border-radius:2px; background:rgba(255,255,255,0.3); margin:2px auto 6px; }
+        #snap-sheet .ss-head { display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:700; color:#ddd; margin-bottom:6px; }
+        #snap-sheet .ss-close { width:40px; height:32px; border-radius:10px; border:1px solid var(--border-3); background:var(--btn-fill); color:#e0e0e0; font-size:16px; cursor:pointer; }
+        #snap-sheet .ss-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+        #snap-sheet .ss-chip { min-height:44px; padding:0 4px; border-radius:12px; border:1px solid var(--border-3); background:var(--btn-fill); color:#bbb; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        #snap-sheet .ss-chip.on { border-color:#00ff88; color:#00ff88; background:rgba(0,255,136,0.12); }
+        #snap-sheet .ss-chip.ss-main { grid-column:span 2; }
+        #snap-sheet .ss-once-chip { min-height:36px; font-size:12px; }
+        #snap-sheet .ss-once-chip.on { border-color:#ffcc00; color:#ffcc00; background:rgba(255,204,0,0.12); }
+        #snap-sheet .ss-chip.hover { outline:2px solid #fff; outline-offset:1px; transform:scale(1.04); }
+        #snap-sheet .ss-sec { font-size:11px; font-weight:700; color:#aaa; margin:10px 0 6px; }
+        #snap-sheet .ss-hint { font-size:10px; color:#888; margin-top:8px; line-height:1.4; }
         /* 点の横の ☑確定（cad-line.js）: 線分の仮の点の横に出す。left・top はボタンの真ん中 */
         #line-float-confirm { display:none; position:fixed; z-index:100003; transform:translate(-50%,-50%); min-width:64px; min-height:48px; padding:0 14px;
             border-radius:24px; border:1.5px solid #00ff88; background:rgba(16,40,28,0.94); color:#00ff88; font:700 15px 'Segoe UI',sans-serif;
@@ -1413,6 +1429,7 @@
     <script src="cad-helmert.js"></script>
     <script src="cad-fav.js"></script>
     <script src="cad-motion.js"></script>
+    <script src="cad-snapsheet.js"></script>
     <script src="cad-storage.js"></script>
     <script src="cad-webcad.js"></script>
     <script src="cad-share.js"></script>

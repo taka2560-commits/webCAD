@@ -150,8 +150,10 @@ function lineUndoStep() {
 }
 window.lineUndoStep = lineUndoStep;
 
-// ===== 点の横の ☑確定（v5.45） =====
-// 仮の点の横に ☑確定 を出す（下のバーの ☑確定 も残す）。オプション「確定ボタンの位置」が「下のバーだけ」なら出さない。
+// ===== 点の横の ☑確定（v5.45。v5.46 で円・寸法・測定・点の指定にも） =====
+// 指で決めた点の横に ☑確定 を出す（下のバーの ☑確定 も残す）。オプション「確定ボタンの位置」が「下のバーだけ」なら出さない。
+// 出す場面（_floatAnchor）: 線分の仮の点、円の 3点・2点・接線接線半径の仮の円（指で入れたとき）、寸法・測定・測量計算などの点（指を離したあと）。
+// 押すと dimConfirmPoint（下のバーの ☑確定 と同じ）
 // ・点から LINE_FLOAT_GAP 離し、画面の中央寄りの側（端なら反対側）に置く。指を当て直している間は薄くして押せなくする
 // ・出てから LINE_FLOAT_GUARD_MS は押しても反応しない（点を置き直すタップが当たって決まってしまわないよう）
 // ・初めて出るときはポップ（UIの動きが入のとき。CSS の .lf-pop）、タップし直したときはその位置へすっと動く
@@ -170,7 +172,7 @@ function _lineFloatEl() {
         b.addEventListener('click', (e) => {
             e.preventDefault(); e.stopPropagation();
             if(Date.now() - _lfShownAt < LINE_FLOAT_GUARD_MS) return; // 出た直後のタップは受けない
-            lineConfirmCandidate();
+            if(typeof window.dimConfirmPoint === 'function') window.dimConfirmPoint(); // 下のバーの ☑確定 と同じ（線分・円・寸法など）
         });
         document.body.appendChild(b);
     }
@@ -187,9 +189,22 @@ function lineFloatPos(px, py, vw, vh) {
     if(x < m || x > vw - m) x = px - (x - px);
     return { x: Math.max(m, Math.min(vw - m, x)), y: Math.max(m + 40, Math.min(vh - m - 60, y)) };
 }
+// 点の横の ☑確定 を置く点（無ければ null）
+function _floatAnchor() {
+    const m = String(cmdState.mode);
+    if(_isLineMode(m)) return cmdState.lineCand || null;
+    if(typeof _CIRCLE_NEW_MODES !== 'undefined' && _CIRCLE_NEW_MODES.has(m)) {
+        const pv = cmdState.circlePreview;
+        if(!pv || !cmdState.circleTouch) return null;
+        const p = pv.last || pv.t2 || { x: pv.cx, y: pv.cy };
+        return { x: p.x, y: p.y };
+    }
+    if(m.startsWith('WAITING_DIM') && cmdState.dimTapped && !touchState.down) { const p = getInputPoint(); return p ? { x: p.x, y: p.y } : null; }
+    return null;
+}
 function lineFloatUpdate() {
-    const c = cmdState.lineCand;
-    if(!c || !_isLineMode(cmdState.mode) || !lineFloatOn()) { _lineFloatHide(); return; }
+    const c = _floatAnchor();
+    if(!c || !lineFloatOn()) { _lineFloatHide(); return; }
     const b = _lineFloatEl(), p = wcsToScreen(c.x, c.y);
     const r = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
     const vw = window.innerWidth || 800, vh = window.innerHeight || 600;

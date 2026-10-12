@@ -483,6 +483,9 @@ function setupEventListeners() {
                 
                 if(isDimMode) {
                     if(typeof guideNotify === 'function') guideNotify('dimTouchEnd');
+                    cmdState.dimTapped = true; // 点の横に ☑確定 を出す（cad-line.js）
+                    touchState.down = false;
+                    if(typeof lineFloatUpdate === 'function') lineFloatUpdate();
                     // 寸法コマンド: 全画面・通常画面問わず自動確定しない。アクションバーの「確定」を待つ
                     // ルーペは消すが、スナップ位置は保持・表示する
                     render();

@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.45（2026年10月13日リリース）**
+**現在のバージョン: v5.46（2026年10月13日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（799件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（803件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -273,6 +273,7 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
   | `cad-webcad.js` | 図面一式（.webcad）の書き出しと開く（gzip、受け取ったファイルの中身の確かめ） |
   | `cad-share.js` | 書き出したファイルをスマホの共有メニューで送る（📤 送る）、画面の画像（PNG） |
   | `cad-launch.js` | ほかのアプリから開く（PC はファイルの関連付けの launchQueue、Android は共有で届いたファイルを sw.js のキャッシュから取り出す） |
+  | `cad-snapsheet.js` | スナップのシート（OSNAP・▼ の長押し・上へなぞる → 指を滑らせて離すと入／切して閉じる。バネの動き） |
   | `cad-qr.js` | このアプリを渡す QR コード（qrcode-generator。リンクは今の場所、手元の開発用なら公開の場所） |
   | `cad-guide.js` | 操作ガイドのしくみ（ツアーの進め方・指し示し・元の図面に戻す、手順カード、つまずいたときの一言）。他のファイルは `guideNotify('出来事')` で知らせるだけ |
   | `cad-guide-tours.js` | 機能の練習ツアー（測量計算・SIMA の変換・杭打ち・点を動かす・写真・印刷）の手順。機能の状態は `onStart` で控えて `onEnd` で戻す |
@@ -287,6 +288,10 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-13: バージョン5.46（スナップのシート・点の横の ☑確定 を寸法・円にも）** 🧲
+  * cad-snapsheet.js（新）: snapSheetOpen・snapSheetClose・snapSheetPick、ボタンの pointerdown → 長押し 280ms か上へ 14px で開く → pointermove で elementFromPoint の種類を光らせる → pointerup で入／切して 220ms 後に閉じる（そのあとの click は使わない）。開く動きは snapSheetSpring(t, 260, 20)（body.motion-ui のとき）。
+  * cad-line.js の _floatAnchor: 線分の仮の点、円の仮の円（cmdState.circleTouch）、WAITING_DIM の点（touchend で cmdState.dimTapped、点が入ったら外す）。押すと dimConfirmPoint。tests/snapsheet.test.cjs。
 
 * **2026-10-13: バージョン5.45（線分の ☑確定 を点の横にも）** ✅
   * cad-line.js: lineFloatUpdate（#line-float-confirm。drawLineCandidate と _lineBar から）、lineFloatPos（点から 64px、中央寄り・端なら反対側）、出てから 250ms は押せない、touchState.down の間は .lf-dim。オプション confirmPos（both / bar）。CSS の .lf-pop（body.motion-ui のときのポップスケール）・.lf-move。

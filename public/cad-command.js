@@ -37,6 +37,8 @@ function handlePointInput(wcs, fromMouse = false) {
     if(snapInputIntercept(wcs)) return;
     _handlePointInputCore(wcs, fromMouse);
     afterSnapPointInput(wcs);
+    cmdState.dimTapped = false; // 点が入ったら、点の横の ☑確定 は次に指を離すまで出さない（cad-line.js）
+    if(typeof lineFloatUpdate === 'function') lineFloatUpdate();
     if(typeof guideNotify === 'function') guideNotify('point'); // 操作ガイド: 手順カードを今の段階に合わせる
 }
 function _handlePointInputCore(wcs, fromMouse) {
@@ -103,7 +105,7 @@ function _handlePointInputCore(wcs, fromMouse) {
     }
     if(m==='WAITING_LINE_P1') { lineSetStart(wcs); return; } // 線分（cad-line.js）
     if(m==='WAITING_LINE_P2') { lineAddSegment(wcs, fromMouse); return; } // 長さ0の線は作らない
-    if(circleHandlePoint(wcs)) return; // 円の 3点・2点（直径）・接線・接線・半径（cad-circle.js）
+    if(circleHandlePoint(wcs, fromMouse)) return; // 円の 3点・2点（直径）・接線・接線・半径（cad-circle.js）
     if(m==='WAITING_CIRCLE_CENTER') {
         const isAuto = lastParams.circleMode === 'auto';
         cmdState.startWcs = {x: wcs.x, y: wcs.y};

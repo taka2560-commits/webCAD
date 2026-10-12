@@ -188,10 +188,12 @@ function circleCommandInput(cmd) {
 }
 
 // ===== 点を入れたとき（cad-command.js の _handlePointInputCore から）。新しい描き方なら処理して true =====
-function circleHandlePoint(wcs) {
+// fromMouse: マウス・打った座標なら true（指で入れたときだけ、仮の円の横に ☑確定 を出す。cad-line.js）
+function circleHandlePoint(wcs, fromMouse) {
     const m = cmdState.mode;
     if(!_CIRCLE_NEW_MODES.has(m)) return false;
     hidePropertyPanel();
+    cmdState.circleTouch = fromMouse === false;
     if(m === 'WAITING_CIRCLE_TTR') { _circleTtrPick(); return true; }
     const P = cmdState.points || (cmdState.points = []);
     const need = m === 'WAITING_CIRCLE_3P' ? 3 : 2, u = wcsToUcs(wcs.x, wcs.y);
