@@ -63,12 +63,14 @@ async function _phUrl(key) {
 function photoAddPin(x, y) {
     saveUndo();
     const layer = _ensureSurveyLayer(PHOTO_LAYER, '#ff9f43');
+    if(layers[layer] && layers[layer].visible === false) { layers[layer].visible = true; addCommandLog('-> 隠していたピンを表示に戻しました'); } // 立てたピンが見えないことがないよう
     const pin = { type: 'PIN', layer, color: null, x, y, text: '', photos: [], time: new Date().toISOString(), name: cogoPointNameAt(x, y) };
     entities.push(pin);
     ensureEntityIds(); initLayers();
     if(typeof updateLayerPanel === 'function') updateLayerPanel();
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
     render();
+    if(typeof pingPin === 'function') pingPin(pin); // ポンと立って、円の波で知らせる（cad-ping.js）
     return pin;
 }
 // 画面上の (sx, sy) の近くのピン（通常画面の何もしていないときのタップから）。開いたら true
@@ -92,10 +94,29 @@ function _phPanelOpen() {
     return !!(p && p.style.display === 'flex' && t && t.textContent === PHOTO_TITLE);
 }
 window.showPhotoPanel = function() { _ph.editing = null; _ph.viewing = null; _phRenderList(); render(); };
+// ピンの表示の入／切（画層「写真・メモ」の表示）。on を省くと切り替え（v5.47）
+function photoPinsShow(on) {
+    const i = layers.findIndex((l) => l.name === PHOTO_LAYER);
+    if(i < 0) { if(on === undefined) showToast('まだピンがありません', 2000); return true; }
+    const v = on === undefined ? layers[i].visible === false : !!on;
+    if((layers[i].visible !== false) === v) return v;
+    layers[i].visible = v;
+    if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
+    if(typeof initLayers === 'function') initLayers();
+    if(typeof updateLayerPanel === 'function') updateLayerPanel();
+    if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    addCommandLog(`-> 写真・メモのピン: ${v ? '表示' : '非表示'}`);
+    if(_phPanelOpen() && !_ph.editing) _phRenderList();
+    render();
+    return v;
+}
+window.photoPinsToggle = function() { return photoPinsShow(); };
 function _phRenderList() {
-    const pins = photoPins();
+    const pins = photoPins(), shown = _phLayerVisible();
     let h = '<div class="cogo-btns"><button class="prop-btn" onclick="photoStartAdd()">📍 ピンを立てる</button>' +
         `<button class="prop-btn btn-sub" onclick="photoLedgerPdf()" ${pins.length ? '' : 'disabled'}>📄 写真台帳 PDF</button></div>`;
+    if(pins.length) h += `<div class="opt-pref-seg" style="margin:6px 0;"><button type="button" class="prop-btn opt-bg-btn${shown ? ' active' : ''}" aria-pressed="${shown}" onclick="photoPinsShow(true)">👁 ピンを表示</button>` +
+        `<button type="button" class="prop-btn opt-bg-btn${shown ? '' : ' active'}" aria-pressed="${!shown}" onclick="photoPinsShow(false)">🚫 隠す</button></div>`;
     if(!pins.length) h += _cogoNote('図面の場所にピンを立てて、メモと写真（その場で撮る・選ぶ）を付けます。ピンは図面と一緒に保存されます。写真台帳（PDF）も作れます。');
     else {
         h += '<div class="ph-list">' + pins.map((p, i) => {
@@ -104,7 +125,7 @@ function _phRenderList() {
                 `<span class="ph-main"><span class="ph-t">${escapeHtml(p.name || `X ${cogoFix(s.X, 1)} Y ${cogoFix(s.Y, 1)}`)}${p.photos.length ? `&nbsp;&nbsp;📷${p.photos.length}` : ''}</span>` +
                 `<span class="ph-m">${escapeHtml((p.text || '（メモなし）').split('\n')[0])}</span></span><span class="ph-d">${_phFmtTime(p.time)}</span></button>`;
         }).join('') + '</div>';
-        h += _cogoNote('ピンをタップすると編集します。図面のピンをタップしても開きます。ピンは画層「写真・メモ」で隠せます。');
+        h += _cogoNote('ピンをタップすると編集します（隠していても、ここから開くと表示に戻します）。図面のピンをタップしても開きます。表示・隠すは、上の切り替え・お気に入りの「ピン」・コマンド PINS でも。');
     }
     showPropertyPanel(PHOTO_TITLE, h);
 }
@@ -123,7 +144,7 @@ window.photoEdit = function(id, center) {
     const p = _phPinById(id);
     if(!p) { _phRenderList(); return; }
     _ph.editing = id; _ph.viewing = null;
-    if(center) { _reanchorView(canvas.width / 2, canvas.height / 2, { x: p.x, y: p.y }); render(); }
+    if(center) { photoPinsShow(true); _reanchorView(canvas.width / 2, canvas.height / 2, { x: p.x, y: p.y }); render(); if(typeof pingAt === 'function') pingAt(p.x, p.y); } // 一覧から開いたら表示に戻し、場所を円の波で知らせる
     _phRenderEdit();
 };
 function _phRenderEdit() {
@@ -233,6 +254,8 @@ function drawPhotoPins() {
     pins.forEach((p, i) => {
         const s = wcsToScreen(p.x, p.y);
         if(s.x < -30 || s.y < -40 || s.x > canvas.width + 30 || s.y > canvas.height + 30) return;
+        const k = typeof pingPinScale === 'function' ? pingPinScale(p.id) : 1; // 立てたときはポンと（cad-ping.js）
+        if(k !== 1) { ctx.save(); ctx.translate(s.x, s.y); ctx.scale(k, k); ctx.translate(-s.x, -s.y); }
         const r = PHOTO_PIN_R, cy = s.y - r - 6, on = _ph.editing === p.id;
         // しずく形のピン（先が場所を指す）
         ctx.beginPath();
@@ -245,6 +268,7 @@ function drawPhotoPins() {
         ctx.fillStyle = '#1b1b1b';
         ctx.fillText(String(i + 1), s.x, cy + 0.5);
         if(p.photos && p.photos.length) { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(s.x + r * 0.85, cy - r * 0.75, 3.5, 0, Math.PI * 2); ctx.fill(); }
+        if(k !== 1) ctx.restore();
     });
     ctx.restore();
 }
@@ -342,5 +366,6 @@ async function _photoLedgerPdf() {
 // ===== コマンド =====
 function processPhotoCommand(cmd) {
     if(cmd === 'PHOTO' || cmd === 'MEMO' || cmd === 'PIN') { window.showPhotoPanel(); return true; }
+    if(cmd === 'PINS') { photoPinsShow(); return true; } // ピンの表示の入／切
     return false;
 }

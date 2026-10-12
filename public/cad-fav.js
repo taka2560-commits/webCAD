@@ -58,6 +58,7 @@ const FAV_CATALOG = [
     { id: 'STAKE', label: '杭打ち', icon: '📍', cat: 'survey', panel: '📍 杭打ち', run: () => showStakePanel() },
     { id: 'TS', label: 'TS連携', icon: '📡', cat: 'survey', panel: '📡 TS連携', run: () => showTsPanel() },
     { id: 'PHOTO', label: '写真', icon: '📷', cat: 'survey', panel: '📷 写真・メモ', run: () => showPhotoPanel() },
+    { id: 'PINS', label: 'ピン 表示', icon: '📍', cat: 'survey', run: () => photoPinsToggle() },
     { id: 'GNSS', label: '現在地', icon: '🛰', color: '#528bff', cat: 'survey', run: () => toggleGnss() },
     { id: 'SIMAOUT', label: 'SIMA出力', icon: '📄', cat: 'survey', run: () => exportSima() },
     { id: 'CSVOUT', label: 'CSV出力', icon: '📄', cat: 'survey', run: () => exportCoordCsv() },
