@@ -10,7 +10,7 @@ const PING_DUR = 2.3;                       // 秒
 const PING_RINGS = [0.03, 0.31, 0.98, 1.26]; // 波の始まり（秒）
 const PING_RING_SEC = 1.0, PING_RING_PX = 40, PING_POP_SEC = 0.3;
 const PING_COLOR = '#ff9f43';               // ピンと同じ色
-let _pings = [];   // { x, y, id, t0 }
+let _pings = [];   // { x, y, id, t0, color }
 let _pingRaf = 0;
 
 function _pingReduce() { return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
@@ -18,11 +18,11 @@ const _pingOutBack = (x) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * M
 const _pingOutCubic = (x) => 1 - Math.pow(1 - x, 3);
 function _pingNow() { return (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000; }
 
-// 地点 (x, y)（図面の座標）を知らせる。id: ピンの ID（ポンと立てる）
-function pingAt(x, y, id) {
+// 地点 (x, y)（図面の座標）を知らせる。id: ピンの ID（ポンと立てる）、color: 波の色（無ければピンの橙）
+function pingAt(x, y, id, color) {
     if(!isFinite(x) || !isFinite(y)) return;
     _pings = _pings.filter((p) => p.id === undefined || p.id !== id);
-    _pings.push({ x, y, id, t0: _pingNow() });
+    _pings.push({ x, y, id, t0: _pingNow(), color: color || PING_COLOR });
     if(navigator.vibrate) navigator.vibrate(12);
     _pingTick();
 }
@@ -46,6 +46,16 @@ function pingPinScale(id) {
     const t = (_pingNow() - p.t0) / PING_POP_SEC;
     return t >= 1 ? 1 : Math.max(0.01, _pingOutBack(Math.max(0, t)));
 }
+// しずく形のピン（先が (sx, sy)。写真・メモのピンと同じ形）。label を丸の中に。scale はポンと立つ途中の大きさ
+function drawPinMark(sx, sy, color, label, scale) {
+    const k = scale === undefined ? 1 : scale, r = 10, cy = sy - r - 6;
+    ctx.save();
+    if(k !== 1) { ctx.translate(sx, sy); ctx.scale(k, k); ctx.translate(-sx, -sy); }
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - r * 0.6, cy + r * 0.8); ctx.arc(sx, cy, r, Math.PI * 0.8, Math.PI * 0.2); ctx.closePath();
+    ctx.fillStyle = color; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.fill(); ctx.stroke();
+    if(label !== undefined && label !== '') { ctx.fillStyle = '#1b1b1b'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(label), sx, cy + 0.5); }
+    ctx.restore();
+}
 // 波と距離（描画の重ね。cad-render.js）
 function drawPingOverlay() {
     if(!_pings.length) return;
@@ -54,7 +64,7 @@ function drawPingOverlay() {
     ctx.setLineDash([]);
     _pings.forEach((p) => {
         const s = wcsToScreen(p.x, p.y), t = now - p.t0;
-        ctx.strokeStyle = PING_COLOR; ctx.lineWidth = 2;
+        ctx.strokeStyle = p.color || PING_COLOR; ctx.lineWidth = 2;
         if(reduce) { // 動かさない: 二重の円を少しのあいだ
             [14, 26].forEach((r) => { ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.stroke(); });
         } else {

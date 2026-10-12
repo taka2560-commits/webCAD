@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.47（2026年10月13日リリース）**
+**現在のバージョン: v5.48（2026年10月13日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（805件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（806件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -289,6 +289,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-13: バージョン5.48（張り合わせ点もピンと ☑確定）** 🧮
+  * cad-ping.js に drawPinMark（しずく形・番号）と pingAt の色。drawHelmOverlay は張り合わせ点を drawPinMark（pingPinScale('helm:' + si)）、_helmAfterPick で pingAt(…, 'helm:' + si, 緑)。点の横の ☑確定 は WAITING_DIMCOGO_PT でも出る（v5.46 の dimTapped）。
 
 * **2026-10-13: バージョン5.47（ピンの知らせ・ピンの表示の入／切）** 📍
   * cad-ping.js（新）: pingAt・pingPin（photoAddPin・photoEdit(id, true) から）、pingPinScale（drawPhotoPins がピンを outBack で拡大）、drawPingOverlay（波 0.03・0.31・0.98・1.26 秒、1 秒で 5→45px、outCubic。_gnss.fix があれば距離）。cad-photo.js に photoPinsShow・photoPinsToggle（PINS・お気に入り PINS）。tests/ping.test.cjs。

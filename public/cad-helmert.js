@@ -361,6 +361,7 @@ function _helmAfterPick() {
     if(k >= 0) _helm.pairs[k] = pr; else { _helm.pairs.push(pr); k = _helm.pairs.length - 1; }
     const sp = _helm.src.points[si];
     addCommandLog(`-> [変換] 組 No.${k + 1}: SIMA「${sp.name || sp.num}」↔ 図面「${s.name || '(点名なし)'}」`);
+    if(typeof pingAt === 'function') pingAt(s.x, s.y, 'helm:' + si, '#00ff88'); // 張り合わせ点のピンをポンと立て、円の波で知らせる（cad-ping.js）
     _helmSolveNow();
     if(_helmViewInst) _helmViewInst.redraw();
 }
@@ -807,11 +808,11 @@ function drawHelmOverlay() {
             if(!many) ctx.fillText(p.name || p.num || '', q.x + 6, q.y - 4);
         });
     }
-    ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // 張り合わせ点: 番号入りのピン（緑。使わない組は灰、残差の大きい組は黄）。指定した直後はポンと立つ（cad-ping.js）
     _helm.pairs.forEach((pr, k) => {
         const w = surveyToWcs(pr.dst.X, pr.dst.Y), q = wcsToScreen(w.x, w.y), c = !pr.use ? '#888888' : pr.res && pr.res.flag ? '#ffcc00' : '#00ff88';
-        ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = c; ctx.fillText(String(k + 1), q.x - 16, q.y - 12); // 番号は左上（点名は右に出る）
+        if(typeof drawPinMark === 'function') drawPinMark(q.x, q.y, c, k + 1, typeof pingPinScale === 'function' ? pingPinScale('helm:' + pr.si) : 1);
+        else { ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, Math.PI * 2); ctx.stroke(); }
     });
     // 選んだ点・表の行で示した点の、変換した位置（点線の丸）
     [_helm.sel, _helm.focus].forEach((i, k) => {
