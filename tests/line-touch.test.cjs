@@ -167,6 +167,41 @@ describe('線分のタッチ（仮の点 → ☑確定）', () => {
         app.eval('resetCommand();');
     });
 
+    it('点の横の ☑確定（v5.45）: 仮の点から離して中央寄りに出し、出た直後は押せない。置き直すと付いて動き、押すと決まる。オプションで出さない', async () => {
+        const fl = () => app.val(`(() => { const b = document.getElementById('line-float-confirm'); return b ? { show: b.style.display, x: parseFloat(b.style.left), y: parseFloat(b.style.top), pop: b.classList.contains('lf-pop') } : null; })()`);
+        app.eval(`processCommand('LINE'); window.innerWidth = 800; window.innerHeight = 600;`);
+        assert.equal(fl() === null || fl().show === 'none', true, '仮の点の前は出さない');
+        tap(100, 300);
+        const f1 = fl();
+        assert.equal(f1.show, 'block');
+        assert.ok(f1.pop, '初めはポップ');
+        assert.ok(Math.hypot(f1.x - 100, f1.y - 300) >= 56, '点から離す');
+        assert.ok(f1.x > 100, '左端寄りの点なら右（中央寄り）に');
+        app.eval(`document.getElementById('line-float-confirm').click()`);
+        assert.equal(app.eval('cmdState.mode'), 'WAITING_LINE_P1', '出た直後のタップは受けない');
+        // 置き直すと付いて動く
+        tap(700, 100);
+        const f2 = fl();
+        assert.ok(f2.x < 700 && f2.y > 100, '右上の点なら左下に');
+        await new Promise((r) => setTimeout(r, 280));
+        app.eval(`document.getElementById('line-float-confirm').click()`);
+        assert.equal(app.eval('cmdState.mode'), 'WAITING_LINE_P2', '押すと始点が決まる');
+        assert.equal(fl().show, 'none', '決まったら隠す');
+        // 指で狙い直している間は薄く・押せない
+        app.eval(`__touch('touchstart', [[300, 300]]); render();`);
+        tap(300, 300);
+        app.eval(`touchState.down = true; _drawFrame(false);`);
+        assert.equal(app.val(`document.getElementById('line-float-confirm').classList.contains('lf-dim')`), true);
+        app.eval(`touchState.down = false; resetCommand(); _drawFrame(false);`);
+        assert.equal(fl().show, 'none', 'コマンドを終えたら隠す');
+        // オプション「下のバーだけ」
+        app.eval(`setDisplayPref('confirmPos', 'bar'); processCommand('LINE');`);
+        tap(100, 300);
+        assert.equal(fl().show, 'none');
+        assert.equal(confirmBtn(), '', '下のバーの ☑確定 はある');
+        app.eval(`setDisplayPref('confirmPos', 'both'); resetCommand();`);
+    });
+
     it('長さ0の線は作らない（同じ点をもう一度・指の二度押し）', () => {
         app.eval(`processCommand('LINE'); handlePointInput({ x: 0, y: 0 }, true); handlePointInput({ x: 0, y: 0 }, true);`);
         assert.deepEqual(lines(), []);

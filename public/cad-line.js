@@ -32,6 +32,7 @@ function _lineBar() {
     if(c) setPrompt(first ? '始点: ☑確定 で決める（タップし直すと動きます）' : '次の点: ☑確定 で線を引く（タップし直すと動きます）');
     else if(lineTouchConfirmOn() && typeof isMobile === 'function' && isMobile()) setPrompt(first ? '1点目: タップして ☑確定' : '次の点: タップして ☑確定');
     else setPrompt(first ? '1点目:' : '次の点:');
+    lineFloatUpdate(); // 点の横の ☑確定
 }
 
 // ほかのコマンドを始める前（processCommand）: 線分が出した下のバーを片付ける（以前は ↶・☑確定 が別のコマンドに残った）。
@@ -149,8 +150,68 @@ function lineUndoStep() {
 }
 window.lineUndoStep = lineUndoStep;
 
+// ===== 点の横の ☑確定（v5.45） =====
+// 仮の点の横に ☑確定 を出す（下のバーの ☑確定 も残す）。オプション「確定ボタンの位置」が「下のバーだけ」なら出さない。
+// ・点から LINE_FLOAT_GAP 離し、画面の中央寄りの側（端なら反対側）に置く。指を当て直している間は薄くして押せなくする
+// ・出てから LINE_FLOAT_GUARD_MS は押しても反応しない（点を置き直すタップが当たって決まってしまわないよう）
+// ・初めて出るときはポップ（UIの動きが入のとき。CSS の .lf-pop）、タップし直したときはその位置へすっと動く
+const LINE_FLOAT_GAP = 64;
+const LINE_FLOAT_GUARD_MS = 250;
+let _lfShownAt = 0;
+function lineFloatOn() { return typeof displayPrefKey !== 'function' || displayPrefKey('confirmPos') !== 'bar'; }
+function _lineFloatEl() {
+    let b = document.getElementById('line-float-confirm');
+    if(!b) {
+        b = document.createElement('button');
+        b.id = 'line-float-confirm';
+        b.type = 'button';
+        b.textContent = '☑ 確定';
+        b.setAttribute('aria-label', 'この点で確定');
+        b.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            if(Date.now() - _lfShownAt < LINE_FLOAT_GUARD_MS) return; // 出た直後のタップは受けない
+            lineConfirmCandidate();
+        });
+        document.body.appendChild(b);
+    }
+    return b;
+}
+function _lineFloatHide() {
+    const b = document.getElementById('line-float-confirm');
+    if(b && b.style.display !== 'none') { b.style.display = 'none'; b.classList.remove('lf-pop', 'lf-move', 'lf-dim'); }
+}
+// 置く位置（画面の座標）: 点の中央寄りの側。はみ出すなら反対側、上下もはみ出さないように
+function lineFloatPos(px, py, vw, vh) {
+    const m = 36;
+    let x = px + (px > vw / 2 ? -LINE_FLOAT_GAP : LINE_FLOAT_GAP), y = py + (py > vh / 2 ? -LINE_FLOAT_GAP * 0.6 : LINE_FLOAT_GAP * 0.6);
+    if(x < m || x > vw - m) x = px - (x - px);
+    return { x: Math.max(m, Math.min(vw - m, x)), y: Math.max(m + 40, Math.min(vh - m - 60, y)) };
+}
+function lineFloatUpdate() {
+    const c = cmdState.lineCand;
+    if(!c || !_isLineMode(cmdState.mode) || !lineFloatOn()) { _lineFloatHide(); return; }
+    const b = _lineFloatEl(), p = wcsToScreen(c.x, c.y);
+    const r = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
+    const vw = window.innerWidth || 800, vh = window.innerHeight || 600;
+    const q = lineFloatPos(r.left + p.x, r.top + p.y, vw, vh);
+    const first = b.style.display === 'none' || !b.style.display;
+    if(first) {
+        b.classList.remove('lf-move', 'lf-dim');
+        b.style.display = 'block';
+        b.classList.remove('lf-pop'); void b.offsetWidth; b.classList.add('lf-pop'); // 初めて出るときだけポップ
+        _lfShownAt = Date.now();
+    } else if(b.dataset.cx !== String(c.x) || b.dataset.cy !== String(c.y)) {
+        b.classList.add('lf-move'); // 点を置き直したら、その横へすっと動く
+        _lfShownAt = Date.now();
+    }
+    b.dataset.cx = String(c.x); b.dataset.cy = String(c.y);
+    b.style.left = `${Math.round(q.x)}px`; b.style.top = `${Math.round(q.y)}px`;
+    b.classList.toggle('lf-dim', !!touchState.down); // 指で狙い直している間は押せない
+}
+
 // 仮の点の印（緑の輪と十字）。描画の最後に重ねる（cad-render.js）。始点からの線は drawRubberBand が仮の点まで描く
 function drawLineCandidate() {
+    lineFloatUpdate(); // 点の横の ☑確定 も合わせる
     const c = cmdState.lineCand;
     if(!c || !_isLineMode(cmdState.mode)) return;
     const p = wcsToScreen(c.x, c.y);

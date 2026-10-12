@@ -928,6 +928,24 @@
         /* パネルの中の薄い灰色の説明（style で色を決めているもの）も明るくする */
         body.outdoor-mode [style*="color:#888"], body.outdoor-mode [style*="color:#999"], body.outdoor-mode [style*="color:#aaa"], body.outdoor-mode [style*="color:#777"] { color: #e6e6e6 !important; }
 
+        /* 点の横の ☑確定（cad-line.js）: 線分の仮の点の横に出す。left・top はボタンの真ん中 */
+        #line-float-confirm { display:none; position:fixed; z-index:100003; transform:translate(-50%,-50%); min-width:64px; min-height:48px; padding:0 14px;
+            border-radius:24px; border:1.5px solid #00ff88; background:rgba(16,40,28,0.94); color:#00ff88; font:700 15px 'Segoe UI',sans-serif;
+            box-shadow:0 4px 14px rgba(0,0,0,0.55); cursor:pointer; touch-action:manipulation; zoom:var(--btn-k, 1); }
+        #line-float-confirm.lf-dim { opacity:0.35; pointer-events:none; }
+        body.guide-touring #line-float-confirm { z-index:1000003; }
+        @media (prefers-reduced-motion: no-preference) {
+            /* ポップスケール: 0.6 から少し越えて（1.10）元の大きさへ。0.22 秒 */
+            body.motion-ui #line-float-confirm.lf-pop { animation: lf-pop 220ms linear; }
+            body.motion-ui #line-float-confirm.lf-move { transition: left 140ms cubic-bezier(0.33, 1, 0.68, 1), top 140ms cubic-bezier(0.33, 1, 0.68, 1); }
+            @keyframes lf-pop {
+                0%   { transform:translate(-50%,-50%) scale(0.6); opacity:0; animation-timing-function:cubic-bezier(0.33, 1, 0.68, 1); }
+                36%  { opacity:1; }
+                68%  { transform:translate(-50%,-50%) scale(1.10); animation-timing-function:cubic-bezier(0.65, 0, 0.35, 1); }
+                100% { transform:translate(-50%,-50%) scale(1); opacity:1; }
+            }
+        }
+
         /* ===== UIの動き（試用。オプション「UIの動き」で body.motion-ui。動かす処理は cad-motion.js） =====
            参考: モーションリファレンス（プレスフィードバック・バウンスプレス・タップリップル・ピルインジケーター・フェード＋スライド・
            スイッチ状態スプリング・長押し進行・エラーシェイク・読込から成功）。道具として速く感じるよう、時間は参考の半分ほど。

@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.44.1（2026年10月12日リリース）**
+**現在のバージョン: v5.45（2026年10月13日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（798件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（799件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -287,6 +287,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-13: バージョン5.45（線分の ☑確定 を点の横にも）** ✅
+  * cad-line.js: lineFloatUpdate（#line-float-confirm。drawLineCandidate と _lineBar から）、lineFloatPos（点から 64px、中央寄り・端なら反対側）、出てから 250ms は押せない、touchState.down の間は .lf-dim。オプション confirmPos（both / bar）。CSS の .lf-pop（body.motion-ui のときのポップスケール）・.lf-move。
 
 * **2026-10-12: バージョン5.44（ほかのアプリから開く）** 📲
   * manifest.json に file_handlers（.dwg・.dxf・.jww・.sim・.sdr・.webcad・.csv）・launch_handler（focus-existing）・share_target（POST /share-target、multipart の file）。sw.js は共有の POST を webcad-shared キャッシュに置いて ./?shared=1 へ 303（activate で消さない）。cad-launch.js（新）が launchQueue と ?shared=1 を受けて openIncomingFile（cad-io.js の 📁開く の振り分けを関数にした）。tests/launch.test.cjs（sw.js は vm で動かす）。
