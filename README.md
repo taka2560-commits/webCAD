@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.49.1（2026年10月13日リリース）**
+**現在のバージョン: v5.49.2（2026年10月13日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,9 +204,9 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（811件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（851件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
-npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
+npm run check        # lint → テスト（計算ゲートを含む）→ 品質のチェック G1 → ビルド → 画面のチェック G2（CI と同じ内容。docs/品質管理ゲート.md）
 ```
 
 * **自動テスト**: `tests/*.test.cjs` は Node.js 標準の `node:test` で動きます。`tests/helpers/load-app.cjs` が index.html と `public/cad-*.js` をブラウザと同じ順序で jsdom 上に読み込むので、テストからアプリの関数・変数をそのまま呼べます（IndexedDB は fake-indexeddb で再現）。不具合を直すときは、先にそれを再現するテストを追加してください。

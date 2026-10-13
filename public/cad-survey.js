@@ -75,9 +75,12 @@ function _polygonCentroid(pts) {
     }
     return { x: cx / (3 * a), y: cy / (3 * a) };
 }
+// 多角形の面積（座標法）。1点目からの差で計算する（公共座標・mm の図面でも桁が落ちないように。v5.49.2）
 function polygonArea(pts) {
+    if(!pts.length) return 0;
+    const ox = pts[0].x, oy = pts[0].y;
     let a = 0;
-    for(let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += p.x * q.y - q.x * p.y; }
+    for(let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += (p.x - ox) * (q.y - oy) - (q.x - ox) * (p.y - oy); }
     return Math.abs(a) / 2;
 }
 

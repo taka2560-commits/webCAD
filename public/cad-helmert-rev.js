@@ -13,12 +13,13 @@ function helmReverseSolve() {
     const up = _helm.pairs.filter((p) => p.use && s.points[p.si]).map((p) => ({ src: p.dst, dst: s.points[p.si] }));
     return helmSolve(up, _helm.mode);
 }
-// 測量の座標での変換 sol を、図面の座標（WCS）の写し方 editXform にする（相似変換なので、1点と2つの向きで決まる）
+// 測量の座標での変換 sol を、図面の座標（WCS）の写し方 editXform にする。式から直接作る（v5.49.2。
+// 以前は「重心と 1 単位ずらした点の写り先の差」で作っていて、mm の図面・公共座標では丸めの誤差で 5km 先が 0.2mm ずれた。計算ゲートで発見）
+//   測量: X′ = X1 + a(X − X0) − b(Y − Y0)、Y′ = Y1 + b(X − X0) + a(Y − Y0)
+//   図面は x = Y·f（東）、y = X·f（北）なので: x′ = x1 + a(x − x0) + b(y − y0)、y′ = y1 − b(x − x0) + a(y − y0)
 function helmReverseXform(sol) {
-    const f = (x, y) => { const v = wcsToSurvey(x, y), q = helmApply(sol, v.X, v.Y); return surveyToWcs(q.X, q.Y); };
-    const o = surveyToWcs(sol.X0, sol.Y0); // 変換元（図面の張り合わせ点）の重心（大きい座標でも桁が落ちないよう、ここを基準に）
-    const t = f(o.x, o.y), ex = f(o.x + 1, o.y), ey = f(o.x, o.y + 1);
-    return editXform(ex.x - t.x, ex.y - t.y, ey.x - t.x, ey.y - t.y, o, t);
+    const o = surveyToWcs(sol.X0, sol.Y0), t = surveyToWcs(sol.X1, sol.Y1);
+    return editXform(sol.a, -sol.b, sol.b, sol.a, o, t); // editXformPoint: x′ = tx + a·dx + c·dy、y′ = ty + b·dx + d·dy
 }
 function _helmRevDesc(sol) {
     const q = helmApply(sol, sol.X0, sol.Y0), mv = Math.hypot(q.X - sol.X0, q.Y - sol.Y0); // 重心が動く量

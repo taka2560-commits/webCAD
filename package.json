@@ -11,9 +11,11 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test \"tests/*.test.cjs\" tests/test-text-parse.cjs",
-    "lint": "eslint public src tests vite.config.js",
-    "check": "npm run lint && npm test && npm run build"
+    "test": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/quality/test-count-reporter.mjs --test-reporter-destination=stdout \"tests/*.test.cjs\" tests/test-text-parse.cjs",
+    "lint": "eslint public src tests scripts vite.config.js",
+    "check": "npm run lint && npm test && npm run quality && npm run build && npm run ui-gate",
+    "quality": "node scripts/quality/check.mjs",
+    "ui-gate": "node scripts/quality/ui-gate.mjs"
   },
   "repository": {
     "type": "git",
@@ -32,6 +34,7 @@
     "eslint-config-prettier": "^10.1.8",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^26.1.0",
+    "playwright-core": "^1.56.1",
     "prettier": "^3.9.6",
     "vite": "^8.2.1"
   },

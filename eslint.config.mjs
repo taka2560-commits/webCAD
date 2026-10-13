@@ -67,6 +67,16 @@ export default [
         }
     },
     {
+        // 品質のチェックの道具（scripts/quality。Node.js の ES モジュール）。
+        // page.evaluate の中はブラウザ（アプリ）で動くので、アプリの名前（entities など）は no-undef にしない
+        files: ["scripts/**/*.mjs"],
+        languageOptions: {
+            sourceType: "module",
+            globals: { console: "readonly", process: "readonly", fetch: "readonly", setTimeout: "readonly", URL: "readonly" }
+        },
+        rules: { "no-undef": "off" }
+    },
+    {
         // Vite でバンドルするモジュール（src/）
         files: ["src/**/*.js"],
         languageOptions: {

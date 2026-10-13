@@ -7,11 +7,12 @@
 function dist(x1,y1,x2,y2) { return Math.sqrt((x2-x1)**2+(y2-y1)**2); }
 function normalizeAngle(a) { while(a<0)a+=Math.PI*2; while(a>=Math.PI*2)a-=Math.PI*2; return a; }
 function isAngleBetweenCCW(a,s,e) { a=normalizeAngle(a-s); e=normalizeAngle(e-s); return a<=e; }
+// 3点を通る円の中心。1点目からの差で計算する（公共座標のような大きな座標でも桁が落ちないように。v5.49.2。以前は最大 0.015mm ずれた）
 function circumcenter(x1,y1,x2,y2,x3,y3) {
-    const D=2*(x1*(y2-y3)+x2*(y3-y1)+x3*(y1-y2)); if(Math.abs(D)<1e-10) return null;
-    const ux=((x1*x1+y1*y1)*(y2-y3)+(x2*x2+y2*y2)*(y3-y1)+(x3*x3+y3*y3)*(y1-y2))/D;
-    const uy=((x1*x1+y1*y1)*(x3-x2)+(x2*x2+y2*y2)*(x1-x3)+(x3*x3+y3*y3)*(x2-x1))/D;
-    return {x:ux,y:uy};
+    const bx=x2-x1, by=y2-y1, cx=x3-x1, cy=y3-y1;
+    const D=2*(bx*cy-by*cx), lb=bx*bx+by*by, lc=cx*cx+cy*cy;
+    if(!(lb>0&&lc>0) || Math.abs(D)<=1e-12*Math.max(lb,lc)) return null; // 一直線・同じ点
+    return {x:x1+(cy*lb-by*lc)/D, y:y1+(bx*lc-cx*lb)/D};
 }
 
 // ===== 交点計算（スナップ・トリム・延長で使う） =====

@@ -110,7 +110,7 @@ describe('測量: SIMA・座標CSV', () => {
         assert.ok(text.includes('Z00,座標ﾃﾞｰﾀ,,'));
         assert.ok(text.includes('A01,1,測点Ａ－１,10.000,20.000,,'), text);
         assert.ok(text.includes('A01,2,ﾃｽﾄ～点,30.000,40.000,1.500,'), '「〜」は Shift-JIS の「～」にする');
-        assert.ok(!text.includes('�'));
+        assert.ok(!text.includes('\uFFFD'));
     });
 
     it('Shift-JIS で保存された SIMA ファイルを開ける（文字コードの自動判定）', async () => {
