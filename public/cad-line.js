@@ -199,6 +199,7 @@ function _floatAnchor() {
         const p = pv.last || pv.t2 || { x: pv.cx, y: pv.cy };
         return { x: p.x, y: p.y };
     }
+    if(m === 'WAITING_DIMMEAS_TO') return null; // 基点測定の2点目: 指を離して値を読むだけなので出さない（☑確定 は下のバーで記録）
     if(m.startsWith('WAITING_DIM') && cmdState.dimTapped && !touchState.down) { const p = getInputPoint(); return p ? { x: p.x, y: p.y } : null; }
     return null;
 }

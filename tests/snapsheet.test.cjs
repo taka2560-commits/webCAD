@@ -110,6 +110,14 @@ describe('スナップのシート・点の横の ☑確定（円・寸法）', 
         assert.notEqual(app.eval('cmdState.mode'), m0, '押すと次の段階へ');
         assert.equal(shown(), false, '点が入ったら次に指を離すまで出さない');
         app.eval('resetCommand(); _drawFrame(false);');
+        // 基点測定: 基点は出す、2点目（指を離して値を読むだけ）は出さない（v5.49.3）
+        app.eval(`processCommand('MEASURE'); __touch('touchstart', [[400, 300]]); __touch('touchend', []);`);
+        assert.equal(app.eval('cmdState.mode'), 'WAITING_DIMMEAS_BASE');
+        assert.equal(shown(), true, '基点は出す');
+        app.eval(`dimConfirmPoint(); __touch('touchstart', [[500, 300]]); __touch('touchend', []);`);
+        assert.equal(app.eval('cmdState.mode'), 'WAITING_DIMMEAS_TO');
+        assert.equal(shown(), false, '2点目は出さない');
+        app.eval('resetCommand(); _drawFrame(false);');
         // 円の 3点: マウスでは出さない、指なら出す
         app.eval(`processCommand('CIRCLE'); hidePropertyPanel(); processCommand('3P'); handlePointInput({ x: 0, y: 10 }, true); handlePointInput({ x: 10, y: 0 }, true); handlePointInput({ x: 0, y: -10 }, true); _drawFrame(false);`);
         assert.equal(shown(), false, 'マウス・座標では出さない');
