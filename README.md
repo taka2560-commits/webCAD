@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.48（2026年10月13日リリース）**
+**現在のバージョン: v5.49（2026年10月13日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（806件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（808件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト → ビルドをまとめて実行（CI と同じ内容）
 ```
@@ -275,6 +275,7 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
   | `cad-launch.js` | ほかのアプリから開く（PC はファイルの関連付けの launchQueue、Android は共有で届いたファイルを sw.js のキャッシュから取り出す） |
   | `cad-snapsheet.js` | スナップのシート（OSNAP・▼ の長押し・上へなぞる → 指を滑らせて離すと入／切して閉じる。バネの動き） |
   | `cad-ping.js` | ピンの知らせ（ポンと立つ・円の波・現在地からの距離） |
+  | `cad-helmert-rev.js` | SIMA の変換の逆（張り合わせ点から図面 → SIMA の変換を求め、図面の図形を SIMA の座標へ動かす） |
   | `cad-qr.js` | このアプリを渡す QR コード（qrcode-generator。リンクは今の場所、手元の開発用なら公開の場所） |
   | `cad-guide.js` | 操作ガイドのしくみ（ツアーの進め方・指し示し・元の図面に戻す、手順カード、つまずいたときの一言）。他のファイルは `guideNotify('出来事')` で知らせるだけ |
   | `cad-guide-tours.js` | 機能の練習ツアー（測量計算・SIMA の変換・杭打ち・点を動かす・写真・印刷）の手順。機能の状態は `onStart` で控えて `onEnd` で戻す |
@@ -289,6 +290,9 @@ npm run check        # lint → テスト → ビルドをまとめて実行（C
 ## 📅 更新履歴
 
 詳しくは **[更新履歴.md](更新履歴.md)** を参照してください。
+
+* **2026-10-13: バージョン5.49（SIMA の変換の逆）** 🔁
+  * cad-helmert-rev.js（新）: helmReverseSolve（組の src と dst を入れ替えて helmSolve）、helmReverseXform（測量の座標の相似変換を、重心 o と2つの向きの写りから editXform に）、helmReverse（cadChoose で選んだ図形／すべて）、helmReverseApply（editTransformEntity・↩ 1回・張り合わせ点の図面側も動かして _helmSolveNow）。tests/helmert-rev.test.cjs。
 
 * **2026-10-13: バージョン5.48（張り合わせ点もピンと ☑確定）** 🧮
   * cad-ping.js に drawPinMark（しずく形・番号）と pingAt の色。drawHelmOverlay は張り合わせ点を drawPinMark（pingPinScale('helm:' + si)）、_helmAfterPick で pingAt(…, 'helm:' + si, 緑)。点の横の ☑確定 は WAITING_DIMCOGO_PT でも出る（v5.46 の dimTapped）。

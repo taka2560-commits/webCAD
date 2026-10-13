@@ -580,7 +580,8 @@ function helmResultHtml() {
         '<button class="prop-btn btn-sub" onclick="helmExportSima()">📄 変換後の SIMA</button>' +
         (tsOn ? '<button class="prop-btn btn-sub" onclick="helmSendSima()" title="変換後の点を SIMA で機械へ送る">📤 機械へ送る</button>' : '') +
         '<button class="prop-btn btn-sub" onclick="helmExportCsv()">📄 結果の CSV</button>' +
-        '<button class="prop-btn btn-sub" onclick="helmPlaceTable()" title="結果の表を図面に置く">📋 結果の表を置く</button></div>';
+        '<button class="prop-btn btn-sub" onclick="helmPlaceTable()" title="結果の表を図面に置く">📋 結果の表を置く</button>' +
+        '<button class="prop-btn btn-sub" onclick="helmReverse()" title="逆の向き: 図面の図形（選んだ図形かすべて）を、SIMA の座標へ動かす（cad-helmert-rev.js）">🔁 図面を SIMA に合わせる</button></div>';
     const nLots = _helmRangeLots().length;
     h += _cogoNote(`取り込むと、新しい画層「${escapeHtml(_helmLayerName())}」に 点 ${st.n}${nLots ? '・区画 ' + nLots : ''} が入ります（元の図面の点はそのまま）。` +
         (_helm.applied ? `<br>取り込み済み: 画層「${escapeHtml(_helm.applied)}」` : ''));
