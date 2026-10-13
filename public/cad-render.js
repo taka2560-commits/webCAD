@@ -125,7 +125,7 @@ function _drawFrame(overlayOnly) {
         if(_lastBaseMs >= GESTURE_CACHE_MIN_MS) _saveFrameCache();
         else if(_frameCache) _frameCache = null; // 軽い図面ではキャッシュ用のメモリを持たない
         }
-        if(layoutActive()) { if(window.updateZoomSlider) window.updateZoomSlider(); return; } // レイアウトは見るだけ（カーソル・スナップ・測量の印などは重ねない）
+        if(layoutActive()) { if(window.updateZoomSlider) window.updateZoomSlider(); if(typeof _lineFloatHide === 'function') _lineFloatHide(); return; } // レイアウトは見るだけ（カーソル・スナップ・測量の印などは重ねない。点の横の ☑確定 も隠す）
         drawRubberBand(); drawSnapMarker(); drawCrosshair();
         drawLineCandidate(); // 線分の仮の点（☑確定 で決まる点。cad-line.js）
         if(typeof drawSurveyOverlays === 'function') drawSurveyOverlays(); // 現在地（GNSS）・一覧で選んだ点の目印

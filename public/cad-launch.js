@@ -19,6 +19,7 @@ function _launchWhenIdle(fn, tries) {
 }
 function _launchOpen(file, how) {
     if(!file) return;
+    window.__launchedFile = true; // 起動のときの「前回の作業」の復元は聞かない（受け取ったファイルとぶつからないよう。cad-storage.js）
     addCommandLog(`-> ${how}: ${file.name}`);
     _launchWhenIdle(() => openIncomingFile(file));
 }
@@ -41,6 +42,7 @@ async function launchPickShared() {
     let params;
     try { params = new window.URLSearchParams(location.search); } catch { return false; }
     if(!params.has('shared')) return false;
+    window.__launchedFile = true; // 取り出す前から、復元の確認は出さない
     try { window.history.replaceState(null, '', location.pathname + location.hash); } catch { /* 戻せなくてもよい */ }
     const caches = window.caches;
     if(!caches) return false;

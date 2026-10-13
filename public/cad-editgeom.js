@@ -79,7 +79,7 @@ function _editXformShape(e, T) {
         _editSetRot(e, 'rotation', editXformAngle(T, e.rotation || 0));
     } else if(t === 'PLINE') {
         (e.points || []).forEach(mp);
-    } else if(t === 'POINT') {
+    } else if(t === 'POINT' || t === 'PIN') { // ピン（写真・メモ）も点として動かす（図面を SIMA に合わせる。編集コマンドは _editTargets でピンを外している）
         mp(e);
     } else if(t === 'TEXT') {
         mp(e);

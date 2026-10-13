@@ -834,6 +834,7 @@ function _closeDrawingNow() {
     if(typeof window.updateLayerPanel === 'function') window.updateLayerPanel();
     if(typeof window.setCurrentProjectName === 'function') window.setCurrentProjectName(null);
     if(typeof outputNameSet === 'function') outputNameSet(''); // 出力名も外す（cad-outname.js）
+    if(typeof _pings !== 'undefined') _pings = []; // ピンの知らせの波も消す（cad-ping.js）
     resetCommand();
     setDrawingName('新規図面');
     resetUCS();
@@ -954,7 +955,9 @@ function _undoSnapshot() {
     }
     _undoStrCache = next;
     // レイアウト（cad-layout.js）は取り込みのたびに作り直し、中を書き換えないので、同じ配列を指すだけでよい
-    return { v: 2, ids, strs, layers: JSON.stringify(layers), lay: (typeof cadLayouts !== 'undefined') ? cadLayouts : undefined };
+    // SIMA の変換の張り合わせ点（図面側の座標を「図面を SIMA に合わせる」で動かすので、↩・やり直しで一緒に戻す。cad-helmert-rev.js）
+    const hp = (typeof _helm !== 'undefined' && _helm.src && _helm.pairs.length) ? { src: _helm.src.name, pairs: JSON.stringify(_helm.pairs) } : undefined;
+    return { v: 2, ids, strs, layers: JSON.stringify(layers), lay: (typeof cadLayouts !== 'undefined') ? cadLayouts : undefined, helm: hp };
 }
 function _applyUndoSnapshot(s) {
     if(Array.isArray(s)) { entities = s; } // 旧形式（entities配列のみ）との互換
@@ -975,6 +978,9 @@ function _applyUndoSnapshot(s) {
         layers = JSON.parse(s.layers);
         _undoStrCache = cache;
         if(s.lay !== undefined && typeof layoutsRestoreRef === 'function') layoutsRestoreRef(s.lay);
+        if(s.helm && typeof _helm !== 'undefined' && _helm.src && _helm.src.name === s.helm.src) { // 同じ SIMA を開いているときだけ
+            try { _helm.pairs = JSON.parse(s.helm.pairs); if(typeof _helmSolveNow === 'function') _helmSolveNow(); } catch { /* 戻せなくてもよい */ }
+        }
     }
     else { entities = s.entities; layers = s.layers; }
     // 選択はIDで保持しているため、戻した後も同じ図形を指す（存在しなくなった図形は自動で外れる）

@@ -25,7 +25,7 @@ function snapSheetSpring(t, k, c) {
 
 function _ssFs() { return document.body.classList.contains('fullscreen-mode'); }
 // 全画面は ⊕（全画面のスナップ）の入／切。index.html の fsOsnapEnabled はボタンの aria-pressed に出ている
-function _ssMainOn() { const fb = document.getElementById('fs-btn-osnap'); return _ssFs() && fb ? fb.getAttribute('aria-pressed') === 'true' : !!osnapState.main; }
+function _ssMainOn() { return !!osnapState.main; } // 実際に効いているのは osnapState.main（全画面の ⊕ はずれていることがある）
 function _ssEl() {
     let el = document.getElementById('snap-sheet');
     if(!el) {
@@ -98,7 +98,11 @@ function snapSheetIsOpen() { return !!_ss; }
 function snapSheetPick(key, fromGesture) {
     if(!key) return;
     if(key === 'main') {
-        if(_ssFs() && typeof window.toggleFsOsnap === 'function') window.toggleFsOsnap(); else if(typeof window.toggleOsnapMain === 'function') window.toggleOsnapMain();
+        if(_ssFs() && typeof window.toggleFsOsnap === 'function') {
+            const want = !osnapState.main;
+            window.toggleFsOsnap(); // 全画面の ⊕ と osnapState.main を一緒に変える
+            if(!!osnapState.main !== want) window.toggleFsOsnap(); // ⊕ がずれていたら、もう一度で合わせる
+        } else if(typeof window.toggleOsnapMain === 'function') window.toggleOsnapMain();
     } else if(key.startsWith('once:')) {
         const k = key.slice(5);
         if(cmdState.mode === 'IDLE') { if(typeof showToast === 'function') showToast('「次の1点だけ」は、線・寸法などのコマンドの途中で使います', 2500); }
@@ -130,6 +134,7 @@ function _ssBind(btn) {
     let g = null; // { x, y, timer, opened, id }
     const open = () => { if(!g || g.opened) return; g.opened = true; snapSheetOpen({ gesture: true }); };
     btn.addEventListener('pointerdown', (e) => {
+        btn._ssSkipClick = 0; // 前の長押しのあとに click が来なかったとき、捨てる窓を残さない
         if(e.pointerType === 'mouse' && e.button !== 0) return;
         g = { x: e.clientX, y: e.clientY, opened: false, id: e.pointerId };
         g.timer = setTimeout(open, SNAP_SHEET_HOLD_MS);
@@ -163,6 +168,7 @@ function snapSheetSetup() {
     ['btn-osnap', 'btn-osnap-panel', 'fs-btn-osnap', 'fs-btn-osnap-panel'].forEach((id) => _ssBind(document.getElementById(id)));
     // シートの外を押したら閉じる
     document.addEventListener('pointerdown', (e) => { if(_ss && _ss.pinned && !e.target.closest('#snap-sheet') && !e.target.closest('#btn-osnap, #btn-osnap-panel, #fs-btn-osnap, #fs-btn-osnap-panel')) snapSheetClose(); }, true);
-    document.addEventListener('keydown', (e) => { if(e.key === 'Escape' && _ss) snapSheetClose(); });
+    // Esc はシートを閉じるだけ（作図中のコマンドまで取り消さない）
+    document.addEventListener('keydown', (e) => { if(e.key === 'Escape' && _ss) { snapSheetClose(); e.stopImmediatePropagation(); e.preventDefault(); } }, true);
 }
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', snapSheetSetup); else snapSheetSetup();

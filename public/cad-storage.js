@@ -536,6 +536,7 @@ window.deleteProjectFromList = async function(name) {
 
 // ===== 起動時の自動復元チェック =====
 async function checkAutoRestore() {
+    if (window.__launchedFile) return; // ほかのアプリから開いた・共有で受け取ったファイルを開くとき（cad-launch.js）
     // アプリ更新の「再読み込み」から起動した場合は確認なしで復元する
     let silent = false;
     try { silent = sessionStorage.getItem('cad_auto_restore') === '1'; sessionStorage.removeItem('cad_auto_restore'); } catch { /* 非対応 */ }

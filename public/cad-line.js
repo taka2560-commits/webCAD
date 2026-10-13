@@ -204,7 +204,10 @@ function _floatAnchor() {
 }
 function lineFloatUpdate() {
     const c = _floatAnchor();
-    if(!c || !lineFloatOn()) { _lineFloatHide(); return; }
+    // パネルが図面を覆っているとき（スマホ・画面いっぱい）は出さない（パネルの中を押したつもりで決まらないように）
+    const pp = document.getElementById('property-panel');
+    const covered = !!pp && pp.style.display === 'flex' && typeof panelCoversDrawing === 'function' && panelCoversDrawing();
+    if(!c || !lineFloatOn() || covered || (typeof layoutActive === 'function' && layoutActive())) { _lineFloatHide(); return; }
     const b = _lineFloatEl(), p = wcsToScreen(c.x, c.y);
     const r = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
     const vw = window.innerWidth || 800, vh = window.innerHeight || 600;

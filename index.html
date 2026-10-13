@@ -928,6 +928,8 @@
         /* パネルの中の薄い灰色の説明（style で色を決めているもの）も明るくする */
         body.outdoor-mode [style*="color:#888"], body.outdoor-mode [style*="color:#999"], body.outdoor-mode [style*="color:#aaa"], body.outdoor-mode [style*="color:#777"] { color: #e6e6e6 !important; }
 
+        /* スナップのシートを開くボタン: 指を滑らせる途中で画面を動かす操作にされない（pointercancel で途切れない）ように */
+        #btn-osnap, #btn-osnap-panel, #fs-btn-osnap, #fs-btn-osnap-panel { touch-action:none; }
         /* スナップのシート（cad-snapsheet.js）: 画面の下からバネで上がる。transform は JS が動かす */
         #snap-sheet { display:none; position:fixed; left:50%; bottom:0; transform:translate(-50%, 105%); z-index:1000004; width:min(560px, 100vw); box-sizing:border-box;
             padding:6px 14px calc(14px + env(safe-area-inset-bottom)); border-radius:18px 18px 0 0; background:var(--panel-bg); border:1px solid var(--border-color); border-bottom:none;
@@ -945,9 +947,11 @@
         #snap-sheet .ss-sec { font-size:11px; font-weight:700; color:#aaa; margin:10px 0 6px; }
         #snap-sheet .ss-hint { font-size:10px; color:#888; margin-top:8px; line-height:1.4; }
         /* 点の横の ☑確定（cad-line.js）: 線分の仮の点の横に出す。left・top はボタンの真ん中 */
-        #line-float-confirm { display:none; position:fixed; z-index:100003; transform:translate(-50%,-50%); min-width:64px; min-height:48px; padding:0 14px;
-            border-radius:24px; border:1.5px solid #00ff88; background:rgba(16,40,28,0.94); color:#00ff88; font:700 15px 'Segoe UI',sans-serif;
-            box-shadow:0 4px 14px rgba(0,0,0,0.55); cursor:pointer; touch-action:manipulation; zoom:var(--btn-k, 1); }
+        /* 大きさは --btn-k を掛けて決める（zoom にすると left・top まで拡大されて、違う場所に出ていた）。
+           z-index はパネル・下のバー（100002）より下にして、パネルを開いたら隠れ、下のバーの ❌・↶ を押したつもりで決まらないように */
+        #line-float-confirm { display:none; position:fixed; z-index:100001; transform:translate(-50%,-50%); min-width:calc(64px * var(--btn-k, 1)); min-height:calc(48px * var(--btn-k, 1));
+            padding:0 calc(14px * var(--btn-k, 1)); border-radius:calc(24px * var(--btn-k, 1)); border:1.5px solid #00ff88; background:rgba(16,40,28,0.94); color:#00ff88;
+            font:700 calc(15px * var(--btn-k, 1)) 'Segoe UI',sans-serif; box-shadow:0 4px 14px rgba(0,0,0,0.55); cursor:pointer; touch-action:manipulation; }
         #line-float-confirm.lf-dim { opacity:0.35; pointer-events:none; }
         body.guide-touring #line-float-confirm { z-index:1000003; }
         @media (prefers-reduced-motion: no-preference) {

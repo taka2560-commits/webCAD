@@ -46,6 +46,29 @@ describe('図面を SIMA に合わせる（変換の逆）', () => {
         assert.deepEqual(app.errors(), []);
     });
 
+    it('点検で直したこと: ピンも動く・↩ で張り合わせ点も戻る・選んだ図形だけなら張り合わせ点は動かさない', () => {
+        const th = 30 * Math.PI / 180, toPub = (X, Y) => ({ X: -12000 + X * Math.cos(th) - Y * Math.sin(th), Y: 45000 + X * Math.sin(th) + Y * Math.cos(th) });
+        const loc = [[0, 0], [100, 0], [100, 50]];
+        const setup = `entities.length = 0; undoStack.length = 0; redoStack.length = 0;
+            ${JSON.stringify(loc)}.forEach(([X, Y]) => { const w = surveyToWcs(X, Y); entities.push({ type: 'POINT', layer: 0, color: null, x: w.x, y: w.y }); });
+            { const w = surveyToWcs(50, 25); entities.push({ type: 'PIN', layer: 0, color: null, x: w.x, y: w.y, text: '', photos: [] }); }
+            ensureEntityIds(); cmdState.selectedIndices = []; _helm.mode = 'rigid';
+            _helm.src = { name: 'pub.sim', points: ${JSON.stringify(loc.map(([X, Y], i) => Object.assign({ num: String(i + 1) }, toPub(X, Y))))} };
+            _helm.pairs = ${JSON.stringify(loc.map(([X, Y], i) => ({ si: i, dst: { X, Y }, use: true })))}; _helmSolveNow(); window.confirm = () => true;`;
+        app.eval(setup + 'helmReverse();');
+        const pin = app.val(`(() => { const e = entities.find(e => e.type === 'PIN'); return wcsToSurvey(e.x, e.y); })()`);
+        near(pin.X, toPub(50, 25).X, 1e-6); near(pin.Y, toPub(50, 25).Y, 1e-6);
+        app.eval('undo();');
+        near(app.val('_helm.pairs[1].dst.X'), 100, 1e-9, '↩ で張り合わせ点も元の図面の座標に');
+        assert.ok(app.val('Math.max(..._helm.pairs.map(p => p.res.d))') < 1e-6, '戻したあとも計算は合う');
+        app.eval('redo();');
+        near(app.val('_helm.pairs[1].dst.X'), toPub(100, 0).X, 1e-6, 'やり直しでも一緒に');
+        // 選んだ図形だけ: 張り合わせ点は動かさない
+        app.eval(setup + 'cmdState.selectedIndices = [3]; helmReverse();');
+        near(app.val('_helm.pairs[1].dst.X'), 100, 1e-9);
+        app.eval('_helm.src = null; _helm.pairs = []; cmdState.selectedIndices = [];');
+    });
+
     it('張り合わせ点が1組だけなら知らせる', () => {
         app.eval(`_helm.src = { name: 'a', points: [{ num: '1', X: 0, Y: 0 }] }; _helm.pairs = [{ si: 0, dst: { X: 1, Y: 1 }, use: true }];
             window.__t = null; window.__st0 = window.showToast; window.showToast = (m) => { window.__t = m; };`);

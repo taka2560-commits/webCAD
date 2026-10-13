@@ -40,12 +40,13 @@ window.helmReverse = function() {
     });
     return true;
 };
-// 図形 idx を sol で動かす（↩ 1回分）。張り合わせ点の図面側も動かして、計算し直す
+// 図形 idx を sol で動かす（↩ 1回分。張り合わせ点も ↩ で戻る: cad-core.js の _undoSnapshot）。
+// すべての図形を動かしたときは、張り合わせ点の図面側も動かして計算し直す（選んだ図形だけなら、張り合わせ点はそのまま）
 function helmReverseApply(sol, idx) {
-    const T = helmReverseXform(sol);
+    const T = helmReverseXform(sol), all = idx.length === entities.length;
     saveUndo();
     idx.forEach((i) => { const e = entities[i]; if(e) { editTransformEntity(e, T); delete e.bbox; } });
-    _helm.pairs.forEach((p) => { if(p.dst) { const q = helmApply(sol, p.dst.X, p.dst.Y); p.dst = Object.assign({}, p.dst, { X: q.X, Y: q.Y }); } });
+    if(all) _helm.pairs.forEach((p) => { if(p.dst) { const q = helmApply(sol, p.dst.X, p.dst.Y); p.dst = Object.assign({}, p.dst, { X: q.X, Y: q.Y }); } });
     if(typeof _helmSolveNow === 'function') _helmSolveNow();
     if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();

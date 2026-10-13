@@ -59,6 +59,44 @@ describe('スナップのシート・点の横の ☑確定（円・寸法）', 
         app.eval('resetCommand();');
     });
 
+    it('点検で直したこと: Esc はシートだけ閉じる・OSNAP の入／切は実際の状態から・長押しのあと click が来なくても次のタップは効く', async () => {
+        app.eval(`processCommand('LINE'); processCommand('0,0'); snapSheetOpen();
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));`);
+        assert.equal(app.val('snapSheetIsOpen()'), false);
+        assert.equal(app.eval('cmdState.mode'), 'WAITING_LINE_P2', 'コマンドは続く');
+        app.eval('resetCommand();');
+        // 全画面の ⊕ がずれていても、表示と入／切は osnapState.main に合わせる
+        app.eval(`osnapState.main = false; document.body.classList.add('fullscreen-mode'); snapSheetOpen();`);
+        assert.match(app.eval(`document.querySelector('#snap-sheet [data-ss="main"]').textContent`), /切/);
+        app.eval(`document.querySelector('#snap-sheet [data-ss="main"]').click();`);
+        assert.equal(app.val('osnapState.main'), true, '1回で入になる');
+        app.eval(`snapSheetClose(); document.body.classList.remove('fullscreen-mode');`);
+        // 長押しで開いて click が来なかった → 次のふつうのタップは効く
+        const b = `document.getElementById('btn-osnap')`;
+        app.eval(`__ptr(${b}, 'pointerdown', 500, 590);`);
+        await wait(320);
+        app.eval(`__ptr(${b}, 'pointerup', 500, 590); snapSheetClose(); __ptr(${b}, 'pointerdown', 500, 590); __ptr(${b}, 'pointerup', 500, 590);
+            window.__clicked = false; ${b}.addEventListener('click', () => { window.__clicked = true; }, { once: true }); ${b}.click();`);
+        assert.equal(app.val('window.__clicked'), true, 'ふつうのタップの click は捨てない');
+        app.eval('osnapState.main = true;');
+    });
+
+    it('点検で直したこと: 点の横の ☑確定 はレイアウトに替えたら消え、パネルが図面を覆うときは出さない', () => {
+        const shown = () => app.val(`(() => { const b = document.getElementById('line-float-confirm'); return !!b && b.style.display === 'block'; })()`);
+        app.eval(`window.innerWidth = 800; window.innerHeight = 600; processCommand('LINE'); __touch('touchstart', [[300, 300]]); __touch('touchend', []);`);
+        assert.equal(shown(), true);
+        app.eval(`window.innerWidth = 500; showOptionsPanel(); lineFloatUpdate();`);
+        assert.equal(shown(), false, 'スマホの幅でパネルが開いていれば出さない');
+        app.eval(`closePropertyPanel(); window.innerWidth = 800; lineFloatUpdate();`);
+        assert.equal(shown(), true);
+        app.eval(`window.__la = layoutActive; layoutActive = () => true; _drawFrame(false);`);
+        assert.equal(shown(), false, 'レイアウトでは消す');
+        app.eval('layoutActive = window.__la; resetCommand(); _drawFrame(false);');
+        // ほかのアプリから開いたときは、起動の復元の確認を出さない
+        app.eval(`window.__oif = openIncomingFile; openIncomingFile = () => {}; window.__launchedFile = false; _launchOpen(new File(['0'], 'a.dxf'), 'テスト'); openIncomingFile = window.__oif;`);
+        assert.equal(app.val('window.__launchedFile'), true);
+    });
+
     it('点の横の ☑確定: 寸法は指を離したあと、円の 3点は指で入れた仮の円の横に。押すと決まる', async () => {
         app.eval(`entities.push({ type: 'LINE', layer: 0, color: null, x1: 0, y1: 0, x2: 100, y2: 0 }); ensureEntityIds(); window.innerWidth = 800; window.innerHeight = 600;`);
         const shown = () => app.val(`(() => { const b = document.getElementById('line-float-confirm'); return !!b && b.style.display === 'block'; })()`);
