@@ -563,7 +563,7 @@ const GUIDE_COMMANDS = [
         ['HELMERT', 'HENKAN', 'SIMA の変換（図面を SIMA に合わせる逆も）'], ['TS', 'SOKKIA', 'TS連携（TSLINK）'], ['SDROUT', '-', 'SDR33出力'], ['STAKE', 'KUI', '杭打ち（SETOUT）'], ['PHOTO', 'MEMO', '写真・メモ（PIN）'], ['PINS', '-', 'ピンの表示の入／切'],
         ['GNSS', 'GPS', '現在地'], ['GNSSZONE', '-', '系番号の選択'], ['SIMAOUT', '-', 'SIMA出力'], ['CSVOUT', '-', '座標CSV出力']]],
     ['図面・表示', [['OPEN', '-', '開く（IMPORT）'], ['SAVE', '-', '保存'], ['PROJECTS', '-', '保存一覧（RESTORE）'], ['WEBCADOUT', 'PACK', '図面一式の書き出し（.webcad）'], ['EXPORTDXF', 'SAVEAS', 'DXF出力'], ['DXFJW', '-', 'DXF出力（Jw_cad 向け）'], ['PRINT', 'PDF', '印刷・PDF（PLOT）'], ['PNGOUT', 'PNG', '画面の画像（PNG）'], ['OUTNAME', '-', '出力名（書き出すファイルの名前）'],
-        ['MAP', 'SHITAE', '地図・下絵（UNDERLAY）'], ['LAYOUT', '-', 'レイアウトを見る（次のレイアウトへ）'], ['MODEL', '-', 'モデルに戻る'], ['ZOOM', 'ZE', '全体表示'], ['UCS', '-', 'UCS（原点）'], ['UCS2P', '2P', 'UCS（2点）'], ['WCS', '-', 'UCSを戻す'], ['UCSMAN', 'UC', 'UCS 管理（登録・切り替え・数値・点・線）'], ['UCSSAVE', '-', '今の UCS を登録'],
+        ['MAP', 'SHITAE', '地図・下絵（UNDERLAY）'], ['LAYOUT', '-', 'レイアウトを見る（次のレイアウトへ）'], ['MODEL', '-', 'モデルに戻る'], ['ZOOM', 'ZE', '全体表示（離れた図形は除く）'], ['ZOOMALL', 'ZA', '全体表示（離れた図形も入れる）'], ['UCS', '-', 'UCS（原点）'], ['UCS2P', '2P', 'UCS（2点）'], ['WCS', '-', 'UCSを戻す'], ['UCSMAN', 'UC', 'UCS 管理（登録・切り替え・数値・点・線）'], ['UCSSAVE', '-', '今の UCS を登録'],
         ['BLOCKS', '-', 'ブロック管理'], ['LAYOFF', '-', 'タッチで画層を非表示'], ['SHOWALL', '-', '隠した図形を再表示'], ['FAV', 'OKINI', 'お気に入りの登録'], ['QR', 'SHAREAPP', 'このアプリを渡す（QR コード）'], ['UNIT', 'LENUNIT', '長さの単位を m ⇔ mm に切り替え'], ['CUNIT', 'COORDUNIT', '座標の単位を m ⇔ mm に切り替え'], ['OUTDOOR', 'SUN', '屋外モードの入・切'], ['MOTION', 'UIMOTION', 'UIの動き（試用）の入・切'], ['ERRORS', 'ERRLOG', 'エラーログ']]],
 ];
 

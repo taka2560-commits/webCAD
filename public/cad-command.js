@@ -818,6 +818,7 @@ function processCommand(cmdText) {
     else if(cmd==='U'||cmd==='UNDO') { if(!(cmd==='U' && lineUndoStep())) undo(); } // 線分の途中の U は、最後に引いた線だけ消す（AutoCAD と同じ）
     else if(cmd==='REDO') { redo(); }
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
+    else if(cmd==='ZOOMALL'||cmd==='ZA') { zoomExtentsAll(); } // 離れた図形も入れて全体（v5.51）
     else if(cmd==='CANCEL') {
         const wasCogo = typeof cogoIsPicking === 'function' && cogoIsPicking(); // 測量計算の点の指定中なら、やめたあとパネルに戻る
         const grip = cmdState.mode === 'WAITING_GRIP_DEST' ? cmdState.grip : null; // 点を動かすのをやめても、図形は選んだまま

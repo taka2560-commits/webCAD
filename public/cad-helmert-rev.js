@@ -53,7 +53,7 @@ function helmReverseApply(sol, idx) {
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
     addCommandLog(`-> [変換] 図面の図形 ${idx.length}個を SIMA の座標へ動かしました（${_helmRevDesc(sol)}）`);
     if(typeof showUndoSnack === 'function') showUndoSnack(`図形 ${idx.length}個を SIMA の座標へ動かしました`);
-    if(typeof zoomExtents === 'function') zoomExtents();
+    if(typeof zoomExtents === 'function') zoomExtents(true); // 知らせを出さない（「↩ 元に戻す」の知らせを残す）
     if(typeof _helmRerender === 'function') _helmRerender();
     if(typeof _helmViewInst !== 'undefined' && _helmViewInst) _helmViewInst.redraw();
     render();

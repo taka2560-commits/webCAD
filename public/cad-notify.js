@@ -31,7 +31,7 @@ function showSnack(msg, o) {
         s.id = 'cad-snack';
         s.setAttribute('role', 'status');
         s.setAttribute('aria-live', 'polite');
-        s.innerHTML = '<span class="sn-msg"></span><button type="button" class="sn-act"></button><button type="button" class="sn-x" aria-label="閉じる">✕</button>';
+        s.innerHTML = '<span class="sn-msg"></span><button type="button" class="sn-act"></button><button type="button" class="sn-act sn-act2"></button><button type="button" class="sn-x" aria-label="閉じる">✕</button>';
         s.querySelector('.sn-x').onclick = () => hideSnack();
         document.body.appendChild(s);
     }
@@ -42,7 +42,15 @@ function showSnack(msg, o) {
         act.textContent = o.action.label;
         act.onclick = () => { hideSnack(); o.action.run(); };
     } else { act.style.display = 'none'; act.onclick = null; }
+    // 2つめのボタン（全体表示の「全部を表示」など）。前の版で作った知らせの欄には無いので、そのときは足す
+    let act2 = s.querySelector('.sn-act2');
+    if(!act2 && o.action2) { act2 = document.createElement('button'); act2.type = 'button'; act2.className = 'sn-act sn-act2'; act.after(act2); }
+    if(act2) {
+        if(o.action2) { act2.style.display = ''; act2.textContent = o.action2.label; act2.onclick = () => { hideSnack(); o.action2.run(); }; }
+        else { act2.style.display = 'none'; act2.onclick = null; }
+    }
     if(o.kind) s.dataset.kind = o.kind; else delete s.dataset.kind;
+    s.classList.toggle('two', !!o.action2);
     s.classList.add('show');
     clearTimeout(s._timer);
     s._timer = setTimeout(hideSnack, o.ms || 6000);
@@ -52,8 +60,7 @@ function hideSnack() {
     if(!s) return;
     s.classList.remove('show');
     clearTimeout(s._timer);
-    const act = s.querySelector('.sn-act');
-    if(act) act.onclick = null; // 送るファイル（大きい PDF のことも）を持ち続けない
+    s.querySelectorAll('.sn-act').forEach((b) => { b.onclick = null; }); // 送るファイル（大きい PDF のことも）を持ち続けない
 }
 
 // 元に戻せる操作（↩ 1回分）のあとに「元に戻す」を出す。押すまでに別の操作をしていたら（↩ の履歴が進んでいたら）戻さない

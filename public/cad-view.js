@@ -136,30 +136,104 @@ function zoomToOrigin() { if(typeof layoutActive === 'function' && layoutActive(
 function zoomExtents(quiet) {
     if(layoutZoomExtents()) return; // レイアウトの画面: 用紙全体（cad-layout.js）
     if(entities.length===0){zoomToOrigin();return;}
-    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    const items = _extentsItems();
+    if(!items.length){zoomToOrigin();return;}
+    // v5.51: 公共座標の図面に混ざった原点の近くの図形（原点から現場へ引いた線も）・桁違いに遠い図形は除き、図形の集まっている所に合わせる
+    const { main, far } = extentsSplit(items);
+    _zoomToBox(_itemsBox(main));
+    if(quiet === true) return;
+    addCommandLog(far.length ? `全体表示（離れた図形 ${far.length}個 は入れていません。全部を入れるには ZOOMALL）` : '全体表示');
+    if(far.length && typeof showSnack === 'function') {
+        // 押したときに図面が変わっていれば何もしない（↩・別の図面を開いた・消したあとに、違う図形を選ばないよう。図形は ID で持つ）
+        const st = { epoch: _geomEpoch, ents: entities, ids: far.map((b) => entities[b.idx] && entities[b.idx].id) };
+        showSnack(`離れた所に図形が ${far.length}個 あります（全体表示には入れていません）`,
+            { kind: 'warn', ms: 8000, action: { label: '🔍 見る', run: () => zoomToFarEntities(st) }, action2: { label: '全部を表示', run: () => zoomExtentsAll() } });
+    }
+    if(typeof guideNotify === 'function') guideNotify('extents');
+}
+// 見えている図形の外枠（idx・minX・minY・maxX・maxY）
+function _extentsItems() {
+    const out = [];
     const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
-    const growPt = (x, y) => { if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; };
-    const growBox = (b) => { if(b) { growPt(b.minX, b.minY); growPt(b.maxX, b.maxY); } };
-    entities.forEach(e=>{
-        if(!isVisible(e)) return;
-        if(e.type==='DIMENSION'){
-            if(e.p1){growPt(e.p1.x,e.p1.y);growPt(e.p2.x,e.p2.y);}
-            if(e.center){growPt(e.center.x-(e.radius||0),e.center.y-(e.radius||0));growPt(e.center.x+(e.radius||0),e.center.y+(e.radius||0));}
-            if(e.vertex){growPt(e.vertex.x,e.vertex.y);growPt(e.arm1.x,e.arm1.y);growPt(e.arm2.x,e.arm2.y);}
-            if(e.point){growPt(e.point.x,e.point.y);}
-            if(e.leaderCoord){growPt(e.leaderCoord.x,e.leaderCoord.y);}
+    entities.forEach((e, idx) => {
+        if(!e || !isVisible(e)) return;
+        let b = null;
+        const grow = (x, y) => { if(!isFinite(x) || !isFinite(y)) return; if(!b) b = { idx, minX: x, minY: y, maxX: x, maxY: y }; else { if(x < b.minX) b.minX = x; if(y < b.minY) b.minY = y; if(x > b.maxX) b.maxX = x; if(y > b.maxY) b.maxY = y; } };
+        const growBox = (bb) => { if(bb) { grow(bb.minX, bb.minY); grow(bb.maxX, bb.maxY); } };
+        if(e.type === 'DIMENSION') {
+            if(e.p1) { grow(e.p1.x, e.p1.y); grow(e.p2.x, e.p2.y); }
+            if(e.center) { grow(e.center.x - (e.radius || 0), e.center.y - (e.radius || 0)); grow(e.center.x + (e.radius || 0), e.center.y + (e.radius || 0)); }
+            if(e.vertex) { grow(e.vertex.x, e.vertex.y); grow(e.arm1.x, e.arm1.y); grow(e.arm2.x, e.arm2.y); }
+            if(e.point) grow(e.point.x, e.point.y);
+            if(e.leaderCoord) grow(e.leaderCoord.x, e.leaderCoord.y);
         }
-        else if(e.type==='HATCH'){ if(e.target) growBox(calcBBox(e.target)); }
-        else { growBox(e.bbox || (e.bbox = calcBBox(e))); }
+        else if(e.type === 'HATCH') { if(e.target) growBox(calcBBox(e.target)); }
+        else growBox(e.bbox || (e.bbox = calcBBox(e)));
+        if(b) out.push(b);
     });
-    if(!isFinite(minX)){zoomToOrigin();return;}
-    const pad=50, w=maxX-minX||1, h=maxY-minY||1;
+    return out;
+}
+function _itemsBox(items) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for(const b of items) { if(b.minX < minX) minX = b.minX; if(b.minY < minY) minY = b.minY; if(b.maxX > maxX) maxX = b.maxX; if(b.maxY > maxY) maxY = b.maxY; }
+    return { minX, minY, maxX, maxY };
+}
+function _zoomToBox(bb) {
+    const pad=50, w=bb.maxX-bb.minX||1, h=bb.maxY-bb.minY||1;
     const sx=(canvas.width-pad*2)/w, sy=(canvas.height-pad*2)/h;
     view.scale=Math.min(sx,sy);
-    const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
-    _reanchorView(canvas.width/2, canvas.height/2, {x:cx, y:cy});
+    _reanchorView(canvas.width/2, canvas.height/2, {x:(bb.minX+bb.maxX)/2, y:(bb.minY+bb.maxY)/2});
     render();
-    if(quiet === true) return;
-    addCommandLog('全体表示');
-    if(typeof guideNotify === 'function') guideNotify('extents');
+}
+// 図形の外枠を、集まっている所（main）と離れた図形（far）に分ける。
+// 1) 図形の中心の真ん中（X・Y それぞれの中央値）に近い半分を「芯」にする
+// 2) 芯が原点から遠い（芯の大きさの 5 倍より遠い）ときは、原点に近い側（原点から芯までの半分より原点寄り）に
+//    かかる図形を離れた図形とする（公共座標の図面に混ざった原点の近くの図形・原点から現場へ引いた線）
+// 3) どこにあっても、芯から芯の大きさの 1000 倍より遠い図形は離れた図形とする
+// 4) 離れた図形が「全体の 1/4 以下」のときだけ除く。図形が2つ以下・芯の大きさが 0 なら分けない
+// 道路の中心線のように芯から長く伸びる図形・数 km 先の基準点は、原点の側でなければ除かない（v5.51 の点検で直した）
+const EXTENTS_FAR_ORIGIN = 5, EXTENTS_FAR_HUGE = 1000, EXTENTS_FAR_SHARE = 0.25;
+function extentsSplit(items) {
+    const n = items.length, all = { main: items.slice(), far: [] };
+    if(n < 3) return all;
+    const cxOf = (b) => (b.minX + b.maxX) / 2, cyOf = (b) => (b.minY + b.maxY) / 2;
+    // 大きな図面（20万図形など）でも速いよう、数の並べ替えは Float64Array で
+    const median = (a) => { a.sort(); const h = a.length >> 1; return a.length % 2 ? a[h] : (a[h - 1] + a[h]) / 2; };
+    const mx = median(Float64Array.from(items, cxOf)), my = median(Float64Array.from(items, cyOf));
+    const dist = Float64Array.from(items, (b) => Math.hypot(cxOf(b) - mx, cyOf(b) - my));
+    const dCore = Float64Array.from(dist).sort()[Math.ceil(n / 2) - 1];
+    const box = _itemsBox(items.filter((b, i) => dist[i] <= dCore));
+    const span = Math.max(box.maxX - box.minX, box.maxY - box.minY);
+    if(!(span > 0)) return all; // 芯の大きさが 0（同じ所の点だけ）なら決めない
+    // 外枠と外枠の近さ（重なっていれば 0）
+    const gap = (b, c) => Math.hypot(Math.max(c.minX - b.maxX, 0, b.minX - c.maxX), Math.max(c.minY - b.maxY, 0, b.minY - c.maxY));
+    const O = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+    const D = gap(box, O), useOrigin = D > EXTENTS_FAR_ORIGIN * span, R = D / 2;
+    const far = items.filter((b) => (useOrigin && gap(b, O) <= R) || gap(b, box) > EXTENTS_FAR_HUGE * span);
+    if(!far.length || far.length > Math.max(1, Math.floor(n * EXTENTS_FAR_SHARE))) return all;
+    const fs = new Set(far);
+    return { main: items.filter((b) => !fs.has(b)), far };
+}
+// 除かずに全部を入れて表示（全体表示の知らせの「全部を表示」・コマンド ZOOMALL）
+function zoomExtentsAll() {
+    if(typeof layoutActive === 'function' && layoutActive()) { zoomExtents(); return; }
+    const items = _extentsItems();
+    if(!items.length) { zoomToOrigin(); return; }
+    _zoomToBox(_itemsBox(items));
+    addCommandLog('全体表示（離れた図形も入れる）');
+}
+// 離れた図形へ移って選ぶ（消すなら選んだときのバーの 🗑）。コマンドの途中では選ばずに移るだけ
+function zoomToFarEntities(st) {
+    if(st.ents !== entities || st.epoch !== _geomEpoch) { if(typeof showToast === 'function') showToast('図面が変わったので、もう一度「全体」を押してください', { kind: 'warn', ms: 3000 }); return; }
+    const idxs = st.ids.map((id) => entityIndexById(id)).filter((i) => i >= 0);
+    if(!idxs.length) return;
+    if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel();
+    _zoomToBox(_itemsBox(_extentsItems().filter((b) => idxs.includes(b.idx))));
+    if(cmdState.mode !== 'IDLE') { addCommandLog(`-> 離れた図形 ${idxs.length}個 の所へ移りました`); return; }
+    const sel = [...new Set(idxs.flatMap((i) => (typeof expandGroupTargets === 'function') ? expandGroupTargets(i) : [i]))];
+    cmdState.selectedIndices = sel; cmdState.highlightIdx = sel.length === 1 ? sel[0] : -1;
+    if(typeof updatePropertiesPanel === 'function') updatePropertiesPanel();
+    if(typeof updateSelectionBar === 'function') updateSelectionBar();
+    render();
+    addCommandLog(`-> 離れた図形 ${idxs.length}個 を選びました（いらなければ 🗑 で消せます。「全体」で元の表示に戻ります）`);
 }

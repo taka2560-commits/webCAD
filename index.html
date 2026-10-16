@@ -431,6 +431,9 @@
             box-shadow:0 6px 20px rgba(0,0,0,0.5); opacity:0; pointer-events:none; transition:opacity .2s; }
         #cad-snack.show { opacity:1; }
         #cad-snack .sn-msg { flex:1; min-width:0; }
+        /* ボタンが2つのとき（全体表示の「🔍 見る」「全部を表示」）は、文を上の段に、ボタンを右寄せで下の段に（スマホで文が細く折れないよう） */
+        #cad-snack.two { flex-wrap:wrap; justify-content:flex-end; padding:8px 6px 6px 14px; }
+        #cad-snack.two .sn-msg { flex:1 1 100%; }
         #cad-snack button { pointer-events:auto; flex-shrink:0; height:38px; border-radius:8px; cursor:pointer; font:700 13px 'Segoe UI',sans-serif; }
         #cad-snack:not(.show) button { pointer-events:none; }
         #cad-snack .sn-act { padding:0 14px; background:rgba(var(--brand-rgb),0.14); border:1px solid rgba(var(--brand-rgb),0.55); color:var(--brand); }
