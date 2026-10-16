@@ -453,6 +453,10 @@ window.showCoordListPanel = function() {
                 <button class="prop-btn btn-sub" onclick="exportSima()">📄 SIMA出力</button>
                 <button class="prop-btn btn-sub" onclick="exportSdr33()" title="ソキアのトータルステーション用（既知点・杭打ち点）">📄 SDR33出力</button>
             </div>
+            <div class="coord-grp"><span class="coord-grp-label">図面</span>
+                <button id="coord-show-btn" class="prop-btn btn-sub" onclick="coordListSetShown()" title="図面の測点（点と点名の文字）の表示の入／切。一覧・出力にはそのまま入ります">👁 表示 入</button>
+                <button id="coord-delall-btn" class="prop-btn btn-sub" style="color:#ff6b6b;border-color:rgba(255,107,107,0.45);" onclick="coordListDeleteAll()" title="一覧の点（検索中は見つかった点だけ）を図面から消す（↩ で戻せます）">🗑 全部消す</button>
+            </div>
         </div>
         <div class="coord-lbl" title="「自動」は点の広がりから決めます。「指定」にすると、読み込む・置く点の点名をその高さにします（例: 縮尺 1/500 で 2.5mm の文字なら 1.25 m）">${ptLabelControlHtml()}
             <button class="prop-btn btn-sub" onclick="ptLabelApplyExisting()" title="図面の点名の文字を、この大きさにそろえる（↩ で戻せます）">🔠 今の点名をこの大きさに</button>
@@ -476,6 +480,66 @@ window.coordListDeletePoint = function(p) {
     if(typeof showUndoSnack === 'function') showUndoSnack(`点「${label}」を消しました`);
     window.updateCoordListContent();
     render();
+};
+// 座標一覧の点（点・同じまとまり（gid）の点名の文字・属性付きブロックの部品）の図形
+function _coordListEnts(list) {
+    const set = new Set(), gids = new Set();
+    (list || collectSurveyPoints()).forEach((p) => {
+        const e0 = (p.id !== null && p.id !== undefined) ? entities.find((e) => e && e.id === p.id) : entities[p.idx];
+        if(e0) set.add(e0);
+        const g = p.gid || (e0 && e0.gid);
+        if(g) gids.add(g);
+    });
+    if(gids.size) entities.forEach((e) => { if(e && e.gid && gids.has(e.gid)) set.add(e); });
+    return set;
+}
+// 図面の測点の表示: true 全部見える・false 全部隠している・'mixed' 一部・null 点なし
+window.coordListShownState = function() {
+    const ents = [..._coordListEnts()];
+    if(!ents.length) return null;
+    const h = ents.filter((e) => e.hidden).length;
+    return h === 0 ? true : h === ents.length ? false : 'mixed';
+};
+// 図面の測点の表示の入／切（on を省くと、全部見えていれば隠す・それ以外は表示）。一覧・出力・測量計算にはそのまま入る。↩ で戻せる
+window.coordListSetShown = function(on) {
+    const ents = [..._coordListEnts()];
+    if(!ents.length) { showToast('測点がありません', 2000); return; }
+    if(on === undefined) on = ents.some((e) => e.hidden);
+    const change = ents.filter((e) => !!e.hidden === on);
+    if(change.length) {
+        saveUndo();
+        change.forEach((e) => { if(on) { e.hidden = false; delete e.hiddenBy; } else { e.hidden = true; e.hiddenBy = 'survey'; } });
+        if(!on) { cmdState.selectedIndices = []; cmdState.highlightIdx = -1; if(typeof updatePropertiesPanel === 'function') updatePropertiesPanel(); }
+        _bumpGeomEpoch();
+        if(typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
+        if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
+        render();
+    }
+    addCommandLog(`-> 座標一覧の測点: ${on ? '表示' : '非表示'}`);
+    window.updateCoordListContent();
+};
+// 一覧の点をまとめて消す（検索中は見つかった点だけ）。確かめてから。↩・「元に戻す」で戻せる
+window.coordListDeleteAll = function() {
+    const list = _coordListSnapshot.slice();
+    if(!list.length) { showToast('消す測点がありません', 2000); return; }
+    const qEl = document.getElementById('coord-search');
+    const filtered = !!(qEl && qEl.value.trim());
+    cadConfirm({ title: '🗑 測点を消す', danger: true, ok: `${list.length}点を消す`,
+        message: `${filtered ? '検索で見つかった' : '一覧のすべての'} ${list.length}点を、点名の文字といっしょに図面から消します。\n「↩ 元に戻す」で戻せます。` }, (yes) => {
+        if(!yes) return;
+        const del = _coordListEnts(list);
+        if(!del.size) { window.updateCoordListContent(); return; }
+        saveUndo();
+        const before = entities.length;
+        for(let i = entities.length - 1; i >= 0; i--) if(del.has(entities[i])) entities.splice(i, 1);
+        cmdState.selectedIndices = []; cmdState.highlightIdx = -1;
+        _bumpGeomEpoch();
+        if(typeof updatePropertiesPanel === 'function') updatePropertiesPanel();
+        addCommandLog(`-> 座標一覧から ${list.length}点を消しました（図形 ${before - entities.length}個）`);
+        if(typeof showUndoSnack === 'function') showUndoSnack(`測点 ${list.length}点を消しました`);
+        window.updateCoordListContent();
+        render();
+    });
 };
 // 座標一覧から SIMA を読み込む（ファイルを選ぶ → 今の図面があれば「置き換える／今の図面に追加／やめる」→ 図面に入れて、一覧も新しくする）
 window.coordListImportSima = function() {
@@ -505,6 +569,15 @@ window.updateCoordListContent = function() {
     box.textContent = '';
     const cnt = document.getElementById('coord-list-count');
     if(cnt) cnt.textContent = all.length ? ` ${q ? `${list.length} / ` : ''}${all.length}点` : '';
+    // 図面の段: 表示の入／切（一部だけ隠れていれば「一部」）と、消す点の数
+    const sb = document.getElementById('coord-show-btn'), db = document.getElementById('coord-delall-btn');
+    if(sb) {
+        const st = all.length ? window.coordListShownState() : null;
+        sb.textContent = st === false ? '🚫 表示 切' : st === 'mixed' ? '👁 表示 一部' : '👁 表示 入';
+        sb.setAttribute('aria-pressed', String(st !== false));
+        sb.disabled = st === null;
+    }
+    if(db) { db.textContent = q && list.length ? `🗑 ${list.length}点を消す` : '🗑 全部消す'; db.disabled = !list.length; }
     if(!list.length) {
         const empty = document.createElement('div');
         empty.style.cssText = 'color:#888;text-align:center;padding:16px;font-size:12px;';

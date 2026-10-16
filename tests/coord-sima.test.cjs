@@ -82,4 +82,44 @@ describe('座標一覧の入力', () => {
         assert.match(listText(), /KP1/, '元に戻すと一覧も戻る');
         assert.deepEqual(app.errors(), []);
     });
+
+    it('図面の段: 表示の入／切（点と点名の文字を隠す。一覧・出力には残る）と、全部消す（検索中は見つかった点だけ・確かめてから・元に戻せる）', async () => {
+        app.eval(`entities.push({ type: 'LINE', layer: 0, color: null, x1: 0, y1: 0, x2: 10, y2: 0 }); ensureEntityIds(); showCoordListPanel();`);
+        app.window.confirm = () => false; // 今の図面に追加
+        await load();
+        const btn = (id) => app.eval(`document.getElementById('${id}').textContent`);
+        assert.equal(btn('coord-show-btn'), '👁 表示 入');
+        app.eval(`coordListSetShown()`);
+        assert.equal(app.eval(`entities.filter(e => e.type !== 'LINE').every(e => e.hidden)`), true, '点と点名の文字を隠す');
+        assert.equal(app.eval(`entities.find(e => e.type === 'LINE').hidden`), undefined, 'ほかの図形はそのまま');
+        assert.equal(btn('coord-show-btn'), '🚫 表示 切');
+        assert.match(listText(), /KP1[\s\S]*KP2/, '一覧には残る');
+        assert.equal(app.val('buildCoordCsvText().pointCount'), 2, '出力にも入る');
+        app.eval(`applyPointPreset(); handlePointInput({ x: 5, y: 5 }, true); resetCommand(); showCoordListPanel();`);
+        assert.equal(btn('coord-show-btn'), '👁 表示 一部', '新しく置いた点だけ見えている');
+        app.eval(`coordListSetShown()`);
+        assert.equal(app.eval(`entities.some(e => e.hidden)`), false, '一部のときは全部表示に');
+        // 全部消す: やめると何もしない
+        const n0 = app.eval('entities.length');
+        app.window.confirm = () => false;
+        app.eval(`coordListDeleteAll()`);
+        assert.equal(app.eval('entities.length'), n0);
+        // 検索中は見つかった点だけ
+        app.window.confirm = () => true;
+        app.eval(`document.getElementById('coord-search').value = 'KP'; updateCoordListContent();`);
+        assert.equal(btn('coord-delall-btn'), '🗑 2点を消す');
+        app.eval(`coordListDeleteAll()`);
+        assert.deepEqual(app.val('collectSurveyPoints().map(p => /^KP/.test(p.name))'), [false], '置いた点だけ残る');
+        assert.equal(app.eval(`entities.some(e => e.type === 'TEXT' && /^KP/.test(e.text))`), false, '点名の文字も消す');
+        assert.equal(app.eval(`entities.filter(e => e.type === 'LINE').length`), 1, '線は残る');
+        app.eval(`document.querySelector('#cad-snack .sn-act').click()`);
+        assert.equal(app.eval('entities.length'), n0, '元に戻す');
+        app.eval(`document.getElementById('coord-search').value = ''; updateCoordListContent();`);
+        assert.equal(btn('coord-delall-btn'), '🗑 全部消す');
+        app.eval(`coordListDeleteAll()`);
+        assert.equal(app.val('collectSurveyPoints().length'), 0);
+        assert.equal(app.eval(`document.getElementById('coord-delall-btn').disabled`), true);
+        assert.equal(app.eval(`document.getElementById('coord-show-btn').disabled`), true);
+        assert.deepEqual(app.errors(), []);
+    });
 });
