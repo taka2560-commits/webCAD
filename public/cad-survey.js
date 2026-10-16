@@ -483,9 +483,11 @@ window.coordListDeletePoint = function(p) {
 };
 // 座標一覧の点（点・同じまとまり（gid）の点名の文字・属性付きブロックの部品）の図形
 function _coordListEnts(list) {
-    const set = new Set(), gids = new Set();
+    // 点ごとに entities を探すと 点の数 × 図形の数 になり、大きな図面で固まる（v5.50.1）→ ID の表を1回だけ作る
+    const set = new Set(), gids = new Set(), byId = new Map();
+    entities.forEach((e) => { if(e && e.id !== null && e.id !== undefined) byId.set(e.id, e); });
     (list || collectSurveyPoints()).forEach((p) => {
-        const e0 = (p.id !== null && p.id !== undefined) ? entities.find((e) => e && e.id === p.id) : entities[p.idx];
+        const e0 = (p.id !== null && p.id !== undefined) ? byId.get(p.id) : entities[p.idx];
         if(e0) set.add(e0);
         const g = p.gid || (e0 && e0.gid);
         if(g) gids.add(g);
@@ -494,8 +496,8 @@ function _coordListEnts(list) {
     return set;
 }
 // 図面の測点の表示: true 全部見える・false 全部隠している・'mixed' 一部・null 点なし
-window.coordListShownState = function() {
-    const ents = [..._coordListEnts()];
+window.coordListShownState = function(list) {
+    const ents = [..._coordListEnts(list)];
     if(!ents.length) return null;
     const h = ents.filter((e) => e.hidden).length;
     return h === 0 ? true : h === ents.length ? false : 'mixed';
@@ -572,7 +574,7 @@ window.updateCoordListContent = function() {
     // 図面の段: 表示の入／切（一部だけ隠れていれば「一部」）と、消す点の数
     const sb = document.getElementById('coord-show-btn'), db = document.getElementById('coord-delall-btn');
     if(sb) {
-        const st = all.length ? window.coordListShownState() : null;
+        const st = all.length ? window.coordListShownState(all) : null;
         sb.textContent = st === false ? '🚫 表示 切' : st === 'mixed' ? '👁 表示 一部' : '👁 表示 入';
         sb.setAttribute('aria-pressed', String(st !== false));
         sb.disabled = st === null;
