@@ -133,14 +133,15 @@ function togglePlanView() {
 
 function zoomToOrigin() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); view.scale=1; _reanchorView(canvas.width/2, canvas.height/2, {x:ucs.originX, y:ucs.originY}); render(); addCommandLog('原点へズーム'); }
 // quiet: true ならコマンド欄・練習ツアーに知らせない（図面一式の表紙の図。cad-webcad.js）
-function zoomExtents(quiet) {
+// plain: true なら浮かぶバーの分を空けずに四方同じ余白（バーの写らない表紙の図。v5.51.1）
+function zoomExtents(quiet, plain) {
     if(layoutZoomExtents()) return; // レイアウトの画面: 用紙全体（cad-layout.js）
     if(entities.length===0){zoomToOrigin();return;}
     const items = _extentsItems();
     if(!items.length){zoomToOrigin();return;}
     // v5.51: 公共座標の図面に混ざった原点の近くの図形（原点から現場へ引いた線も）・桁違いに遠い図形は除き、図形の集まっている所に合わせる
     const { main, far } = extentsSplit(items);
-    _zoomToBox(_itemsBox(main));
+    _zoomToBox(_itemsBox(main), plain === true);
     if(quiet === true) return;
     addCommandLog(far.length ? `全体表示（離れた図形 ${far.length}個 は入れていません。全部を入れるには ZOOMALL）` : '全体表示');
     if(far.length && typeof showSnack === 'function') {
@@ -178,12 +179,34 @@ function _itemsBox(items) {
     for(const b of items) { if(b.minX < minX) minX = b.minX; if(b.minY < minY) minY = b.minY; if(b.maxX > maxX) maxX = b.maxX; if(b.maxY > maxY) maxY = b.maxY; }
     return { minX, minY, maxX, maxY };
 }
-function _zoomToBox(bb) {
-    const pad=50, w=bb.maxX-bb.minX||1, h=bb.maxY-bb.minY||1;
-    const sx=(canvas.width-pad*2)/w, sy=(canvas.height-pad*2)/h;
-    view.scale=Math.min(sx,sy);
-    _reanchorView(canvas.width/2, canvas.height/2, {x:(bb.minX+bb.maxX)/2, y:(bb.minY+bb.maxY)/2});
+function _zoomToBox(bb, plain) {
+    const ins=plain ? { left: 50, right: 50, top: 50, bottom: 50 } : _viewInsets(50), w=bb.maxX-bb.minX||1, h=bb.maxY-bb.minY||1;
+    const aw=canvas.width-ins.left-ins.right, ah=canvas.height-ins.top-ins.bottom;
+    view.scale=Math.min(aw/w, ah/h);
+    _reanchorView(ins.left+aw/2, ins.top+ah/2, {x:(bb.minX+bb.maxX)/2, y:(bb.minY+bb.maxY)/2});
     render();
+}
+// 図面に重なって浮かぶバー（左のツールバー・上のバー・下のバー）の分だけ余白を広げる（v5.51.1）。
+// 以前は四方に同じ 50px だけ空けていたので、全体表示で図面の左端が左のツールバーの下に隠れていた。
+// 隠れているバー（座標読取の全画面など）は数えない。空けると図面の場所が狭くなりすぎるときは四方 pad に戻す
+function _viewInsets(pad) {
+    const ins = { left: pad, right: pad, top: pad, bottom: pad };
+    if(!canvas.getBoundingClientRect) return ins;
+    const cv = canvas.getBoundingClientRect(), gap = 12;
+    const shown = (id) => {
+        const el = document.getElementById(id);
+        if(!el || el.inert) return null;
+        const r = el.getBoundingClientRect();
+        if(r.width < 1 || r.height < 1) return null;
+        const cs = getComputedStyle(el);
+        return (cs.display === 'none' || cs.visibility === 'hidden' || (cs.opacity !== '' && Number(cs.opacity) === 0)) ? null : r;
+    };
+    const tb = shown('toolbar'), top = shown('top-bar'), sb = shown('status-bar');
+    if(tb && tb.left - cv.left < canvas.width / 3) ins.left = Math.max(pad, tb.right - cv.left + gap);
+    if(top && top.top - cv.top < canvas.height / 3) ins.top = Math.max(pad, top.bottom - cv.top + gap);
+    if(sb && cv.bottom - sb.bottom < canvas.height / 3) ins.bottom = Math.max(pad, cv.bottom - sb.top + gap);
+    if(canvas.width - ins.left - ins.right < 120 || canvas.height - ins.top - ins.bottom < 120) return { left: pad, right: pad, top: pad, bottom: pad };
+    return ins;
 }
 // 図形の外枠を、集まっている所（main）と離れた図形（far）に分ける。
 // 1) 図形の中心の真ん中（X・Y それぞれの中央値）に近い半分を「芯」にする

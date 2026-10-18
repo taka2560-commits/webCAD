@@ -129,7 +129,12 @@
         #cmd-pill-prompt { color:var(--text-color);font:600 12px 'Consolas',monospace;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
         #cmd-pill-hint { color:var(--mute);font:700 11px 'Segoe UI',sans-serif;white-space:nowrap;flex-shrink:0; font-size: 14px; }
         #command-line-area.collapsed #cmd-pill-dot, #command-line-area.collapsed #cmd-pill-name, #command-line-area.collapsed #cmd-pill-sep, #command-line-area.collapsed #cmd-pill-prompt { display:none; }
-        #command-line-area.collapsed #cmd-pill-hint { display:block; font-size:14px; color:var(--text-color); }
+        /* たたんだ丸いボタン: 「コマンド ▲」は 40px の丸に入らず「マンド」と切れていたので、左のツールバーと同じ 記号＋小さな名前 にする（v5.51.1） */
+        #cmd-pill-fab { display:none; }
+        #command-line-area.collapsed #cmd-pill-hint { display:none; }
+        #command-line-area.collapsed #cmd-pill-fab { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; line-height:1; color:var(--text-color); font-family:'Segoe UI',sans-serif; }
+        #cmd-pill-fab-ic { font-size:15px; }
+        #cmd-pill-fab-cap { font-size:9px; font-weight:700; letter-spacing:-0.3px; white-space:nowrap; }
         
         #command-log { flex:1;padding:6px 10px;overflow-y:auto;color:#ccc;display:flex;flex-direction:column;justify-content:flex-end; background:rgba(0,0,0,0.25); font-size:12px; }
         #command-input-wrapper { display:flex;padding:6px 10px;background-color:rgba(255,255,255,0.92);color:#000; align-items:center; }
@@ -884,7 +889,8 @@
         #status-bar { min-height: calc(38px * var(--btn-k, 1)); }
         #command-line-area { bottom: calc(14px + 38px * var(--btn-k, 1)); }
         #command-line-area.collapsed { width: calc(40px * var(--btn-k, 1)); height: calc(40px * var(--btn-k, 1)); border-radius: calc(20px * var(--btn-k, 1)); }
-        #command-line-area.collapsed #cmd-pill-hint { font-size: calc(14px * var(--btn-k, 1)); }
+        #cmd-pill-fab-ic { font-size: calc(15px * var(--btn-k, 1)); }
+        #cmd-pill-fab-cap { font-size: calc(9px * var(--btn-k, 1)); }
         #command-line-area:not(.collapsed) { left: calc(16px + 52px * var(--btn-k, 1)); }
         #guide-help-btn { bottom: calc(22px + 78px * var(--btn-k, 1)); width: calc(40px * var(--btn-k, 1)); height: calc(40px * var(--btn-k, 1)); border-radius: calc(20px * var(--btn-k, 1)); font-size: calc(18px * var(--btn-k, 1)); }
         #sel-actionbar { bottom: calc(18px + 38px * var(--btn-k, 1)); right: calc(18px + 40px * var(--btn-k, 1)); }
@@ -1164,7 +1170,7 @@
             <button id="btn-ortho" class="status-btn" aria-pressed="false" title="直交モード (F8)" onclick="toggleOrtho()">ORTHO</button>
             <div style="position:relative;display:inline-flex;">
                 <button id="btn-osnap" class="status-btn active" aria-pressed="true" title="オブジェクトスナップ (F3)" onclick="toggleOsnapMain()">OSNAP</button>
-                <button id="btn-osnap-panel" class="status-btn" style="padding:0 3px;margin-left:-4px;" onclick="toggleOsnapPanel(event)">▼</button>
+                <button id="btn-osnap-panel" class="status-btn" style="padding:0 5px;margin-left:2px;" title="スナップの種類" aria-label="スナップの種類を選ぶ" onclick="toggleOsnapPanel(event)">▼</button>
             </div>
             <span id="snap-indicator" style="color:#00ff00;width:30px;font-size:10px;"></span>
             <span id="coords-display"><span class="coord-x">X:0</span><span class="coord-y">Y:0</span></span>
@@ -1189,17 +1195,18 @@
         <button class="prop-btn" style="margin-top:15px; width:100%;" onclick="invertLayersVisibility()">全画層の表示反転</button>
     </div>
     <div id="command-line-area" class="collapsed glass-panel">
-        <button id="command-pill" onclick="toggleCommandLine()" title="コマンドラインを開閉">
+        <button id="command-pill" onclick="toggleCommandLine()" title="コマンドラインを開閉" aria-label="コマンド欄を開閉">
             <span id="cmd-pill-dot"></span>
             <span id="cmd-pill-name">READY</span>
             <span id="cmd-pill-sep">·</span>
             <span id="cmd-pill-prompt">コマンド入力</span>
-            <span id="cmd-pill-hint">コマンド ▲</span>
+            <span id="cmd-pill-hint">コマンド ▼</span>
+            <span id="cmd-pill-fab" aria-hidden="true"><span id="cmd-pill-fab-ic">⌨</span><span id="cmd-pill-fab-cap">コマンド</span></span>
         </button>
         <div id="command-log">
-            <div>Web CADシステム v2.0 初期化完了。</div>
+            <div>Web CAD 初期化完了。</div>
             <div>・作図: LINE(L), CIRCLE(C), RECTANG(REC), ARC(A), PLINE(PL)</div>
-            <div>・寸法: DIMLIN(DLI), DIMALN(DAL), DIMRAD(DRA), DIMDIA(DDI), DIMANG(DAN), DIMORD(DOR)</div>
+            <div>・寸法: DIMLINEAR(DLI), DIMALIGNED(DAL), DIMRADIUS(DRA), DIMDIAMETER(DDI), DIMANGULAR(DAN), DIMORDINATE(DOR)</div>
             <div>・測定: MEASURE(MEA) 基点からのX・Y・直線距離を出したまま見る</div>
             <div>・ファイル: DXF/DWG読み込み・エクスポート対応</div>
         </div>

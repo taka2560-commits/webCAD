@@ -129,4 +129,26 @@ describe('仕上げ', () => {
         assert.match(html, /animation: menuIn 0\.2s/);
         assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'public', 'cad-panels.js'), 'utf8'), /fs-btn-area-select/);
     });
+
+    it('コマンド欄の最初の説明に出るコマンド名・略は、どれも打って動く（v5.51.1。以前は DIMLIN などの無い名前が出ていた）', () => {
+        const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+        const log = html.slice(html.indexOf('<div id="command-log">'), html.indexOf('</div>', html.indexOf('・測定:')));
+        const names = [...log.matchAll(/([A-Z]{2,})\(([A-Z]+)\)/g)].flatMap((m) => [m[1], m[2]]);
+        assert.ok(names.length >= 20, `名前を読めた ${names.length}`);
+        const bad = names.filter((n) => app.val(`(() => { resetCommand(); const before = document.getElementById('command-log').textContent.length;
+            processCommand('${n}'); const added = document.getElementById('command-log').textContent.slice(before); resetCommand(); return /不明なコマンド/.test(added); })()`));
+        assert.deepEqual(bad, []);
+    });
+
+    it('たたんだコマンドのボタンは「⌨ コマンド」（丸に収まる）、開くと「コマンド ▼」。OSNAP と ▼ は重ねない（v5.51.1）', () => {
+        const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+        assert.match(html, /<span id="cmd-pill-fab-cap">コマンド<\/span>/);
+        assert.match(html, /#command-line-area\.collapsed #cmd-pill-hint \{ display:none; \}/);
+        assert.doesNotMatch(html, /id="btn-osnap-panel"[^>]*margin-left:-/);
+        app.eval('toggleCommandLine()');
+        assert.equal(app.val(`document.getElementById('command-line-area').classList.contains('collapsed')`), false);
+        assert.equal(app.val(`document.getElementById('cmd-pill-hint').textContent`), 'コマンド ▼');
+        app.eval('toggleCommandLine()');
+        assert.deepEqual(app.errors(), []);
+    });
 });

@@ -151,4 +151,37 @@ describe('全体表示: 離れた図形を除く', () => {
         })()`);
         assert.deepEqual(r, { missed: 0, wrong: 0, local: 0 });
     });
+
+    it('浮かぶバー（左のツールバー・上のバー・下のバー）の下に図面の端を隠さない。表紙の図（plain）は四方同じ（v5.51.1）', () => {
+        site(50);
+        // jsdom は大きさを持たないので、390×844 のスマホの画面のバーの位置を入れる
+        app.eval(`window.__rects = { 'top-bar': [8, 8, 382, 62], toolbar: [8, 62, 62, 790], 'status-bar': [8, 800, 382, 836] };
+            window.__oldW = canvas.width; window.__oldH = canvas.height; canvas.width = 390; canvas.height = 844;
+            window.__oldRect = Element.prototype.getBoundingClientRect;
+            Element.prototype.getBoundingClientRect = function() {
+                const r = this === canvas ? [0, 0, 390, 844] : window.__rects[this.id];
+                if(!r) return window.__oldRect.call(this);
+                return { left: r[0], top: r[1], right: r[2], bottom: r[3], width: r[2] - r[0], height: r[3] - r[1], x: r[0], y: r[1] };
+            };`);
+        try {
+            // 画面での図形の外枠（左・上・下の端）
+            const edges = () => app.val(`(() => { const pts = entities.flatMap((e) => [wcsToScreen(e.x1, e.y1), wcsToScreen(e.x2, e.y2)]);
+                return { l: Math.min(...pts.map((p) => p.x)), r: Math.max(...pts.map((p) => p.x)), t: Math.min(...pts.map((p) => p.y)), b: Math.max(...pts.map((p) => p.y)) }; })()`);
+            app.eval('zoomExtents(true)');
+            let e = edges();
+            assert.ok(e.l >= 62 + 10, `左のツールバーに隠れない ${JSON.stringify(e)}`);
+            assert.ok(e.t >= 62 + 10 && e.b <= 800 - 10 && e.r <= 390 - 40, `上・下のバーに隠れず、右も画面の中 ${JSON.stringify(e)}`);
+            app.eval('zoomExtents(true, true)');
+            e = edges();
+            assert.ok(Math.abs(e.l - (390 - e.r)) < 1, `表紙の図は左右同じ余白 ${JSON.stringify(e)}`);
+            // バーが隠れている（座標読取の全画面）ときは、バーの分を空けない
+            app.eval(`document.getElementById('toolbar').style.display = 'none'`);
+            const ins = app.val('_viewInsets(50)');
+            assert.equal(ins.left, 50);
+            app.eval(`document.getElementById('toolbar').style.display = ''`);
+        } finally {
+            app.eval('Element.prototype.getBoundingClientRect = window.__oldRect; canvas.width = window.__oldW; canvas.height = window.__oldH;');
+        }
+        assert.deepEqual(app.errors(), []);
+    });
 });

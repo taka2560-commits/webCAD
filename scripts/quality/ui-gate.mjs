@@ -88,6 +88,22 @@ async function runOne(browser, v, btn, motion) {
     if (overlap(parts['#toolbar'], parts['#status-bar'])) fail(run, '左のツールバーと下の欄が重なっています');
     const hScroll = await page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth);
     if (hScroll > 1) fail(run, `横にスクロールできてしまいます（${hScroll}px）`);
+    // たたんだコマンドのボタンの文字が丸に収まる・OSNAP と ▼ が重ならない（v5.51.1）
+    const pill = await page.evaluate(() => { const b = document.getElementById('command-pill'); return { sw: b.scrollWidth, cw: b.clientWidth }; });
+    if (pill.sw > pill.cw + 1) fail(run, `たたんだコマンドのボタンの文字が切れています（${pill.sw}px / ${pill.cw}px）`);
+    if (overlap(await rectOf(page, '#btn-osnap'), await rectOf(page, '#btn-osnap-panel'))) fail(run, 'OSNAP と ▼ が重なっています');
+    // 全体表示で、図面の端が左のツールバー・上のバー・下の欄の下に隠れない（v5.51.1）
+    const ext = await page.evaluate(() => {
+        entities.length = 0;
+        entities.push({ type: 'LINE', layer: 0, color: null, x1: 35000, y1: -12000, x2: 35100, y2: -11900 }, { type: 'LINE', layer: 0, color: null, x1: 35000, y1: -11900, x2: 35100, y2: -12000 });
+        if (typeof ensureEntityIds === 'function') ensureEntityIds();
+        zoomExtents(true);
+        const p = [wcsToScreen(35000, -12000), wcsToScreen(35100, -11900)], c = canvas.getBoundingClientRect();
+        const box = { x: c.left + Math.min(p[0].x, p[1].x), y: c.top + Math.min(p[0].y, p[1].y), w: Math.abs(p[1].x - p[0].x), h: Math.abs(p[1].y - p[0].y) };
+        entities.length = 0; render();
+        return box;
+    });
+    for (const s of ['#top-bar', '#toolbar', '#status-bar']) if (overlap(ext, parts[s])) fail(run, `全体表示で図面の端が ${s} の下に隠れます`);
     await shot('base');
 
     // ---- 2. 点の横の ☑確定（指の端末だけ） ----

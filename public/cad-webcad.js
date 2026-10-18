@@ -87,7 +87,7 @@ async function _wcCoverImage() {
     if(typeof captureCleanImage !== 'function' || !(canvas.width > 0 && canvas.height > 0)) return null;
     const saved = { x: view.x, y: view.y, scale: view.scale, rotation: view.rotation };
     try {
-        if(typeof zoomExtents === 'function') zoomExtents(true); // コマンド欄・練習ツアーには知らせない
+        if(typeof zoomExtents === 'function') zoomExtents(true, true); // コマンド欄・練習ツアーには知らせない。バーは写らないので四方同じ余白
         const r = await captureCleanImage(1, 'image/jpeg', 0.85);
         if(!r.blob) return null;
         const jpeg = await _wcBlobBytes(r.blob);

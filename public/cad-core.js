@@ -561,8 +561,6 @@ function toggleCommandLine() {
     const area = document.getElementById('command-line-area');
     if (!area) return;
     area.classList.toggle('collapsed');
-    const hint = document.getElementById('cmd-pill-hint');
-    if (hint) hint.textContent = area.classList.contains('collapsed') ? 'コマンド ▲' : 'コマンド ▼';
 }
 // ピルに現在のコマンド名・プロンプト文を反映する（setPrompt / setActiveTool から呼ばれる）
 function updateCommandPill() {
