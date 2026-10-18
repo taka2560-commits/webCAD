@@ -438,8 +438,8 @@ window.updateLayerManagerContent = function() {
             </button>
         </div>
         ${bulk ? `
-        <div class="lm-bulk" role="group" aria-label="画層の色をまとめて変える">
-            <div class="lm-bulk-help">色を変える画層にチェックを付け、色を選んで「この色に」を押します</div>
+        <div class="lm-bulk" role="group" aria-label="画層の色・線種をまとめて変える">
+            <div class="lm-bulk-help">変える画層にチェックを付け、下でする事を選んで、いちばん下のボタンを押します</div>
             <div class="lm-bulk-row">
                 <span>選ぶ:</span>
                 <button class="status-btn" onclick="lmBulkPickAll('all')">すべて</button>
@@ -447,16 +447,24 @@ window.updateLayerManagerContent = function() {
                 <button class="status-btn" onclick="lmBulkPickAll('none')">外す</button>
             </div>
             <label class="lm-bulk-opt">
-                <input type="checkbox" id="lm-bulk-bylayer" ${bulk.byLayer ? 'checked' : ''} onchange="lmBulkSetByLayer(this.checked)">
+                <input type="checkbox" id="lm-bulk-setcolor" ${bulk.setColor ? 'checked' : ''} onchange="lmBulkSetOpt('setColor', this.checked)">
+                <span>画層の色を変える（右下の色の四角で選んだ色に）</span>
+            </label>
+            <label class="lm-bulk-opt">
+                <input type="checkbox" id="lm-bulk-bylayer" ${bulk.byLayer ? 'checked' : ''} onchange="lmBulkSetOpt('byLayer', this.checked)">
                 <span>図形の色も ByLayer にする（個別の色の図形 <b id="lm-bulk-nown">${_lmBulkOwnCount()}</b>個 も、画層の色になります）</span>
             </label>
+            <label class="lm-bulk-opt">
+                <input type="checkbox" id="lm-bulk-ltbylayer" ${bulk.ltByLayer ? 'checked' : ''} onchange="lmBulkSetOpt('ltByLayer', this.checked)">
+                <span>図形の線種も ByLayer にする（破線などの個別の線種の図形 <b id="lm-bulk-nlt">${_lmBulkLtIdx().length}</b>個 も、画層の線種になります）</span>
+            </label>
             <div class="lm-bulk-row">
-                <input type="color" id="lm-bulk-color" class="lm-color lm-bulk-color" value="${_layerColorHex(bulk.color)}" oninput="lmBulkSetColor(this.value)" aria-label="まとめて付ける色">
-                <button class="prop-btn lm-bulk-apply" id="lm-bulk-apply" onclick="lmBulkApply()"${_lmBulkIdx().length ? '' : ' disabled'}>${_lmBulkLabel()}</button>
+                <input type="color" id="lm-bulk-color" class="lm-color lm-bulk-color" value="${_layerColorHex(bulk.color)}" oninput="lmBulkSetColor(this.value)" aria-label="まとめて付ける色"${bulk.setColor ? '' : ' disabled'}>
+                <button class="prop-btn lm-bulk-apply" id="lm-bulk-apply" onclick="lmBulkApply()"${_lmBulkCanApply() ? '' : ' disabled'}>${_lmBulkLabel()}</button>
                 <button class="prop-btn lm-bulk-cancel" onclick="lmBulkColorMode(false)">やめる</button>
             </div>
         </div>` : `
-        <button class="prop-btn lm-bulk-start" onclick="lmBulkColorMode(true)" title="いくつかの画層（すべてでも）を選んで、同じ色にまとめて変えます">🎨 画層の色をまとめて変える</button>`}
+        <button class="prop-btn lm-bulk-start" onclick="lmBulkColorMode(true)" title="いくつかの画層（すべてでも）を選んで、色をまとめて変えます。図形の個別の色・線種を外して画層に従わせることもできます">🎨 画層の色・線種をまとめて変える</button>`}
         ${(() => {
             // 取り込み時に非表示にした図形を、種類ごとに表示する（円弧・塗りつぶし・そのほか）。取り込んだ塗りつぶしは、また隠せる
             const hid = entities.filter(en => en.hidden);
@@ -514,7 +522,9 @@ window.updateLayerManagerContent = function() {
 
 // ===== 画層の色をまとめて変える（v5.52） =====
 // 選んだ画層は名前で持つ（↩・別の図面を開くなどで画層の並びが変わっても、違う画層を変えない）
-let _lmBulk = null; // { names: Set<画層名>, color: '#rrggbb', byLayer: 図形の個別の色も外すか } 。null なら使っていない
+// { names: Set<画層名>, color: '#rrggbb', setColor: 画層の色を変えるか, byLayer: 図形の個別の色も外すか, ltByLayer: 図形の個別の線種も外すか（v5.53） }。
+// null なら使っていない
+let _lmBulk = null;
 function _lmBulkIdx() {
     if(!_lmBulk) return [];
     const out = [];
@@ -530,18 +540,37 @@ function _lmBulkOwnIdx() {
     return out;
 }
 function _lmBulkOwnCount() { return _lmBulkOwnIdx().length; }
-function _lmBulkLabel() { const n = _lmBulkIdx().length; return n ? `🎨 ${n}個の画層をこの色に` : '🎨 画層を選んでください'; }
+// 選んだ画層にある、個別の線種を持つ図形（線種が ByLayer でない図形。取り込んだ図面の HIDDEN などの破線）の番号
+function _lmBulkLtIdx() {
+    const set = new Set(_lmBulkIdx());
+    const out = [];
+    if(!set.size) return out;
+    entities.forEach((e, i) => { if(e && e.lt && String(e.lt).trim().toUpperCase() !== 'BYLAYER' && set.has(Number(e.layer))) out.push(i); });
+    return out;
+}
+// 押せるのは、画層を選んでいて、する事が1つ以上あるとき
+function _lmBulkCanApply() { return !!_lmBulk && _lmBulkIdx().length > 0 && (_lmBulk.setColor || _lmBulk.byLayer || _lmBulk.ltByLayer); }
+function _lmBulkLabel() {
+    const n = _lmBulkIdx().length;
+    if(!n) return '🎨 画層を選んでください';
+    if(!(_lmBulk.setColor || _lmBulk.byLayer || _lmBulk.ltByLayer)) return 'する事を選んでください';
+    return _lmBulk.setColor ? `🎨 ${n}個の画層をこの色に` : `✔ ${n}個の画層に行う`;
+}
 // 一覧を作り直さずに、ボタンの文字だけ合わせる（作り直すと一覧のスクロールが先頭に戻るため）
 function _lmBulkSyncApply() {
     const b = document.getElementById('lm-bulk-apply');
-    if(b) { b.textContent = _lmBulkLabel(); b.disabled = !_lmBulkIdx().length; }
+    if(b) { b.textContent = _lmBulkLabel(); b.disabled = !_lmBulkCanApply(); }
     const n = document.getElementById('lm-bulk-nown');
     if(n) n.textContent = String(_lmBulkOwnCount());
+    const nl = document.getElementById('lm-bulk-nlt');
+    if(nl) nl.textContent = String(_lmBulkLtIdx().length);
+    const c = document.getElementById('lm-bulk-color');
+    if(c && _lmBulk) c.disabled = !_lmBulk.setColor;
 }
 window.lmBulkColorMode = function(on) {
     if(on) {
         const cur = layers[currentLayerIndex];
-        _lmBulk = { names: new Set(), color: _layerColorHex(cur ? cur.color : '#ffffff'), byLayer: true }; // 図形の個別の色も外すのが初め（v5.52.1）
+        _lmBulk = { names: new Set(), color: _layerColorHex(cur ? cur.color : '#ffffff'), setColor: true, byLayer: true, ltByLayer: false }; // 図形の個別の色も外すのが初め（v5.52.1）。線種は選んだときだけ（v5.53）
     } else _lmBulk = null;
     window.updateLayerManagerContent();
 };
@@ -568,23 +597,33 @@ window.lmBulkReset = function() {
     _lmBulk = null;
     window.updateLayerManagerContent();
 };
-window.lmBulkSetByLayer = function(on) { if(_lmBulk) _lmBulk.byLayer = !!on; };
+window.lmBulkSetOpt = function(key, on) {
+    if(!_lmBulk || !['setColor', 'byLayer', 'ltByLayer'].includes(key)) return;
+    _lmBulk[key] = !!on;
+    _lmBulkSyncApply();
+};
+window.lmBulkSetByLayer = function(on) { window.lmBulkSetOpt('byLayer', on); };
 window.lmBulkSetColor = function(color) { if(_lmBulk) _lmBulk.color = color; };
 window.lmBulkApply = function() {
     const idx = _lmBulkIdx();
-    if(!_lmBulk || !idx.length) return;
-    const color = _layerColorHex(_lmBulk.color);
+    if(!_lmBulkCanApply()) return;
+    const color = _layerColorHex(_lmBulk.color), setColor = !!_lmBulk.setColor;
     const own = _lmBulk.byLayer ? _lmBulkOwnIdx() : [];
-    saveUndo(); // まとめて1回の ↩ で戻る（図形の色も）
-    idx.forEach((i) => { layers[i].color = color; });
+    const lts = _lmBulk.ltByLayer ? _lmBulkLtIdx() : [];
+    if(!setColor && !own.length && !lts.length) { if(typeof showToast === 'function') showToast('選んだ画層に、変える図形はありません', { kind: 'warn', ms: 2500 }); return; }
+    saveUndo(); // まとめて1回の ↩ で戻る（図形の色・線種も）
+    if(setColor) idx.forEach((i) => { layers[i].color = color; });
     own.forEach((i) => { entities[i].color = null; }); // ByLayer（画層の色で描く）
-    addCommandLog(`-> 画層 ${idx.length}個 の色を ${color} に変更しました${own.length ? `（図形 ${own.length}個 を ByLayer に）` : ''}`);
+    lts.forEach((i) => { entities[i].lt = null; }); // ByLayer（画層の線種で描く）
+    const parts = [setColor ? `画層 ${idx.length}個 の色を ${color} に` : '', own.length ? `図形 ${own.length}個 の色を ByLayer に` : '', lts.length ? `図形 ${lts.length}個 の線種を ByLayer に` : ''].filter(Boolean);
+    const msg = parts.join('・') + 'しました';
+    addCommandLog(`-> ${msg}`);
     _lmBulk = null;
     render();
     updatePropertiesPanel();
     updateLayerColorDisplay();
     updateLayerPanel();
-    if(typeof showUndoSnack === 'function') showUndoSnack(`画層 ${idx.length}個 の色を変えました${own.length ? `（図形 ${own.length}個 を ByLayer に）` : ''}`);
+    if(typeof showUndoSnack === 'function') showUndoSnack(msg);
 };
 
 // 画層パネルの追加関数

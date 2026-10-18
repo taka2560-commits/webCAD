@@ -225,4 +225,30 @@ describe('画層の色をまとめて変える（v5.52）', () => {
         assert.equal(app.val('layers[1].color'), '#808080');
         assert.deepEqual(app.errors(), []);
     });
+
+    it('図形の線種も ByLayer にする（初めは切）。色を変えずに線種だけ戻せる。変える物が無ければ ↩ を増やさない（v5.53）', () => {
+        app.eval(`entities.push({ type: 'LINE', layer: 1, color: '#ff00ff', lt: 'HIDDENK1', x1: 0, y1: 0, x2: 1, y2: 0 }, { type: 'LINE', layer: 1, color: null, lt: 'BYLAYER', x1: 0, y1: 1, x2: 1, y2: 1 },
+            { type: 'ARC', layer: 1, color: null, lt: 'CENTER', cx: 0, cy: 0, radius: 1, startAngle: 0, endAngle: 1 }, { type: 'LINE', layer: 2, color: null, lt: 'DASHED', x1: 0, y1: 2, x2: 1, y2: 2 }); ensureEntityIds();
+            showLayerManagerPanel(); lmBulkColorMode(true); lmBulkToggle(1, true)`);
+        assert.equal(app.val(`document.getElementById('lm-bulk-ltbylayer').checked`), false, '線種は初めは切');
+        assert.equal(app.val(`document.getElementById('lm-bulk-nlt').textContent`), '2', '道路の個別の線種の図形 2個（BYLAYER は数えない）');
+        // 色は変えず、図形の色もそのまま、線種だけ
+        app.eval(`lmBulkSetOpt('setColor', false); lmBulkSetOpt('byLayer', false); lmBulkSetOpt('ltByLayer', true)`);
+        assert.equal(app.val(`document.getElementById('lm-bulk-color').disabled`), true, '色を変えないときは色の欄を押せない');
+        assert.equal(app.val(`document.getElementById('lm-bulk-apply').textContent`), '✔ 1個の画層に行う');
+        app.eval('lmBulkApply()');
+        assert.deepEqual(app.val('entities.map((e) => e.lt || null)'), [null, 'BYLAYER', null, 'DASHED'], '選んだ画層の図形だけ');
+        assert.deepEqual(app.val('entities.map((e) => effectiveLinetype(e))'), [null, null, null, 'DASHED'], '画層（実線）に従う');
+        assert.equal(app.val('entities[0].color'), '#ff00ff', '図形の色はそのまま');
+        assert.equal(app.val('layers[1].color'), '#f00', '画層の色はそのまま');
+        assert.equal(app.val('undoStack.length'), 1);
+        app.eval('undo()');
+        assert.deepEqual(app.val('entities.map((e) => e.lt || null)'), ['HIDDENK1', 'BYLAYER', 'CENTER', 'DASHED']);
+        // する事が無ければ押せない。変える物が無ければ ↩ を増やさない
+        app.eval(`lmBulkColorMode(true); lmBulkToggle(0, true); lmBulkSetOpt('setColor', false); lmBulkSetOpt('byLayer', false)`);
+        assert.equal(app.val(`document.getElementById('lm-bulk-apply').disabled`), true);
+        app.eval(`lmBulkSetOpt('ltByLayer', true); lmBulkApply()`);
+        assert.equal(app.val('undoStack.length'), 0, '画層 0 には個別の線種の図形が無い');
+        assert.deepEqual(app.errors(), []);
+    });
 });
