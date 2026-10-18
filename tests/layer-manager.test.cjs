@@ -205,4 +205,24 @@ describe('画層の色をまとめて変える（v5.52）', () => {
         assert.equal(q('.lm-bulk-start'), 1);
         assert.deepEqual(app.errors(), []);
     });
+
+    it('まとめて変えるとき、選んだ画層の図形の個別の色を ByLayer にする（初めは入。切ればそのまま）。↩ 1回で図形の色も戻る（v5.52.1）', () => {
+        app.eval(`entities.push({ type: 'LINE', layer: 1, color: '#ff00ff', x1: 0, y1: 0, x2: 1, y2: 0 }, { type: 'TEXT', layer: 1, color: '#00ffff', x: 0, y: 0, text: 'A', height: 1 },
+            { type: 'LINE', layer: 1, color: null, x1: 0, y1: 1, x2: 1, y2: 1 }, { type: 'LINE', layer: 2, color: '#ff00ff', x1: 0, y1: 2, x2: 1, y2: 2 }); ensureEntityIds();
+            showLayerManagerPanel(); lmBulkColorMode(true)`);
+        assert.equal(app.val(`document.getElementById('lm-bulk-bylayer').checked`), true, '初めは入');
+        app.eval('lmBulkToggle(1, true)');
+        assert.equal(app.val(`document.getElementById('lm-bulk-nown').textContent`), '2', '道路の個別の色の図形 2個');
+        app.eval(`lmBulkSetColor('#808080'); lmBulkApply()`);
+        assert.deepEqual(app.val('entities.map((e) => e.color)'), [null, null, null, '#ff00ff'], '選んだ画層の図形だけ ByLayer');
+        assert.deepEqual(app.val('entities.map((e) => getEntityColor(e))'), ['#808080', '#808080', '#808080', '#ff00ff']);
+        app.eval('undo()');
+        assert.deepEqual(app.val('entities.map((e) => e.color)'), ['#ff00ff', '#00ffff', null, '#ff00ff']);
+        assert.equal(app.val('layers[1].color'), '#f00');
+        // 切ると図形の色はそのまま
+        app.eval(`lmBulkColorMode(true); lmBulkToggle(1, true); lmBulkSetByLayer(false); lmBulkSetColor('#808080'); lmBulkApply()`);
+        assert.deepEqual(app.val('entities.map((e) => e.color)'), ['#ff00ff', '#00ffff', null, '#ff00ff']);
+        assert.equal(app.val('layers[1].color'), '#808080');
+        assert.deepEqual(app.errors(), []);
+    });
 });
