@@ -357,6 +357,7 @@ window.invertLayersVisibility = function() {
 
 // 画層管理フローティングパネルの表示
 window.showLayerManagerPanel = function() {
+    _lmBulk = null; // 開き直したら、色をまとめて変えるのはやめる
     showPropertyPanel('画層一括管理', '<div id="layer-manager-container"></div>');
     window.updateLayerManagerContent();
 };
@@ -382,6 +383,7 @@ window.updateLayerManagerContent = function() {
     const isLayoffActive = cmdState.mode === 'WAITING_LAYOFF_TOUCH';
     const pick = isLayoffActive ? (cmdState.layoffPick || []).filter((i) => layers[i]) : [];
     const ghostPct = Math.round(ghostLayerAlpha() * 100);
+    const bulk = _lmBulk; // 色をまとめて変えているとき（v5.52）
     // 画層の1行: 👁️（表示・非表示）・色（押すと色を選ぶ）・名前（押すと作図画層）。画面いっぱいのときは CSS で大きく・何列かに並べる
     const layerRow = (l, hidden) => {
         const isCurrent = l.index === currentLayerIndex;
@@ -392,11 +394,15 @@ window.updateLayerManagerContent = function() {
             ? `<button class="status-btn lm-eye" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); color:#888;" onclick="toggleLayerVisibility(${l.index})" title="表示する">➖</button>`
             : `<button class="status-btn lm-eye" style="background:rgba(0,255,136,0.1); border:1px solid rgba(0,255,136,0.3); color:#00ff88;" onclick="toggleLayerVisibility(${l.index})" title="非表示にする">👁️</button>`;
         const picked = pick.includes(l.index);
+        const bulkOn = bulk && bulk.names.has(l.name);
+        const bulkBox = bulk ? `<input type="checkbox" class="lm-cpick" data-li="${l.index}" ${bulkOn ? 'checked' : ''} onchange="lmBulkToggle(${l.index}, this.checked)" aria-label="画層「${escapeHtml(l.name)}」を色をまとめて変える画層に選ぶ">` : '';
+        const nameClick = bulk ? `lmBulkToggle(${l.index}, null)` : `changeCurrentLayer('${l.index}')`;
+        const nameTitle = bulk ? `押すと選ぶ／外す: ${escapeHtml(l.name)}` : `クリックで作図画層に設定: ${escapeHtml(l.name)}`;
         return `
-            <div class="prop-row lm-row${hidden ? ' lm-off' : ''}${picked ? ' lm-pick' : ''}">
-                ${eye}
+            <div class="prop-row lm-row${hidden ? ' lm-off' : ''}${picked ? ' lm-pick' : ''}${bulkOn ? ' lm-bulk-on' : ''}">
+                ${bulkBox}${eye}
                 <input type="color" class="lm-color" value="${_layerColorHex(l.color)}" onchange="changeLayerColorGlobal(${l.index}, this.value)" title="画層の色を変える: ${escapeHtml(l.name)}" aria-label="画層「${escapeHtml(l.name)}」の色">
-                <div class="lm-name" style="${textStyle}" onclick="changeCurrentLayer('${l.index}')" title="クリックで作図画層に設定: ${escapeHtml(l.name)}">
+                <div class="lm-name" style="${textStyle}" onclick="${nameClick}" title="${nameTitle}">
                     ${currentMark}${escapeHtml(l.name)}
                 </div>
                 ${typeof ltypeOptionsHtml === 'function' ? `<select class="lm-lt" onchange="changeLayerLinetype(${l.index}, this.value)" title="画層の線種: ${escapeHtml(l.name)}" aria-label="画層「${escapeHtml(l.name)}」の線種">${ltypeOptionsHtml(layers[l.index] && layers[l.index].lt, false)}</select>` : ''}
@@ -431,6 +437,22 @@ window.updateLayerManagerContent = function() {
                 🔄 表示反転
             </button>
         </div>
+        ${bulk ? `
+        <div class="lm-bulk" role="group" aria-label="画層の色をまとめて変える">
+            <div class="lm-bulk-help">色を変える画層にチェックを付け、色を選んで「この色に」を押します</div>
+            <div class="lm-bulk-row">
+                <span>選ぶ:</span>
+                <button class="status-btn" onclick="lmBulkPickAll('all')">すべて</button>
+                <button class="status-btn" onclick="lmBulkPickAll('shown')">表示中</button>
+                <button class="status-btn" onclick="lmBulkPickAll('none')">外す</button>
+            </div>
+            <div class="lm-bulk-row">
+                <input type="color" id="lm-bulk-color" class="lm-color lm-bulk-color" value="${_layerColorHex(bulk.color)}" oninput="lmBulkSetColor(this.value)" aria-label="まとめて付ける色">
+                <button class="prop-btn lm-bulk-apply" id="lm-bulk-apply" onclick="lmBulkApply()"${_lmBulkIdx().length ? '' : ' disabled'}>${_lmBulkLabel()}</button>
+                <button class="prop-btn lm-bulk-cancel" onclick="lmBulkColorMode(false)">やめる</button>
+            </div>
+        </div>` : `
+        <button class="prop-btn lm-bulk-start" onclick="lmBulkColorMode(true)" title="いくつかの画層（すべてでも）を選んで、同じ色にまとめて変えます">🎨 画層の色をまとめて変える</button>`}
         ${(() => {
             // 取り込み時に非表示にした図形を、種類ごとに表示する（円弧・塗りつぶし・そのほか）。取り込んだ塗りつぶしは、また隠せる
             const hid = entities.filter(en => en.hidden);
@@ -484,6 +506,67 @@ window.updateLayerManagerContent = function() {
     html += `</div>`; // スクロール領域の閉じタグ
 
     container.innerHTML = html;
+};
+
+// ===== 画層の色をまとめて変える（v5.52） =====
+// 選んだ画層は名前で持つ（↩・別の図面を開くなどで画層の並びが変わっても、違う画層を変えない）
+let _lmBulk = null; // { names: Set<画層名>, color: '#rrggbb' } 。null なら使っていない
+function _lmBulkIdx() {
+    if(!_lmBulk) return [];
+    const out = [];
+    layers.forEach((l, i) => { if(l && _lmBulk.names.has(l.name)) out.push(i); });
+    return out;
+}
+function _lmBulkLabel() { const n = _lmBulkIdx().length; return n ? `🎨 ${n}個の画層をこの色に` : '🎨 画層を選んでください'; }
+// 一覧を作り直さずに、ボタンの文字だけ合わせる（作り直すと一覧のスクロールが先頭に戻るため）
+function _lmBulkSyncApply() {
+    const b = document.getElementById('lm-bulk-apply');
+    if(b) { b.textContent = _lmBulkLabel(); b.disabled = !_lmBulkIdx().length; }
+}
+window.lmBulkColorMode = function(on) {
+    if(on) {
+        const cur = layers[currentLayerIndex];
+        _lmBulk = { names: new Set(), color: _layerColorHex(cur ? cur.color : '#ffffff') };
+    } else _lmBulk = null;
+    window.updateLayerManagerContent();
+};
+// checked: true 選ぶ・false 外す・null 入れ替える（名前を押したとき）
+window.lmBulkToggle = function(i, checked) {
+    const l = layers[i];
+    if(!_lmBulk || !l) return;
+    const on = (checked === null) ? !_lmBulk.names.has(l.name) : !!checked;
+    if(on) _lmBulk.names.add(l.name); else _lmBulk.names.delete(l.name);
+    document.querySelectorAll(`.lm-cpick[data-li="${i}"]`).forEach((cb) => {
+        cb.checked = on;
+        const row = cb.closest('.lm-row');
+        if(row) row.classList.toggle('lm-bulk-on', on);
+    });
+    _lmBulkSyncApply();
+};
+window.lmBulkPickAll = function(kind) {
+    if(!_lmBulk) return;
+    _lmBulk.names = new Set(kind === 'none' ? [] : layers.filter((l) => l && (kind === 'all' || l.visible !== false)).map((l) => l.name));
+    window.updateLayerManagerContent();
+};
+window.lmBulkReset = function() {
+    if(!_lmBulk) return;
+    _lmBulk = null;
+    window.updateLayerManagerContent();
+};
+window.lmBulkSetColor = function(color) { if(_lmBulk) _lmBulk.color = color; };
+window.lmBulkApply = function() {
+    const idx = _lmBulkIdx();
+    if(!_lmBulk || !idx.length) return;
+    const color = _layerColorHex(_lmBulk.color);
+    saveUndo(); // まとめて1回の ↩ で戻る
+    idx.forEach((i) => { layers[i].color = color; });
+    addCommandLog(`-> 画層 ${idx.length}個 の色を ${color} に変更しました`);
+    _lmBulk = null;
+    render();
+    updatePropertiesPanel();
+    updateLayerColorDisplay();
+    updateLayerPanel();
+    if(typeof showUndoSnack === 'function') showUndoSnack(`画層 ${idx.length}個 の色を変えました`);
 };
 
 // 画層パネルの追加関数

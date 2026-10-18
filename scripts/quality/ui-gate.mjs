@@ -166,13 +166,22 @@ async function runOne(browser, v, btn, motion) {
     }
 
     // ---- 4. パネルが画面に収まる ----
-    for (const [name, fn] of [['オプション', 'showOptionsPanel()'], ['座標一覧', 'showCoordListPanel()'], ['UCS 管理', 'showUcsManager()']]) {
+    for (const [name, fn] of [['オプション', 'showOptionsPanel()'], ['座標一覧', 'showCoordListPanel()'], ['UCS 管理', 'showUcsManager()'], ['画層の色をまとめて変える', "showLayerManagerPanel(); lmBulkColorMode(true); lmBulkPickAll('all')"]]) {
         await page.evaluate((f) => { closePropertyPanel(); (0, eval)(f); }, fn);
         await page.waitForTimeout(motion ? 300 : 60);
         const r = await rectOf(page, '#property-panel');
         if (!r) { fail(run, `${name} のパネルが開きません`); continue; }
         if (!inside(r, vw, vh, 2)) fail(run, `${name} のパネルが画面からはみ出しています ${JSON.stringify(r)}`);
     }
+    // 画層の色をまとめて変える欄（v5.52）: ボタンがパネルの中に収まり、文字が切れない
+    const bulkOut = await page.evaluate(() => { const p = document.getElementById('property-panel').getBoundingClientRect();
+        return [...document.querySelectorAll('.lm-bulk button, .lm-bulk input')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > p.right + 1 || r.left < p.left - 1 || e.scrollWidth > e.clientWidth + 2); }).map((e) => e.textContent.trim() || e.id); });
+    if (bulkOut.length) fail(run, `画層の色をまとめて変える欄がはみ出しています: ${bulkOut.join(', ')}`);
+    // 座標読取の ＋ は、読んだ点を画面の同じ場所に置いたまま拡大する（v5.52）
+    const fsz = await page.evaluate(() => { document.body.classList.add('fullscreen-mode'); const w = screenToWcs(canvas.width * 0.3, canvas.height * 0.6);
+        const u = wcsToUcs(w.x, w.y); updateFsCoordTooltip(0, 0, u.x, u.y, null, true); const p0 = wcsToScreen(w.x, w.y); fsZoomIn(); const p1 = wcsToScreen(w.x, w.y);
+        document.body.classList.remove('fullscreen-mode'); window._fsZoomAnchor = null; return Math.hypot(p1.x - p0.x, p1.y - p0.y); });
+    if (!(fsz < 0.5)) fail(run, `座標読取の ＋ で、読んだ点が動きます（${fsz}px）`);
     await shot('panel');
     await page.evaluate(() => closePropertyPanel());
 

@@ -47,6 +47,12 @@ function setupEventListeners() {
         if(e.button===1){mouse.isPanning=true;e.preventDefault();return;} // Middle click for panning
         if(layoutActive()) { if(e.button===0) mouse.isPanning = true; e.preventDefault(); return; } // レイアウトは見るだけ: 左ボタンでも画面を動かす
         if(e.button===0) {
+            // 座標読取: 押した点（スナップしていればその点）を ＋・− の拡大の中心にする（v5.52）
+            if(document.body.classList.contains('fullscreen-mode')) {
+                updateMousePos(e);
+                const sr = findSnap(mouse.screenX, mouse.screenY, mouse.wcsX, mouse.wcsY);
+                window._fsZoomAnchor = sr ? { x: sr.wcsX, y: sr.wcsY } : { x: mouse.wcsX, y: mouse.wcsY };
+            }
             // 動かさずに押したとき（ペン・自動操作などで mousemove が来ていない）も、押した所を使う（前の位置や 0,0 に置かない）
             const r0 = canvas.getBoundingClientRect();
             if(Math.abs(e.clientX - r0.left - mouse.screenX) > 1 || Math.abs(e.clientY - r0.top - mouse.screenY) > 1) {
@@ -310,9 +316,9 @@ function setupEventListeners() {
             // 全画面座標ツールチップ更新
             if(snapActive()) {
                 const su = wcsToUcs(snapResult.wcsX, snapResult.wcsY);
-                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, su.x, su.y, snapResult.type);
+                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, su.x, su.y, snapResult.type, true);
             } else {
-                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, mouse.ucsX, mouse.ucsY, null);
+                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, mouse.ucsX, mouse.ucsY, null, true);
             }
             render();
         } else if(e.touches.length === 2) {
@@ -405,10 +411,10 @@ function setupEventListeners() {
             if(snapActive()) {
                 const su = wcsToUcs(snapResult.wcsX, snapResult.wcsY);
                 setCoordsDisplay(su.x, su.y);
-                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, su.x, su.y, snapResult.type);
+                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, su.x, su.y, snapResult.type, true);
             } else {
                 setCoordsDisplay(mouse.ucsX, mouse.ucsY);
-                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, mouse.ucsX, mouse.ucsY, null);
+                if(window.updateFsCoordTooltip) window.updateFsCoordTooltip(touch.clientX, touch.clientY, mouse.ucsX, mouse.ucsY, null, true);
             }
 
             // ルーペ・スナップ記号・範囲選択枠などの重ね表示だけが変わる（図形・表示位置は変わらない）

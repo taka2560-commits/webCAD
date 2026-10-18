@@ -151,3 +151,58 @@ describe('画層一括管理: 起動時', () => {
         try { assert.equal(app.eval('ghostLayerAlpha()'), 0.15); } finally { app.close(); }
     });
 });
+
+describe('画層の色をまとめて変える（v5.52）', () => {
+    let app;
+    before(async () => { app = await loadApp(); });
+    after(() => app.close());
+    beforeEach(() => app.eval(`resetCommand(); closePropertyPanel(); entities.length = 0; undoStack.length = 0; redoStack.length = 0;
+        layers.splice(0, layers.length, { name: '0', color: '#ffffff', visible: true }, { name: '道路', color: '#f00', visible: true },
+            { name: '境界', color: '#ffff00', visible: true }, { name: '等高線', color: '#00ff00', visible: false });
+        currentLayerIndex = 0; initLayers();`));
+    it('画層の色をまとめて変える: チェック・名前で選ぶ、すべて／表示中／外す、この色に（1回の ↩ で戻る）、やめる・開き直すと選びは消える（v5.52）', () => {
+        app.eval('showLayerManagerPanel()');
+        const q = (sel) => app.val(`document.querySelectorAll('${sel}').length`);
+        assert.equal(q('.lm-cpick'), 0, '初めはチェックを出さない');
+        // jsdom はインラインの onclick を動かさないので、ボタンの onclick の中身をそのまま動かす
+        const press = (js) => app.eval(app.val(`(${js}).getAttribute('onclick')`));
+        press(`document.querySelector('.lm-bulk-start')`);
+        assert.equal(q('.lm-cpick'), 4);
+        assert.equal(app.val(`document.getElementById('lm-bulk-apply').disabled`), true, '選ぶまで押せない');
+        // 名前を押すと選ぶ（作図画層は変えない）。チェックでも
+        press(`[...document.querySelectorAll('.lm-name')].find((d) => d.textContent.includes('道路'))`);
+        assert.equal(app.val('currentLayerIndex'), 0);
+        app.eval(`lmBulkToggle(3, true)`);
+        assert.equal(app.val(`document.getElementById('lm-bulk-apply').textContent`), '🎨 2個の画層をこの色に');
+        assert.equal(q('.lm-row.lm-bulk-on'), 2);
+        app.eval(`lmBulkSetColor('#123456')`);
+        press(`document.getElementById('lm-bulk-apply')`);
+        assert.deepEqual(app.val('layers.map((l) => l.color)'), ['#ffffff', '#123456', '#ffff00', '#123456']);
+        assert.equal(q('.lm-bulk'), 0, '変えたら元の表示に戻る');
+        assert.equal(app.val('undoStack.length'), 1, '↩ は1回分');
+        app.eval('undo()');
+        assert.deepEqual(app.val('layers.map((l) => l.color)'), ['#ffffff', '#f00', '#ffff00', '#00ff00']);
+        // すべて・表示中・外す
+        app.eval(`lmBulkColorMode(true); lmBulkPickAll('all')`);
+        assert.equal(q('.lm-cpick:checked'), 4);
+        app.eval(`lmBulkPickAll('shown')`);
+        assert.equal(q('.lm-cpick:checked'), 3, '表示中の3つ');
+        app.eval(`lmBulkPickAll('none')`);
+        assert.equal(q('.lm-cpick:checked'), 0);
+        // 選んだ画層は名前で持つ: 画層の並びが変わっても、違う画層を変えない
+        app.eval(`lmBulkToggle(1, true); layers.splice(0, 1); initLayers(); lmBulkApply()`);
+        assert.equal(app.val(`layers.find((l) => l.name === '道路').color`), '#ffffff', '今の色（作図画層の色）で「道路」だけ');
+        assert.equal(app.val(`layers.find((l) => l.name === '境界').color`), '#ffff00');
+        // やめる・開き直す
+        app.eval(`lmBulkColorMode(true); lmBulkToggle(0, true)`);
+        press(`document.querySelector('.lm-bulk-cancel')`);
+        assert.equal(q('.lm-cpick'), 0);
+        app.eval(`lmBulkColorMode(true); showLayerManagerPanel()`);
+        assert.equal(q('.lm-cpick'), 0);
+        // 図面を閉じたら（パネルは開いたまま）、選びを消して元の表示に戻す（G3 で見つけた）
+        app.eval(`lmBulkColorMode(true); lmBulkPickAll('all'); _closeDrawingNow()`);
+        assert.equal(q('.lm-cpick'), 0);
+        assert.equal(q('.lm-bulk-start'), 1);
+        assert.deepEqual(app.errors(), []);
+    });
+});

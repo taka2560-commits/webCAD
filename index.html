@@ -791,6 +791,18 @@
         .lm-off .lm-color { opacity: 0.5; }
         .lm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; font-size: 12px; }
         .lm-pick-badge { flex: 0 0 auto; font-size: 10px; font-weight: 700; color: #ff6b6b; }
+        /* 画層の色をまとめて変える（v5.52）: 行の先頭のチェック・選んだ行の印・上の操作の欄 */
+        .lm-cpick { flex: 0 0 auto; width: 20px; height: 20px; margin: 0; accent-color: var(--brand); cursor: pointer; }
+        .lm-row.lm-bulk-on { background: rgba(var(--hl-rgb), 0.12); box-shadow: inset 0 0 0 1px rgba(var(--hl-rgb), 0.5); }
+        .lm-bulk-start { width: 100%; padding: 6px 12px; border-radius: 14px; font-weight: bold; background: rgba(40,44,52,0.9); color: var(--brand); border: 1px solid var(--brand); }
+        .lm-bulk { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 8px; background: rgba(var(--hl-rgb), 0.08); border: 1px solid rgba(var(--hl-rgb), 0.35); }
+        .lm-bulk-help { font-size: 11px; color: #ccc; }
+        .lm-bulk-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: #bbb; }
+        .lm-bulk-row .status-btn { height: 28px; }
+        .lm-bulk-color { width: 34px; height: 30px; }
+        .lm-bulk-apply { flex: 1 1 140px; font-weight: bold; }
+        .lm-bulk-cancel { flex: 0 0 auto; background: rgba(40,44,52,0.9); color: #ddd; border: 1px solid rgba(255,255,255,0.25); }
+        #property-panel.win-max:not(.win-min) .lm-cpick { width: 26px; height: 26px; }
         #property-panel.win-max:not(.win-min) #layer-manager-container { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
         #property-panel.win-max:not(.win-min) .lm-list { max-height: none; flex: 1 1 auto; min-height: 0; }
         #property-panel.win-max:not(.win-min) .lm-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px 12px; }
@@ -1588,6 +1600,7 @@
         function enablePseudoFullscreen() {
             isPseudoFullscreen = true;
             document.body.classList.add('fullscreen-mode');
+            window._fsZoomAnchor = null; // 入るたびに、拡大の中心は読み直す
             window.scrollTo(0, 1); // iOSのURLバー配置ハック
             setTimeout(() => { if(window.resizeCanvas) window.resizeCanvas(); }, 100);
         }
@@ -1603,6 +1616,7 @@
         // フルスクリーン状態の監視 (PC/Android/iPad等のネイティブAPI動作時用)
         function onFullscreenChange() {
             if (document.fullscreenElement || document.webkitFullscreenElement) {
+                if(!document.body.classList.contains('fullscreen-mode')) window._fsZoomAnchor = null;
                 document.body.classList.add('fullscreen-mode');
             } else {
                 document.body.classList.remove('fullscreen-mode');
@@ -1654,21 +1668,33 @@
             _reanchorView(cx, cy, wb);
         }
 
-        // ズームイン（画面中心）
+        // ＋・−・スライダーで拡大・縮小する中心（v5.52）: 最後にカーソル・指で読んだ点（スナップしていればその点）。
+        // その点を画面の同じ場所に置いたまま拡大・縮小する（マウスのホイールと同じ）。
+        // まだ読んでいない・その点が画面の外（動かしたあとなど）なら、今までどおり画面の真ん中
+        window._fsZoomAnchor = null; // 図面の座標（WCS）{ x, y }
+        function _fsZoomCenter() {
+            const a = window._fsZoomAnchor;
+            if(a && Number.isFinite(a.x) && Number.isFinite(a.y)) {
+                const p = wcsToScreen(a.x, a.y);
+                if(p.x >= 0 && p.y >= 0 && p.x <= canvas.width && p.y <= canvas.height) return { cx: p.x, cy: p.y, wb: { x: a.x, y: a.y } };
+            }
+            const cx = canvas.width / 2, cy = canvas.height / 2;
+            return { cx, cy, wb: screenToWcs(cx, cy) };
+        }
+
+        // ズームイン（読んだ点を中心）
         function fsZoomIn() {
             if(typeof view === 'undefined') return;
-            const cx = canvas.width / 2, cy = canvas.height / 2;
-            const wb = screenToWcs(cx, cy);
+            const { cx, cy, wb } = _fsZoomCenter();
             _applyRotZoom(cx, cy, wb, Math.min(view.scale * 1.25, 1000));
             if(window.updateZoomSlider) window.updateZoomSlider();
             render();
         }
 
-        // ズームアウト（画面中心）
+        // ズームアウト（読んだ点を中心）
         function fsZoomOut() {
             if(typeof view === 'undefined') return;
-            const cx = canvas.width / 2, cy = canvas.height / 2;
-            const wb = screenToWcs(cx, cy);
+            const { cx, cy, wb } = _fsZoomCenter();
             _applyRotZoom(cx, cy, wb, Math.max(view.scale / 1.25, 0.001));
             if(window.updateZoomSlider) window.updateZoomSlider();
             render();
@@ -1677,8 +1703,7 @@
         // スライダー操作でズーム（対数スケール: scale = 10^val）
         function fsZoomSlider(val) {
             if(typeof view === 'undefined') return;
-            const cx = canvas.width / 2, cy = canvas.height / 2;
-            const wb = screenToWcs(cx, cy);
+            const { cx, cy, wb } = _fsZoomCenter();
             const targetScale = Math.pow(10, parseFloat(val));
             _applyRotZoom(cx, cy, wb, Math.max(0.001, Math.min(1000, targetScale)));
             if(typeof noteViewGesture === 'function') noteViewGesture(); // スライダー操作中は軽い描画にする
@@ -1713,8 +1738,11 @@
         });
 
         // フローティング座標ツールチップ ＆ 上部HUDバーの更新（cad-core.jsから呼ばれる）
-        window.updateFsCoordTooltip = function(screenX, screenY, ucsX, ucsY, snapType) {
+        // fromTouch: 指で読んだとき true。拡大の中心（v5.52）は指で読んだ点だけ覚える。
+        // マウスは ＋・− へ動かす途中でも読むので、ここでは覚えず、図面を押した点を覚える（cad-input.js の mousedown）
+        window.updateFsCoordTooltip = function(screenX, screenY, ucsX, ucsY, snapType, fromTouch) {
             if(!document.body.classList.contains('fullscreen-mode')) return;
+            if(fromTouch === true && typeof ucsToWcs === 'function' && Number.isFinite(ucsX) && Number.isFinite(ucsY)) window._fsZoomAnchor = ucsToWcs(ucsX, ucsY);
             
             // 案C: 上部固定HUDバーの更新
             const hudX = document.getElementById('fs-hud-x');

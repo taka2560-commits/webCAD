@@ -842,6 +842,9 @@ function _closeDrawingNow() {
 
 // 図面名の表示更新
 function setDrawingName(name) {
+    // 別の図面になったら、前の図面の「色をまとめて変える」の選び（cad-panels.js）と座標読取の拡大の中心は使わない（v5.52）
+    if(typeof lmBulkReset === 'function') lmBulkReset();
+    window._fsZoomAnchor = null;
     window._drawingName = name || ''; // 新UIでは表示欄が無いため、エクスポート名などに使う
     const el = document.getElementById('drawing-name');
     if(el) { el.textContent = name; el.title = name; }

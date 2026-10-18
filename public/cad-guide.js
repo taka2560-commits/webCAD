@@ -104,7 +104,7 @@ const GUIDE_TOURS = {
             { title: 'なぞって読む', text: { touch: '1本指で図面をなぞると、上に X・Y、指の横に座標が出ます。測点に近づくと緑の記号（スナップ）で吸い付きます。\n測点 C に合わせてみましょう。', pc: 'カーソルを動かすと、上に X・Y と座標が出ます。測点に近づくと緑の記号（スナップ）で吸い付きます。\n測点 C に合わせてみましょう。' },
                 target: { wcs: _gC, r: 34 }, done: () => _guideIsFs() && _gSnapAt(_gC()) },
             { title: '座標を残す', text: '指を離しても、座標は左上に残ります（メモに便利です）。\nXY で座標の表示を ON/OFF できます。', target: '#fs-btn-coord', next: true },
-            { title: '拡大・縮小', text: '左下のスライダーと ＋・− で拡大・縮小します。スナップしている点を中心に拡大するので、細かい所も見失いません。2本指でもできます。', target: '#fs-zoom-panel', done: _gZoomed },
+            { title: '拡大・縮小', text: '左下のスライダーと ＋・− で拡大・縮小します。最後に指で読んだ点・マウスでクリックした点（スナップしていればその点）を中心に拡大するので、細かい所も見失いません。2本指でもできます。', target: '#fs-zoom-panel', done: _gZoomed },
             { title: 'スナップの設定', text: '⊕ でスナップの ON/OFF、▼ で吸い付く点の種類や「次の1点だけ」を選べます。', target: ['#fs-btn-osnap', '#fs-btn-osnap-panel'], next: true },
             { title: '全体を表示', text: '⛶ で図面全体を表示します。', target: '#fs-btn-extents', on: 'extents' },
             { title: '道具箱を開く', text: '右端の ◀ で道具箱を開きます。', target: '#fs-drawer-toggle', done: _gDrawerOpen },
