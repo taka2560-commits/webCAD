@@ -384,7 +384,8 @@ window.updateLayerManagerContent = function() {
     const pick = isLayoffActive ? (cmdState.layoffPick || []).filter((i) => layers[i]) : [];
     const ghostPct = Math.round(ghostLayerAlpha() * 100);
     const bulk = _lmBulk; // 色をまとめて変えているとき（v5.52）
-    // 画層の1行: 👁️（表示・非表示）・色（押すと色を選ぶ）・名前（押すと作図画層）。画面いっぱいのときは CSS で大きく・何列かに並べる
+    // 画層の1行: 👁️（表示・非表示）・色（押すと色を選ぶ）・名前（押すと作図画層）。画面いっぱいのときは CSS で大きく・何列かに並べる。
+    // 線種の選択は v5.53.1 で外した（名前が「TL_…」と切れて読めなかったため。画層の線種はプロパティの「画層の線」で変える）
     const layerRow = (l, hidden) => {
         const isCurrent = l.index === currentLayerIndex;
         const curColor = hidden ? '#ffcc00' : '#00ff88';
@@ -405,7 +406,6 @@ window.updateLayerManagerContent = function() {
                 <div class="lm-name" style="${textStyle}" onclick="${nameClick}" title="${nameTitle}">
                     ${currentMark}${escapeHtml(l.name)}
                 </div>
-                ${typeof ltypeOptionsHtml === 'function' ? `<select class="lm-lt" onchange="changeLayerLinetype(${l.index}, this.value)" title="画層の線種: ${escapeHtml(l.name)}" aria-label="画層「${escapeHtml(l.name)}」の線種">${ltypeOptionsHtml(layers[l.index] && layers[l.index].lt, false)}</select>` : ''}
                 ${picked ? '<span class="lm-pick-badge">消す候補</span>' : ''}
             </div>`;
     };

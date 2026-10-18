@@ -159,9 +159,10 @@ describe('線種・線の太さ', () => {
         assert.equal(app.eval(`effectiveLineweight(entities[cmdState.highlightIdx])`), 18);
         app.eval(`changeLayerLinetype(entities[cmdState.highlightIdx].layer, 'CONTINUOUS')`);
         assert.equal(app.eval(`effectiveLinetype(entities[cmdState.highlightIdx])`), null);
-        // 画層管理の行に線種の選択がある
+        // 画層管理の行には線種の選択を出さない（名前を読めるように。画層の線種はプロパティの「画層の線」。v5.53.1）
         app.eval('showLayerManagerPanel()');
-        assert.ok(app.eval(`document.querySelectorAll('#property-panel-content select.lm-lt').length`) >= 2);
+        assert.equal(app.eval(`document.querySelectorAll('#property-panel-content select.lm-lt').length`), 0);
+        assert.ok(app.eval(`document.querySelectorAll('#property-panel-content .lm-name').length`) >= 2);
     });
 
     it('保存と復元: 線種表と線種の尺度も図面と一緒に戻る。置き換えで開くと新しいファイルのものになる', () => {
