@@ -209,8 +209,10 @@ async function exportWebcadFile() {
             let pdf = null;
             try { pdf = new Blob([await webcadPdf(bytes, r)], { type: 'application/pdf' }); }
             catch(e) { console.warn('送る用の PDF を作れませんでした:', e); } // 作れなければ .webcad のまま（Android では「📤 送り方」）
-            if(pdf) offerShare(pdf, base + WEBCAD_PDF_SUFFIX, { saved: name, note: 'LINE などへは PDF の形で送ります' });
-            else offerShare(pack, name);
+            // ☁ Dropbox へ は、PDF ではなく保存した .webcad を送る（cad-dropbox.js）
+            const dbx = (typeof dropboxSaveAction === 'function') ? dropboxSaveAction(pack, name) : null;
+            if(pdf) offerShare(pdf, base + WEBCAD_PDF_SUFFIX, { saved: name, note: 'LINE などへは PDF の形で送ります', action2: dbx });
+            else offerShare(pack, name, { action2: dbx });
         }
     } catch(err) {
         notify(`エラー: 図面一式を書き出せませんでした - ${err.message}`, { kind: 'error', ms: 5000 });

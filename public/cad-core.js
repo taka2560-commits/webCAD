@@ -57,6 +57,7 @@ function showOptionsPanel(){
             <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#ddd;">線種の尺度（LTSCALE）<input class="prop-val" type="number" step="any" style="width:90px;" value="${typeof getDrawingLtscale === 'function' ? getDrawingLtscale() : 1}" onchange="setDrawingLtscale(this.value)"></label>
             <div style="color:#888;font-size:10px;">破線・一点鎖線などの模様の長さの倍率です（AutoCAD の LTSCALE。DWG・DXF を開くとファイルの値になります）</div>
         </div>
+        ${(typeof dropboxOptionsHtml === 'function') ? dropboxOptionsHtml() : ''}
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
             <div style="font-size:11px;color:#aaa;font-weight:700;">オフライン・データ</div>
             <div id="opt-dwg-status" style="font-size:11px;color:#ddd;">DWG・PDF の読込エンジン: 確認中…</div>
@@ -845,6 +846,7 @@ function setDrawingName(name) {
     // 別の図面になったら、前の図面の「色をまとめて変える」の選び（cad-panels.js）と座標読取の拡大の中心は使わない（v5.52）
     if(typeof lmBulkReset === 'function') lmBulkReset();
     window._fsZoomAnchor = null;
+    if(typeof dropboxDrawingChanged === 'function') dropboxDrawingChanged(name); // Dropbox の保存先（開いた図面のフォルダ）を覚えるか（cad-dropbox.js）
     window._drawingName = name || ''; // 新UIでは表示欄が無いため、エクスポート名などに使う
     const el = document.getElementById('drawing-name');
     if(el) { el.textContent = name; el.title = name; }

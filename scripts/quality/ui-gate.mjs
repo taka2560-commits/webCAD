@@ -177,6 +177,21 @@ async function runOne(browser, v, btn, motion) {
     const bulkOut = await page.evaluate(() => { const p = document.getElementById('property-panel').getBoundingClientRect();
         return [...document.querySelectorAll('.lm-bulk button, .lm-bulk input')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > p.right + 1 || r.left < p.left - 1 || e.scrollWidth > e.clientWidth + 2); }).map((e) => e.textContent.trim() || e.id); });
     if (bulkOut.length) fail(run, `画層の色をまとめて変える欄がはみ出しています: ${bulkOut.join(', ')}`);
+    // 書き出したあとの知らせ（📤 送る と ☁ Dropbox へ の2つのボタン）が画面に収まる（v5.54）
+    const snk = await page.evaluate(async () => {
+        localStorage.setItem('cad_dropbox_key', 'uigate1234ab'); closePropertyPanel();
+        const oc = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () {};
+        try { await downloadBlob(new Blob(['x']), 'ゲートの確認_とても長い名前の図面ファイル.dxf', undefined, { named: true }); } finally { HTMLAnchorElement.prototype.click = oc; localStorage.removeItem('cad_dropbox_key'); }
+        const s = document.getElementById('cad-snack'); if (!s || !s.classList.contains('show')) return { shown: false };
+        const r = s.getBoundingClientRect(); const btns = [...s.querySelectorAll('.sn-act')].filter((b) => b.style.display !== 'none').map((b) => { const q = b.getBoundingClientRect(); return { t: b.textContent, x: q.x, y: q.y, w: q.width, h: q.height }; });
+        hideSnack(); return { shown: true, r: { x: r.x, y: r.y, w: r.width, h: r.height }, btns };
+    });
+    if (!snk.shown) fail(run, '書き出したあとの知らせが出ません');
+    else {
+        if (!inside(snk.r, vw, vh, 2)) fail(run, `書き出したあとの知らせが画面からはみ出しています ${JSON.stringify(snk.r)}`);
+        if (!snk.btns.some((b) => b.t === '☁ Dropbox へ')) fail(run, '書き出したあとの知らせに「☁ Dropbox へ」がありません');
+        for (const b of snk.btns) if (!inside(b, vw, vh, 2)) fail(run, `知らせのボタン「${b.t}」が画面からはみ出しています`);
+    }
     // 座標読取の ＋ は、読んだ点を画面の同じ場所に置いたまま拡大する（v5.52）
     const fsz = await page.evaluate(() => { document.body.classList.add('fullscreen-mode'); const w = screenToWcs(canvas.width * 0.3, canvas.height * 0.6);
         const u = wcsToUcs(w.x, w.y); updateFsCoordTooltip(0, 0, u.x, u.y, null, true); const p0 = wcsToScreen(w.x, w.y); fsZoomIn(); const p1 = wcsToScreen(w.x, w.y);

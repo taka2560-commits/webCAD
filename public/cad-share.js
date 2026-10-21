@@ -42,11 +42,11 @@ function offerShare(blob, filename, opt) {
     const o = opt || {};
     const msg = `${o.saved || filename} を保存しました${o.note ? `（${o.note}）` : ''}`;
     if(!shareTypeOk(file)) {
-        showSnack(msg, { kind: 'success', ms: 9000, action: { label: '📤 送り方', run: () => showShareSteps(o.saved || filename) } });
+        showSnack(msg, { kind: 'success', ms: 9000, action: { label: '📤 送り方', run: () => showShareSteps(o.saved || filename) }, action2: o.action2 || null });
         return true;
     }
     if(!canShareFile(file)) return false;
-    showSnack(msg, { kind: 'success', ms: 9000, action: { label: '📤 送る', run: () => shareFile(file, o.saved) } });
+    showSnack(msg, { kind: 'success', ms: 9000, action: { label: '📤 送る', run: () => shareFile(file, o.saved) }, action2: o.action2 || null }); // action2: ☁ Dropbox へ（cad-dropbox.js）
     return true;
 }
 // saved: 保存したファイルの名前（送るものと違うとき。図面一式は .webcad を保存して PDF を送る）

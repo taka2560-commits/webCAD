@@ -931,11 +931,15 @@ async function downloadBlob(blob, filename, share, opt) {
     document.body.removeChild(a);
     // すぐ消すと、Safari（iPhone・iPad・Mac）では保存が始まる前に中身が無くなり、保存に失敗することがある
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-    // スマホ・タブレットでは、共有メニュー（LINE・メール・「ファイル」に保存）で送れるよう「📤 送る」を出す（cad-share.js）
+    // スマホ・タブレットでは、共有メニュー（LINE・メール・「ファイル」に保存）で送れるよう「📤 送る」を出す（cad-share.js）。
+    // Dropbox を使う設定なら「☁ Dropbox へ」も出す（保存したファイルを送る。cad-dropbox.js）
+    const dbx = (share !== false && typeof dropboxSaveAction === 'function') ? dropboxSaveAction(blob, filename) : null;
+    let offered = false;
     if(share !== false && typeof offerShare === 'function') {
-        if(share && share.blob) offerShare(share.blob, share.name || filename, { saved: filename, note: share.note });
-        else offerShare(blob, filename);
+        if(share && share.blob) offered = offerShare(share.blob, share.name || filename, { saved: filename, note: share.note, action2: dbx });
+        else offered = offerShare(blob, filename, { action2: dbx });
     }
+    if(!offered && dbx && typeof showSnack === 'function') showSnack(`${filename} を保存しました`, { kind: 'success', ms: 9000, action: dbx });
     return filename;
 }
 
@@ -950,6 +954,7 @@ function processIOCommand(cmd) {
     if(cmd === 'WEBCADOUT' || cmd === 'PACK') { exportWebcadFile(); return true; } // 図面一式（.webcad。cad-webcad.js）
     if(cmd === 'PNGOUT' || cmd === 'PNG') { exportScreenPng(); return true; } // 画面の画像（cad-share.js）
     if(cmd === 'EXPORTDWG') { exportDwg(); return true; }
+    if(cmd === 'DBOPEN' || cmd === 'DROPBOX') { if(typeof dropboxOpen === 'function') dropboxOpen(); return true; } // Dropbox から開く（cad-dropbox.js）
     return false;
 }
 
