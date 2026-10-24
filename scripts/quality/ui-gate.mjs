@@ -166,7 +166,8 @@ async function runOne(browser, v, btn, motion) {
     }
 
     // ---- 4. パネルが画面に収まる ----
-    for (const [name, fn] of [['オプション', 'showOptionsPanel()'], ['座標一覧', 'showCoordListPanel()'], ['UCS 管理', 'showUcsManager()'], ['画層の色をまとめて変える', "showLayerManagerPanel(); lmBulkColorMode(true); lmBulkPickAll('all')"]]) {
+    for (const [name, fn] of [['オプション', 'showOptionsPanel()'], ['座標一覧', 'showCoordListPanel()'], ['UCS 管理', 'showUcsManager()'], ['画層の色をまとめて変える', "showLayerManagerPanel(); lmBulkColorMode(true); lmBulkPickAll('all')"],
+        ['座標表の読み取り結果', "_airead = { files: [], rows: [{ num: '103', name: 'BM-12', x: '-112360.000', y: '123470.500', z: '102.345', unsure: true, why: 'X の 3 が 8 かも', use: true }, { num: '2', name: '', x: '-12350.1O0', y: '23460.000', z: '', unsure: false, why: '', use: true }], unit: 'm', notes: '見出しは X・Y', cost: 0.04, model: 'claude-opus-5-5', mm: false }; aireadRenderReview()"]]) {
         await page.evaluate((f) => { closePropertyPanel(); (0, eval)(f); }, fn);
         await page.waitForTimeout(motion ? 300 : 60);
         const r = await rectOf(page, '#property-panel');
@@ -177,6 +178,19 @@ async function runOne(browser, v, btn, motion) {
     const bulkOut = await page.evaluate(() => { const p = document.getElementById('property-panel').getBoundingClientRect();
         return [...document.querySelectorAll('.lm-bulk button, .lm-bulk input')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > p.right + 1 || r.left < p.left - 1 || e.scrollWidth > e.clientWidth + 2); }).map((e) => e.textContent.trim() || e.id); });
     if (bulkOut.length) fail(run, `画層の色をまとめて変える欄がはみ出しています: ${bulkOut.join(', ')}`);
+    // 座標表の読み取り結果（v5.55）: 値の欄がパネルに収まり、重ならず、数が切れない（スマホの幅でも X・Y・標高が全部見える）
+    const ai = await page.evaluate(() => {
+        closePropertyPanel();
+        _airead = { files: [], rows: [{ num: '103', name: 'BM-12', x: '-112360.000', y: '123470.500', z: '102.345', unsure: true, why: '確認', use: true }], unit: 'm', notes: '', cost: 0, model: 'claude-opus-5-5', mm: false };
+        aireadRenderReview();
+        const p = document.getElementById('property-panel').getBoundingClientRect();
+        const cells = [...document.querySelectorAll('#airead-review .airead-cell')];
+        const bad = cells.filter((e) => { const r = e.getBoundingClientRect(); return r.width < 1 || r.right > p.right + 1 || r.left < p.left - 1 || e.scrollWidth > e.clientWidth + 1; }).map((e) => e.dataset.key);
+        for (let i = 0; i < cells.length; i++) for (let j = i + 1; j < cells.length; j++) { const a = cells[i].getBoundingClientRect(), b = cells[j].getBoundingClientRect(); if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) bad.push(cells[i].dataset.key + '×' + cells[j].dataset.key); }
+        _airead = null; closePropertyPanel();
+        return { n: cells.length, bad };
+    });
+    if (ai.n !== 5 || ai.bad.length) fail(run, `座標表の読み取り結果の欄が収まりません: ${ai.bad.join(', ') || ai.n + '個'}`);
     // 書き出したあとの知らせ（📤 送る と ☁ Dropbox へ の2つのボタン）が画面に収まる（v5.54）
     const snk = await page.evaluate(async () => {
         localStorage.setItem('cad_dropbox_key', 'uigate1234ab'); closePropertyPanel();

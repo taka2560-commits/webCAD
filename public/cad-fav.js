@@ -61,6 +61,7 @@ const FAV_CATALOG = [
     { id: 'PINS', label: 'ピン 表示', icon: '📍', cat: 'survey', run: () => photoPinsToggle() },
     { id: 'GNSS', label: '現在地', icon: '🛰', color: '#528bff', cat: 'survey', run: () => toggleGnss() },
     { id: 'SIMAOUT', label: 'SIMA出力', icon: '📄', cat: 'survey', run: () => exportSima() },
+    { id: 'AIREAD', label: '座標表を読む', icon: '📷', cat: 'survey', run: () => showAireadPanel() },
     { id: 'CSVOUT', label: 'CSV出力', icon: '📄', cat: 'survey', run: () => exportCoordCsv() },
     { id: 'SAVE', label: '保存', icon: '💾', color: '#00ff88', cat: 'view', run: () => saveProject() },
     { id: 'PROJECTS', label: '保存一覧', icon: '📂', cat: 'view', run: () => showProjectList() },

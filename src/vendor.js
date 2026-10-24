@@ -41,4 +41,21 @@ window.loadPdfJs = function () {
     return _pdfjsPromise;
 };
 
+// Claude の SDK（座標表の読み取り。cad-ai-read.js）。使うときに初めて読み込む（読み取りは電波が要るので、オフライン用には持たない）
+let _claudeSdkPromise = null;
+window.loadClaudeSdk = function () {
+    if (!_claudeSdkPromise) {
+        _claudeSdkPromise = Promise.all([
+            import('@anthropic-ai/sdk'),
+            import('@anthropic-ai/sdk/helpers/beta/zod'),
+            import('zod/v4'),
+        ]).then(([sdk, zh, zod]) => ({ Anthropic: sdk.default, betaZodOutputFormat: zh.betaZodOutputFormat, z: zod.z || zod }))
+            .catch((err) => {
+                _claudeSdkPromise = null; // 失敗時は次回やり直せるようにする
+                throw err;
+            });
+    }
+    return _claudeSdkPromise;
+};
+
 window.dispatchEvent(new Event('webcad-vendor-ready'));

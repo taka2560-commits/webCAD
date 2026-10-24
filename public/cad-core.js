@@ -58,6 +58,7 @@ function showOptionsPanel(){
             <div style="color:#888;font-size:10px;">破線・一点鎖線などの模様の長さの倍率です（AutoCAD の LTSCALE。DWG・DXF を開くとファイルの値になります）</div>
         </div>
         ${(typeof dropboxOptionsHtml === 'function') ? dropboxOptionsHtml() : ''}
+        ${(typeof aireadOptionsHtml === 'function') ? aireadOptionsHtml() : ''}
         <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
             <div style="font-size:11px;color:#aaa;font-weight:700;">オフライン・データ</div>
             <div id="opt-dwg-status" style="font-size:11px;color:#ddd;">DWG・PDF の読込エンジン: 確認中…</div>

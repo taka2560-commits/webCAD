@@ -798,6 +798,25 @@
         .lm-bulk-start { width: 100%; padding: 6px 12px; border-radius: 14px; font-weight: bold; background: rgba(40,44,52,0.9); color: var(--brand); border: 1px solid var(--brand); }
         .lm-bulk { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 8px; background: rgba(var(--hl-rgb), 0.08); border: 1px solid rgba(var(--hl-rgb), 0.35); }
         .lm-bulk-help { font-size: 11px; color: #ccc; }
+        /* 座標表の読み取り（cad-ai-read.js）: 元の写真（押すと大きく）・確かめる表（自信の無い行は色）。v5.55 */
+        .airead-imgs { display: flex; gap: 6px; overflow-x: auto; }
+        .airead-img { height: 90px; width: auto; max-width: none; border: 1px solid var(--border-2); border-radius: var(--r-sub); cursor: zoom-in; background: #fff; }
+        .airead-img.big { height: auto; width: 100%; max-width: 100%; cursor: zoom-out; }
+        .airead-list { display: flex; flex-direction: column; gap: 4px; max-height: 42vh; overflow-y: auto; border: 1px solid var(--border-2); border-radius: var(--r-sub); padding: 4px; }
+        .airead-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.72fr); grid-template-areas: "use num name name" "use x y z" "why why why why"; gap: 3px 4px; align-items: center; padding: 4px; border-radius: 6px; }
+        .airead-row > .airead-use { grid-area: use; width: 18px; height: 18px; margin: 0; accent-color: var(--brand); }
+        .airead-row > .airead-num { grid-area: num; } .airead-row > .airead-name { grid-area: name; }
+        .airead-row > .airead-x { grid-area: x; } .airead-row > .airead-y { grid-area: y; } .airead-row > .airead-z { grid-area: z; }
+        .airead-row .airead-cell { box-sizing: border-box; min-width: 0; width: 100%; padding: 3px 4px; font-family: Consolas, monospace; font-size: 12px; }
+        .airead-head { font-size: 10px; color: #999; padding-block: 0; grid-template-areas: "use num name name" "use x y z"; }
+        .airead-head > span:nth-child(1) { grid-area: use; } .airead-head > span:nth-child(2) { grid-area: num; } .airead-head > span:nth-child(3) { grid-area: name; }
+        .airead-head > span:nth-child(4) { grid-area: x; } .airead-head > span:nth-child(5) { grid-area: y; } .airead-head > span:nth-child(6) { grid-area: z; }
+        .airead-row.unsure, .airead-unsure-key { background: rgba(255, 196, 0, 0.16); }
+        .airead-row.off { opacity: 0.45; }
+        .airead-why { grid-area: why; font-size: 10px; color: #ffcc66; }
+        .airead-row .airead-cell.bad { border-color: #ff6b6b; box-shadow: inset 0 0 0 1px #ff6b6b; }
+        .airead-why { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .airead-why .airead-ok { height: 24px; font-size: 11px; color: var(--brand); border: 1px solid var(--brand); background: transparent; }
         .lm-bulk-opt { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; color: #ddd; cursor: pointer; }
         .lm-bulk-opt input { flex: 0 0 auto; width: 18px; height: 18px; margin: 0; accent-color: var(--brand); cursor: pointer; }
         .lm-bulk-opt b { color: var(--brand); }
@@ -1104,6 +1123,7 @@
                 <button class="menu-item-btn" data-fav="STAKE" onclick="showStakePanel(); toggleTopMenu();" title="杭を順に選び、現在地（GNSS）または器械点から、距離と向き・夾角を案内">📍 杭打ち</button>
                 <button class="menu-item-btn" data-fav="PHOTO" onclick="showPhotoPanel(); toggleTopMenu();" title="図面の場所にピンを立てて、メモと写真を付ける（写真台帳 PDF）">📷 写真・メモ</button>
                 <button class="menu-item-btn" data-fav="GNSS" onclick="toggleGnss(); toggleTopMenu();">🛰 現在地</button>
+                <button class="menu-item-btn" data-fav="AIREAD" onclick="toggleTopMenu(); showAireadPanel();" title="紙の座標表・野帳・スキャンした PDF の写真から、点番号・点名・X・Y・標高を Claude が読み取り、表で確かめてから座標一覧に入れます（自分の Claude の API キーが要ります）">📷 座標表を読む</button>
                 <button class="menu-item-btn" data-fav="SIMAOUT" onclick="exportSima(); toggleTopMenu();">SIMA 出力</button>
                 <button class="menu-item-btn" data-fav="CSVOUT" onclick="exportCoordCsv(); toggleTopMenu();">座標CSV 出力</button>
             </div>
@@ -1469,6 +1489,7 @@
     <script src="cad-share.js"></script>
     <script src="cad-qr.js"></script>
     <script src="cad-dropbox.js"></script>
+    <script src="cad-ai-read.js"></script>
     <script src="cad-launch.js"></script>
     <script src="cad-guide.js"></script>
     <script src="cad-guide-tours.js"></script>

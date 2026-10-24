@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.54（2026年10月21日リリース）**
+**現在のバージョン: v5.55（2026年10月25日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -204,7 +204,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（883件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（895件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト（計算ゲートを含む）→ 品質のチェック G1 → ビルド → 画面のチェック G2（CI と同じ内容。docs/品質管理ゲート.md）
 ```
@@ -277,6 +277,7 @@ npm run check        # lint → テスト（計算ゲートを含む）→ 品�
   | `cad-ping.js` | ピンの知らせ（ポンと立つ・円の波・現在地からの距離） |
   | `cad-helmert-rev.js` | SIMA の変換の逆（張り合わせ点から図面 → SIMA の変換を求め、図面の図形を SIMA の座標へ動かす） |
   | `cad-qr.js` | このアプリを渡す QR コード（qrcode-generator。リンクは今の場所、手元の開発用なら公開の場所） |
+  | `cad-ai-read.js` | 座標表の読み取り（Claude Opus 5.5。写真・PDF → 点番号・点名・X・Y・標高 → 確かめる表 → 座標一覧。API キーは使う人がそれぞれ端末に入れる。SDK は src/vendor.js の loadClaudeSdk） |
   | `cad-dropbox.js` | Dropbox から開く（Chooser）・Dropbox に保存（OAuth 2 PKCE でつなぎ、files/upload。保存先は開いたファイルのフォルダ） |
   | `cad-guide.js` | 操作ガイドのしくみ（ツアーの進め方・指し示し・元の図面に戻す、手順カード、つまずいたときの一言）。他のファイルは `guideNotify('出来事')` で知らせるだけ |
   | `cad-guide-tours.js` | 機能の練習ツアー（測量計算・SIMA の変換・杭打ち・点を動かす・写真・印刷）の手順。機能の状態は `onStart` で控えて `onEnd` で戻す |
