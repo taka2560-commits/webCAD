@@ -57,10 +57,13 @@ const rectOf = (page, sel) => page.evaluate((s) => {
 const inside = (r, vw, vh, m = 0.5) => r.x >= -m && r.y >= -m && r.x + r.w <= vw + m && r.y + r.h <= vh + m;
 const overlap = (a, b) => a && b && a.x < b.x + b.w - 1 && b.x < a.x + a.w - 1 && a.y < b.y + b.h - 1 && b.y < a.y + a.h - 1;
 
+let dwgChecked = false; // DWG の読込エンジンは最初の1回だけ確かめる
 async function runOne(browser, v, btn, motion) {
     const run = `${v.name}・ボタン${btn}・動き${motion ? '入' : '切'}`;
     const ctx = await browser.newContext({ viewport: { width: v.width, height: v.height }, hasTouch: v.touch, isMobile: v.touch && v.width < 700,
         reducedMotion: motion ? 'no-preference' : 'reduce', serviceWorkers: 'block' });
+    // 安全のヘッダー（CSP）に止められた所を集める（v5.56）
+    await ctx.addInitScript(() => { window.__csp = []; document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(`${e.violatedDirective} ${e.blockedURI}`)); });
     await ctx.addInitScript(({ btn, motion }) => {
         try {
             localStorage.setItem('cad_display_prefs', JSON.stringify({ btnSize: btn, motion: motion ? 'on' : 'off' }));
@@ -72,7 +75,10 @@ async function runOne(browser, v, btn, motion) {
     page.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
     page.on('console', (m) => { if (m.type() === 'error' && !/favicon|ERR_|net::|Failed to load resource/.test(m.text())) errs.push('console.error: ' + m.text().slice(0, 200)); });
     page.on('response', (r) => { if (r.status() >= 400 && r.url().startsWith(`http://127.0.0.1:${PORT}`)) errs.push(`読み込めないファイル ${r.status()}: ${r.url().replace(`http://127.0.0.1:${PORT}`, '')}`); });
-    await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
+    const resp = await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
+    const csp = resp && resp.headers()['content-security-policy'];
+    const scriptSrc = ((csp || '').match(/script-src ([^;]*)/) || [])[1] || '';
+    if (!csp || !/connect-src 'self'[^;]*https:\/\/api\.anthropic\.com/.test(csp) || !/frame-ancestors 'none'/.test(csp) || /https?:|\*/.test(scriptSrc)) fail(run, `安全のヘッダー（CSP）が付いていない・よそのスクリプトを許しています: ${csp || 'なし'}`);
     await page.waitForTimeout(900);
     const shot = (n) => page.screenshot({ path: path.join(OUT, `${v.name}-${btn}-${motion ? 'm' : 'r'}-${n}.png`) });
     const vw = v.width, vh = v.height;
@@ -214,6 +220,16 @@ async function runOne(browser, v, btn, motion) {
     await shot('panel');
     await page.evaluate(() => closePropertyPanel());
 
+    // あとから読む部品（Claude の SDK・PDF の表示）が CSP の下でも読める。止められた所が無い
+    const lazy = await page.evaluate(async () => { const out = []; try { const k = await window.loadClaudeSdk(); k.z.object({ a: k.z.string() }).safeParse({ a: 'x' }); k.betaZodOutputFormat(k.z.object({ a: k.z.string() })); out.push('claude'); } catch (e) { out.push('claude NG ' + e.message); } try { await window.loadPdfJs(); out.push('pdf'); } catch (e) { out.push('pdf NG ' + e.message); } return out; });
+    if (lazy.join() !== 'claude,pdf') fail(run, `あとから読む部品が読めません: ${lazy.join(' / ')}`);
+    if (!dwgChecked) {
+        dwgChecked = true;
+        const dwg = await page.evaluate(async () => { try { const m = await window.loadLibreDwg(); const L = m.LibreDwg || (m.default && m.default.LibreDwg); if (!L || typeof L.create !== 'function') return 'LibreDwg.create が無い'; await L.create(); return 'ok'; } catch (e) { return 'NG ' + (e && e.message || e); } });
+        if (dwg !== 'ok') fail(run, `DWG の読込エンジンが動きません（CSP?）: ${dwg}`);
+    }
+    const viol = await page.evaluate(() => window.__csp || []);
+    if (viol.length) fail(run, `CSP に止められました: ${[...new Set(viol)].slice(0, 5).join(' / ')}`);
     if (errs.length) fail(run, 'エラー: ' + [...new Set(errs)].slice(0, 5).join(' / '));
     await ctx.close();
 }

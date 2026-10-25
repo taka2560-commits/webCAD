@@ -13,8 +13,9 @@
     "preview": "vite preview",
     "test": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/quality/test-count-reporter.mjs --test-reporter-destination=stdout \"tests/*.test.cjs\" tests/test-text-parse.cjs",
     "lint": "eslint public src tests scripts vite.config.js",
-    "check": "npm run lint && npm test && npm run quality && npm run build && npm run ui-gate",
+    "check": "npm run lint && npm test && npm run quality && npm run build && npm run secrets && npm run ui-gate",
     "quality": "node scripts/quality/check.mjs",
+    "secrets": "node scripts/quality/secrets.mjs",
     "ui-gate": "node scripts/quality/ui-gate.mjs"
   },
   "repository": {

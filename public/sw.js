@@ -120,6 +120,8 @@ self.addEventListener('fetch', (event) => {
   if (req.method === 'POST' && new URL(req.url).pathname.endsWith('/share-target')) { event.respondWith(receiveShare(req)); return; }
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // Claude・Dropbox との通信（キー・token を見出しに付ける）には触らない・保存しない（v5.56）
+  if (/(^|\.)(anthropic\.com|dropboxapi\.com|dropboxusercontent\.com|dropbox\.com|dropboxstatic\.com)$/.test(url.hostname)) return;
 
   // 1) HTML ナビゲーション: ネットワーク優先（デプロイが即反映）。
   //    ただし電波が弱く NAV_TIMEOUT_MS 以内に返らなければキャッシュを先に表示する。

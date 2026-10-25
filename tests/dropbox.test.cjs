@@ -28,7 +28,7 @@ describe('Dropbox 連携', () => {
         w.URL.createObjectURL = () => 'blob:test'; w.URL.revokeObjectURL = () => {};
         w.HTMLAnchorElement.prototype.click = function () { w.__downloaded = this.download; }; // 保存（ダウンロード）は名前を控えるだけ
         app.eval(`localStorage.removeItem('cad_dropbox_key'); localStorage.removeItem('cad_dropbox_auth'); localStorage.removeItem('cad_dropbox_folder'); localStorage.removeItem('cad_dropbox_pkce');
-            _dbxPkce = null; _dbxLastOpened = null; _dbxFolderCache = {}; hideSnack(); closePropertyPanel();`);
+            _dbxPkce = null; _dbxLastOpened = null; _dbxFolderCache = {}; _dbxBrowse = null; hideSnack(); closePropertyPanel();`);
     });
     const snack = () => app.val(`(() => { const s = document.getElementById('cad-snack'); if(!s || !s.classList.contains('show')) return null;
         return { msg: s.querySelector('.sn-msg').textContent, acts: [...s.querySelectorAll('.sn-act')].filter((b) => b.style.display !== 'none').map((b) => b.textContent) }; })()`);
@@ -73,7 +73,7 @@ describe('Dropbox 連携', () => {
         assert.equal(u.searchParams.get('code_challenge_method'), 'S256');
         assert.equal(u.searchParams.get('token_access_type'), 'offline');
         assert.equal(u.searchParams.get('redirect_uri'), null, 'コードを画面に出す形（ホーム画面のアプリでも戻れる）');
-        assert.equal(u.searchParams.get('scope'), 'files.metadata.read files.content.write', '使う許可だけ');
+        assert.equal(u.searchParams.get('scope'), 'files.metadata.read files.content.read files.content.write', '使う許可だけ（フォルダを知る・読む・保存する）');
         assert.equal(app.val(`!!document.getElementById('dbx-code')`), true, 'コードを貼る欄');
         const verifier = app.val('_dbxPkce.verifier');
         // ログインの間にアプリが閉じられても（画面の中の値が消えても）、端末に覚えた verifier で続けられる
@@ -89,8 +89,10 @@ describe('Dropbox 連携', () => {
         assert.equal(body.get('client_id'), 'abcd1234efgh');
         assert.equal(app.val('dropboxConnected()'), true);
         assert.equal(app.val(`JSON.parse(localStorage.getItem('cad_dropbox_auth')).refresh`), 'RT1');
-        app.eval(`setDropboxAppKey('zzzz1234efgh')`);
+        routes['https://api.dropboxapi.com/2/auth/token/revoke'] = { status: 200, json: null };
+        await app.eval(`setDropboxAppKey('zzzz1234efgh')`);
         assert.equal(app.val('dropboxConnected()'), false, '別のアプリのキーならつなぎ直す');
+        assert.ok(calls.some((c) => c.url.endsWith('/auth/token/revoke')), '前のアプリの許可は Dropbox 側でも取り消す');
         assert.deepEqual(app.errors(), []);
     });
 
@@ -120,31 +122,74 @@ describe('Dropbox 連携', () => {
         assert.deepEqual(snack().acts, ['☁ つなぐ']);
     });
 
-    it('Chooser で選んだファイルを読んで開き、保存はそのファイルと同じフォルダへ。別の図面にしたら決めた保存先に戻る', async () => {
+    it('アプリの中の一覧で開く（よそのスクリプトは使わない）: フォルダ・開けるファイルだけ・名前はそのまま文字で。読んだファイルと同じフォルダに保存', async () => {
         connect();
-        app.eval(`setDropboxFolder('現場データ/')`);
-        assert.equal(app.val('dropboxSaveFolder()'), '/現場データ');
-        // Chooser（dropins.js）の代わり
-        app.eval(`window.Dropbox = { choose: (o) => { window.__chooseOpt = o; o.success([{ link: 'https://dl.dropboxusercontent.com/x/plan.dxf', name: '平面図.dxf', id: 'id:abc', bytes: 5 }]); } };
-            window.__opened = []; openIncomingFile = (f) => { window.__opened.push(f.name); setDrawingName(f.name); };`);
-        routes['https://dl.dropboxusercontent.com/x/plan.dxf'] = { status: 200, text: '0\nEOF' };
-        app.eval('dropboxOpen()');
-        await new Promise((r) => setTimeout(r, 50));
+        app.eval(`setDropboxFolder('/案件/2026 現場A')`);
+        assert.equal(app.val(`document.querySelector('script[src*="dropbox.com"]')`), null);
+        routes['https://api.dropboxapi.com/2/files/list_folder'] = { status: 200, json: { has_more: true, cursor: 'C1', entries: [
+            { '.tag': 'file', name: '平面図.dxf', id: 'id:abc', path_display: '/案件/2026 現場A/平面図.dxf', path_lower: '/案件/2026 現場a/平面図.dxf', size: 2048, server_modified: '2026-10-20T01:02:03Z' },
+            { '.tag': 'file', name: '見積.xlsx', id: 'id:x', path_display: '/案件/2026 現場A/見積.xlsx', size: 10 }] } };
+        routes['https://api.dropboxapi.com/2/files/list_folder/continue'] = { status: 200, json: { has_more: false, entries: [
+            { '.tag': 'folder', name: '<img src=x onerror=alert(1)>', id: 'id:f', path_display: '/案件/2026 現場A/<img src=x onerror=alert(1)>' }] } };
+        await app.eval('dropboxOpen()');
+        await new Promise((r) => setTimeout(r, 30));
+        assert.equal(JSON.parse(calls.find((c) => c.url.endsWith('/list_folder')).opt.body).path, '/案件/2026 現場A');
+        assert.equal(JSON.parse(calls.find((c) => c.url.endsWith('/continue')).opt.body).cursor, 'C1', '多いときは続きも読む');
+        assert.equal(app.val(`document.querySelectorAll('#dbx-browse .dbx-folder').length`), 1);
+        assert.equal(app.val(`document.querySelectorAll('#dbx-browse .dbx-file').length`), 1, '開けない種類（xlsx）は出さない');
+        assert.equal(app.val(`document.querySelectorAll('#dbx-browse img').length`), 0, 'ファイル名は HTML にしない');
+        assert.match(app.val(`document.querySelector('#dbx-browse .dbx-folder').textContent`), /<img src=x/);
+        assert.match(app.val(`document.getElementById('dbx-browse').textContent`), /ほかの種類のファイル 1個/);
+        assert.deepEqual(app.val(`[...document.querySelectorAll('#dbx-browse .dbx-crumb')].map((b) => b.textContent)`), ['Dropbox', '案件', '2026 現場A']);
+        // ファイルを選んで読む
+        app.eval(`window.__opened = []; openIncomingFile = (f) => { window.__opened.push(f.name); setDrawingName(f.name); };`);
+        routes['https://content.dropboxapi.com/2/files/download'] = { status: 200, text: '0 EOF' };
+        const fi = app.val(`[...document.querySelectorAll('#dbx-browse .dbx-file')][0].dataset.i`);
+        await app.eval(`dropboxBrowsePick(${fi})`);
+        await new Promise((r) => setTimeout(r, 30));
+        const dl = calls.find((c) => c.url.endsWith('/files/download'));
+        assert.equal(JSON.parse(dl.opt.headers['Dropbox-API-Arg']).path, 'id:abc');
+        assert.equal(dl.opt.headers.Authorization, 'Bearer AT1');
         assert.deepEqual(app.val('window.__opened'), ['平面図.dxf']);
-        assert.equal(app.val('window.__chooseOpt.linkType'), 'direct');
-        assert.ok(app.val('window.__chooseOpt.extensions').includes('.jww'));
-        routes['https://api.dropboxapi.com/2/files/get_metadata'] = { status: 200, json: { path_display: '/案件/2026 現場A/平面図.dxf' } };
+        // 保存は、読んだファイルと同じフォルダ（get_metadata を呼ばずに分かる）
+        app.eval(`setDropboxFolder('現場データ/')`);
         routes['https://content.dropboxapi.com/2/files/upload'] = (url, opt) => ({ status: 200, json: { path_display: JSON.parse(opt.headers['Dropbox-API-Arg']).path } });
         await app.eval(`dropboxSaveBlob(new Blob(['x']), '平面図_修正.dxf').then((p) => { window.__saved = p; })`);
-        await new Promise((r) => setTimeout(r, 50));
-        assert.equal(JSON.parse(calls.find((c) => c.url.endsWith('get_metadata')).opt.body).path, 'id:abc');
+        await new Promise((r) => setTimeout(r, 30));
         assert.equal(app.val('window.__saved'), '/案件/2026 現場A/平面図_修正.dxf');
+        assert.ok(!calls.some((c) => c.url.endsWith('get_metadata')));
         // 別の図面にした（閉じた・ほかのファイルを開いた）
         app.eval(`setDrawingName('新規図面')`);
         await app.eval(`dropboxSaveBlob(new Blob(['x']), 'b.dxf').then((p) => { window.__saved = p; })`);
-        await new Promise((r) => setTimeout(r, 50));
+        await new Promise((r) => setTimeout(r, 30));
         assert.equal(app.val('window.__saved'), '/現場データ/b.dxf');
-        app.eval('delete window.Dropbox');
+        assert.deepEqual(app.errors(), []);
+    });
+
+    it('一覧: 保存先のフォルダがまだ無ければいちばん上を出す。上へ・たどりで移る。つないでいなければ「つなぐ」。読む許可が足りなければ、つなぎ直しを出す', async () => {
+        app.eval(`setDropboxAppKey('abcd1234efgh')`);
+        await app.eval('dropboxOpen()');
+        assert.deepEqual(snack().acts, ['☁ つなぐ']);
+        assert.equal(calls.length, 0);
+        connect();
+        app.eval(`_dbxBrowse = null; setDropboxFolder('/まだ無い')`);
+        routes['https://api.dropboxapi.com/2/files/list_folder'] = (url, opt) => (JSON.parse(opt.body).path === '/まだ無い' ? { status: 409, json: { error_summary: 'path/not_found/' } }
+            : { status: 200, json: { has_more: false, entries: [{ '.tag': 'folder', name: '案件', path_display: '/案件' }] } });
+        await app.eval('dropboxOpen()');
+        await new Promise((r) => setTimeout(r, 30));
+        assert.equal(app.val('_dbxBrowse.path'), '', 'いちばん上');
+        await app.eval('dropboxBrowseEnter(0)');
+        await new Promise((r) => setTimeout(r, 30));
+        assert.equal(app.val('_dbxBrowse.path'), '/案件');
+        await app.eval('dropboxBrowseUp()');
+        await new Promise((r) => setTimeout(r, 30));
+        assert.equal(app.val('_dbxBrowse.path'), '');
+        // 前の版でつないだ（読む許可が無い）とき
+        routes['https://api.dropboxapi.com/2/files/list_folder'] = { status: 401, json: { error: { '.tag': 'missing_scope', required_scope: 'files.content.read' } } };
+        await app.eval(`dropboxBrowse('/案件')`);
+        await new Promise((r) => setTimeout(r, 30));
+        assert.match(snack().msg, /files\.content\.read/);
+        assert.deepEqual(snack().acts, ['☁ つなぐ']);
     });
 
     it('書き出したあとの知らせに「☁ Dropbox へ」を出す（キーが無ければ出さない）。押すとそのファイルを保存する', async () => {

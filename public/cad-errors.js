@@ -2,6 +2,17 @@
 // cad-errors.js - どのスクリプトより先に読み込み、想定外のエラーを画面に知らせる。
 // スマホでは開発者ツールが使えず「黙って動かない」状態になりやすいため、
 // エラーを端末内（localStorage）に記録し、詳細を表示・コピーできるようにする。
+
+// キー・token に見える文字を隠す（v5.56）。エラーの記録・コマンド欄・知らせに出す文に必ず通す
+// （コピーして人に送るエラーの記録や、画面の写真からキーが漏れないように）
+window.cadMaskSecrets = function (s) {
+    return String(s === undefined || s === null ? '' : s)
+        .replace(/sk-ant-[A-Za-z0-9_-]{6,}/g, 'sk-ant-…（隠しました）')
+        .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi, '$1…（隠しました）')
+        .replace(/(x-api-key["':\s=]+)[A-Za-z0-9._-]{8,}/gi, '$1…（隠しました）')
+        .replace(/("?(?:access|refresh)_token"?\s*[:=]\s*"?)[A-Za-z0-9._~+/=-]{8,}/gi, '$1…（隠しました）')
+        .replace(/\bsl\.[A-Za-z0-9._-]{20,}/g, 'sl.…（隠しました）');
+};
 (function () {
     'use strict';
 
@@ -12,6 +23,8 @@
 
     let log = [];
     try { log = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch { log = []; }
+    // 前の版で記録した文にキーが入っていても、読み直すときに隠す
+    log = Array.isArray(log) ? log.map((e) => Object.assign({}, e, { message: window.cadMaskSecrets(e && e.message), detail: window.cadMaskSecrets(e && e.detail) })) : [];
     if (!Array.isArray(log)) log = [];
     let lastNotice = { msg: '', t: 0 };
 
@@ -33,8 +46,8 @@
         const entry = {
             t: new Date().toISOString(),
             kind: kind,
-            message: String(message || '不明なエラー').slice(0, 500),
-            detail: detail ? String(detail).slice(0, 3000) : '',
+            message: window.cadMaskSecrets(String(message || '不明なエラー')).slice(0, 500),
+            detail: detail ? window.cadMaskSecrets(String(detail)).slice(0, 3000) : '',
             build: buildInfo().id
         };
         log.push(entry);

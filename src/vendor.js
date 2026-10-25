@@ -49,7 +49,12 @@ window.loadClaudeSdk = function () {
             import('@anthropic-ai/sdk'),
             import('@anthropic-ai/sdk/helpers/beta/zod'),
             import('zod/v4'),
-        ]).then(([sdk, zh, zod]) => ({ Anthropic: sdk.default, betaZodOutputFormat: zh.betaZodOutputFormat, z: zod.z || zod }))
+        ]).then(([sdk, zh, zod]) => {
+            const z = zod.z || zod;
+            // zod は速く読むために eval（new Function）を試すが、公開のサーバーの CSP で eval を止めているので、初めから使わない（v5.56）
+            if (typeof z.config === 'function') z.config({ jitless: true });
+            return { Anthropic: sdk.default, betaZodOutputFormat: zh.betaZodOutputFormat, z };
+        })
             .catch((err) => {
                 _claudeSdkPromise = null; // 失敗時は次回やり直せるようにする
                 throw err;

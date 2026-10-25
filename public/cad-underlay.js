@@ -328,7 +328,7 @@ async function ulLoadPdfFile(file) {
         showToast('PDF を読み込んでいます…', 2000);
         const pdfjs = await window.loadPdfJs();
         const bytes = await file.arrayBuffer(), keep = bytes.slice(0); // pdf.js に渡すと使えなくなるので写しを持つ
-        const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes) }).promise;
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false }).promise;
         let pageNo = 1;
         if(doc.numPages > 1) {
             const a = await _ulAskPdfPage(doc.numPages, 0);
@@ -358,7 +358,7 @@ async function ulChangePdfPage() {
     try {
         await busyPaint();
         const pdfjs = await window.loadPdfJs();
-        const doc = await pdfjs.getDocument({ data: new Uint8Array(u.pdf.slice(0)) }).promise;
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(u.pdf.slice(0)), isEvalSupported: false }).promise;
         const r = await _ulPdfPage(doc, pageNo);
         const same = r.w === u.w && r.h === u.h, op = u.opacity;
         ulSetImage(r.src, r.w, r.h, { mime: 'image/png', data: r.data, name: `${u.pdfName || 'PDF'}（${pageNo}ページ）`, pdf: u.pdf, pdfName: u.pdfName, page: pageNo, pages: u.pages }, same ? u.T : null);

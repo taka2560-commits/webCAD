@@ -505,7 +505,7 @@ function isAppleTouchDevice(ua) {
 // ファイルを選ぶ欄の種類の指定（accept）。iPhone・iPad は、.dxf・.dwg・.sim・.sdr のように端末が知らない拡張子を指定すると、
 // 「ファイル」でそのファイルが灰色になって選べないので、指定しない（選んだあとに拡張子で振り分け、合わなければ知らせる）
 function fileAcceptFor(accept) { return isAppleTouchDevice() ? '' : accept; }
-function addCommandLog(t) { const d=document.createElement('div'); d.textContent=t; commandLog.appendChild(d); commandLog.scrollTop=commandLog.scrollHeight; }
+function addCommandLog(t) { const d=document.createElement('div'); d.textContent=(typeof cadMaskSecrets === 'function') ? cadMaskSecrets(t) : t; /* キーに見える文字は隠す（cad-errors.js） */ commandLog.appendChild(d); commandLog.scrollTop=commandLog.scrollHeight; }
 function setPrompt(t) { document.getElementById('command-prompt').textContent=t; updateCommandPill(); if(typeof guideNotify === 'function') guideNotify('mode'); }
 function resetCommand() {
     cmdState=_makeCmdState();

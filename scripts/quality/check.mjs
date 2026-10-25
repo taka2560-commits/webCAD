@@ -3,6 +3,7 @@
 //    （置き換えのときに混ざりやすく、見ても気づけない。説明書き（.md）は BOM・ゼロ幅・制御文字・U+FFFD だけ）
 // 2. 版番号: README の「現在のバージョン」・操作マニュアルの「対応バージョン」・更新履歴のいちばん上 が同じか
 // 3. テストの件数: README の「自動テスト（N件）」が、いま走らせたテストの件数（.quality/test-count.json）と同じか
+// （秘密の文字の検査は、ビルドの後に scripts/quality/secrets.mjs で）
 // 失敗があれば理由を出して終了コード 1
 import fs from 'node:fs';
 import path from 'node:path';

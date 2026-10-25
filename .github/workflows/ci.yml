@@ -40,6 +40,9 @@ jobs:
       - name: 本番ビルド
         run: npm run build
 
+      - name: 秘密の文字の検査（API キー・token・秘密の鍵がソース・設定・ビルドに無いか）
+        run: npm run secrets
+
       - name: 画面のチェック G2（本物の Chrome で、幅 × ボタンの大きさ × 動き の見た目と指の操作）
         run: npm run ui-gate
         env:

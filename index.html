@@ -798,6 +798,16 @@
         .lm-bulk-start { width: 100%; padding: 6px 12px; border-radius: 14px; font-weight: bold; background: rgba(40,44,52,0.9); color: var(--brand); border: 1px solid var(--brand); }
         .lm-bulk { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 8px; background: rgba(var(--hl-rgb), 0.08); border: 1px solid rgba(var(--hl-rgb), 0.35); }
         .lm-bulk-help { font-size: 11px; color: #ccc; }
+        /* Dropbox から開く一覧（cad-dropbox.js。v5.56）: 上にフォルダのたどり、下にフォルダ・ファイルの行 */
+        .dbx-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+        .dbx-crumb { height: 26px; padding: 0 8px; font-size: 11px; }
+        .dbx-sep { color: #777; font-size: 11px; }
+        .dbx-list { display: flex; flex-direction: column; gap: 2px; max-height: 52vh; overflow-y: auto; border: 1px solid var(--border-2); border-radius: var(--r-sub); padding: 4px; }
+        .dbx-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 8px; text-align: left; font: inherit; font-size: 12px; color: var(--text-color); background: transparent; border: none; border-radius: 6px; cursor: pointer; }
+        .dbx-item:hover, .dbx-item:focus-visible { background: rgba(var(--hl-rgb), 0.12); }
+        .dbx-item .dbx-name { min-width: 0; overflow-wrap: anywhere; }
+        .dbx-item .dbx-meta { flex: 0 0 auto; font-size: 10px; color: #999; }
+        .dbx-up { color: #aaa; }
         /* 座標表の読み取り（cad-ai-read.js）: 元の写真（押すと大きく）・確かめる表（自信の無い行は色）。v5.55 */
         .airead-imgs { display: flex; gap: 6px; overflow-x: auto; }
         .airead-img { height: 90px; width: auto; max-width: none; border: 1px solid var(--border-2); border-radius: var(--r-sub); cursor: zoom-in; background: #fff; }
@@ -1752,7 +1762,6 @@
             const m = document.getElementById('top-menu-modal');
             if(!m) return;
             m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
-            if(m.style.display === 'flex' && typeof dropboxPreload === 'function') dropboxPreload(); // 「☁ Dropbox から開く」をすぐ開けるよう先に読む
             if(m.style.display === 'flex' && typeof scrollCue === 'function') scrollCue(m, 'y'); // 画面に収まらなければ、続きの印（下の端を薄く）
         }
 

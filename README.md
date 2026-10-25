@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.55（2026年10月25日リリース）**
+**現在のバージョン: v5.56（2026年10月25日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -197,6 +197,22 @@
 
 ---
 
+## 🔒 キー・token を守る仕組み（v5.56）
+
+Claude の API キー・Dropbox の token は、使う人の端末のブラウザの中にだけ置き、次の仕組みで漏れにくくしています。
+
+* **よそのスクリプトを読まない**: アプリの中で動くのは、このアプリのスクリプトだけです（以前の Dropbox の Chooser のスクリプトもやめ、Dropbox の一覧はアプリが自分で出します）。公開のサーバー（vercel.json）の Content-Security-Policy で、よその場所のスクリプトを止めています。
+* **通信先を絞る（CSP）**: アプリが通信できる先を、自分・api.anthropic.com・Dropbox の API・国土地理院の地図に限っています。よそのページへの埋め込み・プラグイン・よそへのフォーム送信も止めています。ただし、CSP は通信先を限る仕組みで、ページの移動や、許した先（Dropbox など）への送信までは止められません。いちばん大事なのは、取り込んだファイルの文字などから悪いスクリプトを動かされない（XSS を起こさない）ことで、図面・座標・ファイル名などを画面に出すときは、いつも文字として出しています。
+* **DWG の読込エンジン**: 埋め込んだ WASM を data: の URL から読み、中で Function を使うため、CSP で `data:`（通信）と `'unsafe-eval'` を許しています（よその場所は許していません）。
+* **キーは保存・書き出しに入れない**: 自動保存・保存一覧・図面一式（.webcad・PDF）・DXF などには入りません（自動テストで確かめています）。
+* **画面・記録に出さない**: キーの欄は伏せ字で、入れたあとは欄を空にします。コマンド欄・知らせ・エラーの記録（コピーして人に送るもの）では、キー・token に見える文字を「（隠しました）」に置き換えます。
+* **端末に覚えない選択**: Claude のキーは「この端末に覚えない」にすると、アプリを閉じると消えます。
+* **Dropbox の許可の取り消し**: 「接続を切る」・アプリキーを変えたときは、Dropbox 側の許可も取り消します。
+* **Service Worker は API の通信に触らない**: Claude・Dropbox との通信は保存も中継もしません。
+* **ソースにキーを書かない**: 秘密の文字の検査（scripts/quality/secrets.mjs。npm run check と CI で、ビルドの後に走ります）が、ソース・説明書き・設定・CI・ビルド（dist）に API キー・token・秘密の鍵に見える文字が無いかを調べ、あれば止めます。
+* **画面のチェック（G2）**: 手元の preview にも同じヘッダーを付け、毎回「CSP のヘッダーが付いている」「CSP に止められた所が無い」「Claude の SDK・PDF の表示・DWG の読込エンジンが CSP の下でも動く」を確かめます。
+* **料金の上限**: 漏れたときの被害を小さくするため、Claude Console で月の上限（Spend limit）を決めておくことを勧めています（docs/座標表の読み取りの準備.md）。
+
 ## 🧑‍💻 開発者向け
 
 ```bash
@@ -204,7 +220,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（895件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（902件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト（計算ゲートを含む）→ 品質のチェック G1 → ビルド → 画面のチェック G2（CI と同じ内容。docs/品質管理ゲート.md）
 ```
@@ -278,7 +294,7 @@ npm run check        # lint → テスト（計算ゲートを含む）→ 品�
   | `cad-helmert-rev.js` | SIMA の変換の逆（張り合わせ点から図面 → SIMA の変換を求め、図面の図形を SIMA の座標へ動かす） |
   | `cad-qr.js` | このアプリを渡す QR コード（qrcode-generator。リンクは今の場所、手元の開発用なら公開の場所） |
   | `cad-ai-read.js` | 座標表の読み取り（Claude Opus 5.5。写真・PDF → 点番号・点名・X・Y・標高 → 確かめる表 → 座標一覧。API キーは使う人がそれぞれ端末に入れる。SDK は src/vendor.js の loadClaudeSdk） |
-  | `cad-dropbox.js` | Dropbox から開く（Chooser）・Dropbox に保存（OAuth 2 PKCE でつなぎ、files/upload。保存先は開いたファイルのフォルダ） |
+  | `cad-dropbox.js` | Dropbox から開く（アプリの中の一覧。files/list_folder・files/download）・Dropbox に保存（files/upload）。OAuth 2 PKCE でつなぐ。保存先は開いたファイルのフォルダ。Dropbox のスクリプトは読まない（v5.56） |
   | `cad-guide.js` | 操作ガイドのしくみ（ツアーの進め方・指し示し・元の図面に戻す、手順カード、つまずいたときの一言）。他のファイルは `guideNotify('出来事')` で知らせるだけ |
   | `cad-guide-tours.js` | 機能の練習ツアー（測量計算・SIMA の変換・杭打ち・点を動かす・写真・印刷）の手順。機能の状態は `onStart` で控えて `onEnd` で戻す |
   | `cad-guide-help.js` | ヘルプ（❓）の中身と表示: 分類ごとの説明（何ができる・場所・手順・コツ）、探す（ひらがなの読み・コマンド）、開く・やってみる、コマンド一覧、パネルの見出しの ？ |

@@ -26,12 +26,29 @@ const AIREAD_SYSTEM = [
 
 let _airead = null; // { files: [{ name, kind, url, data, mediaType }], rows: [...], unit, notes, cost, mm, model }
 
-function aireadKey() { try { return (localStorage.getItem('cad_claude_key') || '').trim(); } catch { return ''; } }
+// キーの置き場所: 端末に覚える（localStorage）か、アプリを閉じるまで（sessionStorage。「この端末に覚えない」）。
+// どちらもこの端末のブラウザの中だけで、Anthropic にだけ送る（v5.56: 通信先は CSP で api.anthropic.com などに限っている）
+function _aireadStore(kind) { try { return kind === 'session' ? window.sessionStorage : window.localStorage; } catch { return null; } }
+function aireadKey() {
+    for(const kind of ['session', 'device']) {
+        const st = _aireadStore(kind);
+        try { const v = st && st.getItem('cad_claude_key'); if(v) return v.trim(); } catch { /* 読めなければ次 */ }
+    }
+    return '';
+}
+function aireadKeyWhere() {
+    try { const ss = _aireadStore('session'); if(ss && ss.getItem('cad_claude_key')) return 'session'; } catch { /* 無し */ }
+    return aireadKey() ? 'device' : '';
+}
 function aireadEnabled() { return !!aireadKey(); }
-window.setAireadKey = function(v) {
+// session: true なら端末に覚えない（アプリを閉じると消える）
+window.setAireadKey = function(v, session) {
     const k = String(v || '').trim();
     if(k && !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k)) { showToast('API キーの形が違います（sk-ant- で始まる文字をそのまま貼り付けてください）', { kind: 'warn', ms: 4000 }); return false; }
-    try { if(k) localStorage.setItem('cad_claude_key', k); else localStorage.removeItem('cad_claude_key'); } catch { showToast('この端末に覚えられませんでした', { kind: 'error', ms: 3000 }); return false; }
+    // 前のキーは両方の置き場所から消してから、選んだ方にだけ入れる
+    ['session', 'device'].forEach((kind) => { try { const st = _aireadStore(kind); if(st) st.removeItem('cad_claude_key'); } catch { /* 無し */ } });
+    try { if(k) _aireadStore(session ? 'session' : 'device').setItem('cad_claude_key', k); } catch { showToast('キーを入れられませんでした（このブラウザでは覚えられません）', { kind: 'error', ms: 3000 }); return false; }
+    ['opt-ai-key', 'airead-key'].forEach((id) => { const el = document.getElementById(id); if(el) el.value = ''; }); // 欄に残さない
     if(document.getElementById('opt-airead')) showOptionsPanel();
     else if(document.getElementById('airead-panel')) showAireadPanel();
     return true;
@@ -43,8 +60,9 @@ function aireadOptionsHtml() {
     return `
         <div id="opt-airead" style="border-top:1px solid rgba(255,255,255,0.1); margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;">
             <div style="font-size:11px;color:#aaa;font-weight:700;">📷 座標表の読み取り（Claude）</div>
-            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#ddd;">API キー<input class="prop-val" id="opt-ai-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1;min-width:0;" placeholder="${has ? '（入っています。変えるときだけ貼り付け）' : 'sk-ant- で始まるキー'}" onchange="setAireadKey(this.value)"></label>
-            <div style="font-size:11px;color:#ddd;" id="opt-ai-status">${has ? '✅ キーが入っています（この端末だけ）' : 'キーが入っていません'}</div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#ddd;">API キー<input class="prop-val" id="opt-ai-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1;min-width:0;" placeholder="${has ? '（入っています。変えるときだけ貼り付け）' : 'sk-ant- で始まるキー'}" onchange="setAireadKey(this.value, document.getElementById('opt-ai-session').checked)"></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#ddd;"><input type="checkbox" id="opt-ai-session"${aireadKeyWhere() === 'session' ? ' checked' : ''}> この端末に覚えない（アプリを閉じると消える。次に入れるキーから）</label>
+            <div style="font-size:11px;color:#ddd;" id="opt-ai-status">${has ? (aireadKeyWhere() === 'session' ? '✅ キーが入っています（アプリを閉じると消えます）' : '✅ キーが入っています（この端末だけに覚えています）') : 'キーが入っていません'}</div>
             ${has ? '<button class="prop-btn btn-sub" onclick="setAireadKey(\'\')">キーを消す</button>' : ''}
             <div style="color:#888;font-size:10px;">Claude Console（platform.claude.com）で作った自分の API キーを入れます。読み取るたびに、そのキーの持ち主に料金がかかります（1枚でおよそ数円〜十数円）。読み取る画像は Anthropic に送られます。人と共用の端末では入れないでください。</div>
         </div>`;
@@ -58,7 +76,8 @@ function showAireadPanel() {
                 <div>紙の座標表・野帳・スキャンした PDF の写真から、点番号・点名・X・Y・標高を読み取り、確かめてから座標一覧に入れます。</div>
                 <div>使うには、自分の Claude の API キーが要ります（Claude Console → API Keys で作ります）。</div>
                 <input class="prop-val" id="airead-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant- で始まるキーを貼り付け" aria-label="Claude の API キー">
-                <button class="prop-btn" onclick="setAireadKey(document.getElementById('airead-key').value)">キーを入れる</button>
+                <label style="display:flex;align-items:center;gap:6px;font-size:11px;"><input type="checkbox" id="airead-session"> この端末に覚えない（アプリを閉じると消える）</label>
+                <button class="prop-btn" onclick="setAireadKey(document.getElementById('airead-key').value, document.getElementById('airead-session').checked)">キーを入れる</button>
                 <div style="color:#888;font-size:10px;">キーはこの端末にだけ覚えます。読み取るたびに、キーの持ち主に料金がかかります。</div>
             </div>`);
         return;

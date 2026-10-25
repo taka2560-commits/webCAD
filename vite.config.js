@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // DWG読込エンジンなど、初回起動時にはプリキャッシュしない大きなファイル
 const LAZY_ASSET_RE = /libredwg|pdf/i; // DWG 読込エンジン・PDF 表示エンジン（pdf.js）
@@ -90,8 +91,15 @@ function webcadPwaPlugin() {
     };
 }
 
+// 公開（Vercel）と同じ安全のヘッダー（CSP など）を、手元の preview でも付ける（画面のチェック G2 で、CSP に止められる所が無いかを確かめる）。
+// 中身は vercel.json の1か所だけに書く。開発用の dev は、変更の即時反映（ws:）と食い違うので付けない
+const SECURITY_HEADERS = Object.fromEntries(
+    JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'vercel.json'), 'utf8')).headers[0].headers.map((h) => [h.key, h.value])
+);
+
 export default defineConfig({
     plugins: [webcadPwaPlugin()],
+    preview: { headers: SECURITY_HEADERS },
     build: {
         // DWG読込エンジン(libredwg-web, WASM埋め込み)は単体で約9MBあるため警告の閾値を上げる
         chunkSizeWarningLimit: 10000,

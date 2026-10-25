@@ -9,6 +9,7 @@
 // showToast(msg)・showToast(msg, 3000)・showToast(msg, { ms, kind, action: { label, run } })
 // action があるときは、ボタンつきのスナックバーで出す
 function showToast(msg, opt) {
+    if(typeof cadMaskSecrets === 'function') msg = cadMaskSecrets(msg); // キーに見える文字は隠す（cad-errors.js）
     const o = (typeof opt === 'number') ? { ms: opt } : (opt || {});
     if(o.action) { showSnack(msg, o); return; }
     let t = document.getElementById('cad-toast');
@@ -24,6 +25,7 @@ function showToast(msg, opt) {
 
 // ボタンつきのお知らせ（画面の下）。o: { ms, kind, action: { label, run } }
 function showSnack(msg, o) {
+    if(typeof cadMaskSecrets === 'function') msg = cadMaskSecrets(msg);
     o = o || {};
     let s = document.getElementById('cad-snack');
     if(!s) {
