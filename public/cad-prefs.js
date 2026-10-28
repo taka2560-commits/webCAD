@@ -13,6 +13,7 @@ const DISPLAY_PREF_DEFS = {
     // デザイン色（cad-theme.js の配色。kind: 'swatch' は切り替えボタンの列ではなく、色の見本を並べる）
     theme:         { label: 'デザイン色',     def: 'std', kind: 'swatch',
         options: ((window.cadTheme && window.cadTheme.list) || [{ key: 'std', name: '標準' }]).map(t => [t.key, t.name, t.key]) },
+    loupe:         { label: 'ルーペ',         def: 'on',  options: [['on', '入', true], ['off', '切', false]] }, // 指でなぞるときの拡大鏡（v5.57。下のバー・全画面の 🔍 でも切り替え）
     loupeSize:     { label: 'ルーペの大きさ', def: 'm',   options: [['s', '小', 55], ['m', '中', 70], ['l', '大', 90], ['xl', '特大', 115]] },
     loupeZoom:     { label: 'ルーペの倍率',   def: '3',   options: [['2', '2倍', 2], ['3', '3倍', 3], ['4', '4倍', 4], ['6', '6倍', 6]] },
     coordFont:     { label: '座標の文字',     def: 'm',   options: [['s', '小', 0.85], ['m', '中', 1], ['l', '大', 1.3], ['xl', '特大', 1.6]] },
@@ -59,6 +60,29 @@ function displayPref(name) {
     const o = d.options.find(x => x[0] === k);
     return o ? o[2] : undefined;
 }
+
+// ===== ルーペの入／切（v5.57） =====
+// 指でなぞるときの拡大鏡を出すか。切にすると、なぞっても出さない（スナップ・座標の表示はそのまま）
+function loupeEnabled() { return displayPref('loupe') !== false; }
+function syncLoupeButtons() {
+    if(typeof document === 'undefined') return;
+    const on = loupeEnabled();
+    ['btn-loupe', 'fs-btn-loupe'].forEach((id) => {
+        const b = document.getElementById(id);
+        if(!b) return;
+        b.classList.toggle(id === 'btn-loupe' ? 'active' : 'fs-active', on);
+        b.setAttribute('aria-pressed', String(on));
+        b.title = on ? 'ルーペ: 入（押すと切）' : 'ルーペ: 切（押すと入）';
+        if(id === 'fs-btn-loupe') b.style.opacity = on ? '1' : '0.4';
+    });
+}
+window.toggleLoupe = function() {
+    const on = !loupeEnabled();
+    setDisplayPref('loupe', on ? 'on' : 'off');
+    if(!on && typeof touchState !== 'undefined' && touchState.showLoupe) { touchState.showLoupe = false; if(typeof render === 'function') render(); }
+    if(typeof addCommandLog === 'function') addCommandLog(`-> ルーペ: ${on ? '入' : '切'}`);
+    if(typeof showToast === 'function') showToast(`ルーペ: ${on ? '入' : '切'}`, { ms: 1500 });
+};
 
 // ===== 表示の単位（m / mm） =====
 // 図面の値は図面の1単位（オプションの測量の欄: 1m か 1mm）で持っている。
@@ -263,6 +287,7 @@ function applyDisplayPrefs() {
         if(root.classList) root.classList.toggle('btn-big', (displayPref('btnSize') || 1) > 1);
     }
     if(window.cadTheme) window.cadTheme.apply(displayPrefKey('theme'));
+    syncLoupeButtons(); // 下のバー・全画面の 🔍 の見た目（v5.57）
     if(document.body) {
         document.body.classList.toggle('outdoor-mode', isOutdoor());
         document.body.classList.toggle('motion-ui', displayPref('motion') === true);

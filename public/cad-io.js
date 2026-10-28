@@ -954,6 +954,7 @@ function processIOCommand(cmd) {
     if(cmd === 'WEBCADOUT' || cmd === 'PACK') { exportWebcadFile(); return true; } // 図面一式（.webcad。cad-webcad.js）
     if(cmd === 'PNGOUT' || cmd === 'PNG') { exportScreenPng(); return true; } // 画面の画像（cad-share.js）
     if(cmd === 'EXPORTDWG') { exportDwg(); return true; }
+    if(cmd === 'LOUPE' || cmd === 'LP') { if(typeof toggleLoupe === 'function') toggleLoupe(); return true; } // ルーペの入／切（cad-prefs.js。v5.57）
     if(cmd === 'AIREAD' || cmd === 'READTABLE') { if(typeof showAireadPanel === 'function') showAireadPanel(); return true; } // 座標表を読む（Claude。cad-ai-read.js）
     if(cmd === 'DBOPEN' || cmd === 'DROPBOX') { if(typeof dropboxOpen === 'function') dropboxOpen(); return true; } // Dropbox から開く（cad-dropbox.js）
     return false;

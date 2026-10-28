@@ -535,6 +535,9 @@
             #coords-display { min-width: 0; font-size: min(calc(10px * var(--coord-scale, 1)), 15px); }
             #snap-indicator { min-width: 24px; font-size: 9px; }
             #command-line-area:not(.collapsed) { left: 62px; height: 120px; }
+            /* 🔍 を足した分、座標が切れないように: 「範囲: OFF」は「範囲」だけ（入・切は色）、🔍 は詰める（v5.57） */
+            #btn-area-select .sb-state { display: none; }
+            #btn-loupe { padding: 0 3px; }
         }
         /* プロジェクト一覧のスタイル */
         .project-item { display:flex; align-items:center; padding:10px 12px; border-bottom:1px solid #333; cursor:pointer; transition:background 0.2s; gap:8px; }
@@ -663,7 +666,7 @@
         body.has-space-tabs:not(.fullscreen-mode) #toolbar { bottom: calc(17px + 38px * var(--btn-k, 1) + 44px); } /* タブの分だけ上げる（ツールバーの下の段がタブに隠れていた） */
         /* レイアウトの画面は見るだけ: 作図の道具・コマンド・お気に入り・選んだときのバー・スナップの切り替えを隠す */
         body.layout-mode #toolbar, body.layout-mode #fav-bar, body.layout-mode #command-line-area, body.layout-mode #sel-actionbar,
-        body.layout-mode #fs-dim-actionbar, body.layout-mode #btn-coordread, body.layout-mode #btn-area-select, body.layout-mode #btn-ortho,
+        body.layout-mode #fs-dim-actionbar, body.layout-mode #btn-coordread, body.layout-mode #btn-area-select, body.layout-mode #btn-ortho, body.layout-mode #btn-loupe,
         body.layout-mode #btn-osnap, body.layout-mode #btn-osnap-panel, body.layout-mode #snap-indicator { display:none !important; }
         body.layout-mode #status-bar .paper-space-label { display:inline !important; opacity:1 !important; color:var(--brand); font-weight:700; }
         /* デザイン色の見本（cad-prefs.js の _themeSwatchRowHtml）: 3色の帯・名前・言葉を3列に並べ、選んでいるものに ✓ */
@@ -1214,7 +1217,8 @@
             <span class="paper-space-label" style="opacity:0.6;font-size:0.85em;">モデル</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-            <button id="btn-area-select" class="status-btn" aria-pressed="false" title="範囲選択 ON/OFF" onclick="toggleAreaSelect()">範囲: OFF</button>
+            <button id="btn-loupe" class="status-btn active" aria-pressed="true" aria-label="ルーペ 入／切" title="ルーペ: 入（押すと切）" onclick="toggleLoupe()">🔍</button>
+            <button id="btn-area-select" class="status-btn" aria-pressed="false" title="範囲選択 ON/OFF" onclick="toggleAreaSelect()">範囲<span class="sb-state">: OFF</span></button>
             <button id="btn-ortho" class="status-btn" aria-pressed="false" title="直交モード (F8)" onclick="toggleOrtho()">ORTHO</button>
             <div style="position:relative;display:inline-flex;">
                 <button id="btn-osnap" class="status-btn active" aria-pressed="true" title="オブジェクトスナップ (F3)" onclick="toggleOsnapMain()">OSNAP</button>
@@ -1382,6 +1386,7 @@
             </div>
             <button id="fs-btn-help" onclick="showGuideHelp()" title="ヘルプ・操作ガイド">？</button>
             <button id="fs-btn-coord" class="fs-active" aria-pressed="true" onclick="toggleFsCoordAlways()" title="座標表示 ON/OFF">XY</button>
+            <button id="fs-btn-loupe" class="fs-active" aria-pressed="true" aria-label="ルーペ 入／切" onclick="toggleLoupe()" title="ルーペ: 入（押すと切）">🔍</button>
             <button id="fs-btn-extents" onclick="zoomExtents()" title="全体表示">⛶</button>
             <button id="fs-btn-exit" onclick="toggleFullscreen()" title="全画面解除" style="border-color:#ff6b6b;color:#ff6b6b;">✕</button>
         </div>

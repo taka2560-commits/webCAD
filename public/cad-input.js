@@ -391,8 +391,8 @@ function setupEventListeners() {
             }
 
             if(touchState.isDragging) {
-                // ルーペ表示
-                touchState.showLoupe = true;
+                // ルーペ表示（オプション・🔍 で切にしていれば出さない。v5.57）
+                touchState.showLoupe = (typeof loupeEnabled !== 'function') || loupeEnabled();
                 touchState.loupeX = tx; touchState.loupeY = ty;
 
                 // 全画面モード中は常にスナップ検索（座標読取でオブジェクトを探す用）

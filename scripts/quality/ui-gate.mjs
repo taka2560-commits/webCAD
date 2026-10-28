@@ -94,6 +94,19 @@ async function runOne(browser, v, btn, motion) {
     if (overlap(parts['#toolbar'], parts['#status-bar'])) fail(run, '左のツールバーと下の欄が重なっています');
     const hScroll = await page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth);
     if (hScroll > 1) fail(run, `横にスクロールできてしまいます（${hScroll}px）`);
+    // ルーペの 🔍（v5.57）: 下のバーの中にあって、ほかのボタンと重ならず、押すと切り替わる
+    const lb = await rectOf(page, '#btn-loupe');
+    if (!lb || !inside(lb, vw, vh) || overlap(lb, await rectOf(page, '#btn-area-select')) || overlap(lb, await rectOf(page, '#ucs-label'))) fail(run, `ルーペの 🔍 が下のバーに収まっていません ${JSON.stringify(lb)}`);
+    else {
+        await page.click('#btn-loupe');
+        const off = await page.evaluate(() => !loupeEnabled() && document.getElementById('btn-loupe').getAttribute('aria-pressed') === 'false');
+        await page.click('#btn-loupe');
+        if (!off || !(await page.evaluate(() => loupeEnabled()))) fail(run, 'ルーペの 🔍 を押しても切り替わりません');
+    }
+    // 下のバーの座標が、公共座標の長い値でも切れずに収まる（v5.57。🔍 を足した分、狭い画面で切れていた）
+    const crd = await page.evaluate(() => { setCoordsDisplay(-12345.678, 23456.789); const c = document.getElementById('coords-display'), sb = document.getElementById('status-bar').getBoundingClientRect(), r = c.getBoundingClientRect();
+        return { ok: r.right <= sb.right - 2 && [...c.children].every((e) => e.scrollWidth <= e.clientWidth + 1), r: { l: r.left, rr: r.right, sb: sb.right } }; });
+    if (!crd.ok) fail(run, `下のバーの座標が切れています ${JSON.stringify(crd.r)}`);
     // たたんだコマンドのボタンの文字が丸に収まる・OSNAP と ▼ が重ならない（v5.51.1）
     const pill = await page.evaluate(() => { const b = document.getElementById('command-pill'); return { sw: b.scrollWidth, cw: b.clientWidth }; });
     if (pill.sw > pill.cw + 1) fail(run, `たたんだコマンドのボタンの文字が切れています（${pill.sw}px / ${pill.cw}px）`);

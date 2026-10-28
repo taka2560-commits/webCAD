@@ -891,7 +891,8 @@ window.toggleAreaSelect = function() {
     const btn = document.getElementById('btn-area-select');
     if(btn) {
         btn.className = window.areaSelectEnabled ? 'status-btn active' : 'status-btn';
-        btn.textContent = window.areaSelectEnabled ? '範囲: ON' : '範囲: OFF'; // 初めの表示（範囲: OFF）とそろえる
+        // 初めの表示（範囲: OFF）とそろえる。「: ON／OFF」はスマホの幅では隠す（入・切は色で分かる。座標に場所を譲る。v5.57）
+        btn.innerHTML = '範囲<span class="sb-state">: ' + (window.areaSelectEnabled ? 'ON' : 'OFF') + '</span>';
         btn.setAttribute('aria-pressed', String(!!window.areaSelectEnabled));
     }
     addCommandLog(`-> 交差選択（範囲選択）: ${window.areaSelectEnabled ? 'ON' : 'OFF'}`);
