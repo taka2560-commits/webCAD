@@ -94,6 +94,16 @@ async function runOne(browser, v, btn, motion) {
     if (overlap(parts['#toolbar'], parts['#status-bar'])) fail(run, '左のツールバーと下の欄が重なっています');
     const hScroll = await page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth);
     if (hScroll > 1) fail(run, `横にスクロールできてしまいます（${hScroll}px）`);
+    // 円を座標で描く（v5.58）: 円のコマンドの下のバーが出ていても、作図設定の「📍 この座標に円を描く」が隠れずに押せる
+    const cgo = await page.evaluate(async () => {
+        closePropertyPanel(); resetCommand(); processCommand('C');
+        await new Promise((r) => setTimeout(r, 600)); // パネルが出る動きのあとの測り直し（420ms）を待つ
+        const go = document.getElementById('circle-coord-go'); if (!go) return 'ボタンが無い';
+        go.scrollIntoView({ block: 'nearest' }); await new Promise((r) => setTimeout(r, 100));
+        const g = go.getBoundingClientRect(), hit = document.elementFromPoint(g.left + g.width / 2, g.top + g.height / 2);
+        const ok = hit === go || go.contains(hit); resetCommand(); closePropertyPanel(); return ok ? 'ok' : `隠れている（${hit && (hit.id || hit.className)}）`;
+    });
+    if (cgo !== 'ok') fail(run, `円の「📍 この座標に円を描く」が押せません: ${cgo}`);
     // ルーペの 🔍（v5.57）: 下のバーの中にあって、ほかのボタンと重ならず、押すと切り替わる
     const lb = await rectOf(page, '#btn-loupe');
     if (!lb || !inside(lb, vw, vh) || overlap(lb, await rectOf(page, '#btn-area-select')) || overlap(lb, await rectOf(page, '#ucs-label'))) fail(run, `ルーペの 🔍 が下のバーに収まっていません ${JSON.stringify(lb)}`);
@@ -185,7 +195,7 @@ async function runOne(browser, v, btn, motion) {
     }
 
     // ---- 4. パネルが画面に収まる ----
-    for (const [name, fn] of [['オプション', 'showOptionsPanel()'], ['座標一覧', 'showCoordListPanel()'], ['UCS 管理', 'showUcsManager()'], ['画層の色をまとめて変える', "showLayerManagerPanel(); lmBulkColorMode(true); lmBulkPickAll('all')"],
+    for (const [name, fn] of [['オプション', 'showOptionsPanel()'], ['座標一覧', 'showCoordListPanel()'], ['UCS 管理', 'showUcsManager()'], ['円の作図設定（座標で描く）', "resetCommand(); processCommand('C')"], ['画層の色をまとめて変える', "showLayerManagerPanel(); lmBulkColorMode(true); lmBulkPickAll('all')"],
         ['座標表の読み取り結果', "_airead = { files: [], rows: [{ num: '103', name: 'BM-12', x: '-112360.000', y: '123470.500', z: '102.345', unsure: true, why: 'X の 3 が 8 かも', use: true }, { num: '2', name: '', x: '-12350.1O0', y: '23460.000', z: '', unsure: false, why: '', use: true }], unit: 'm', notes: '見出しは X・Y', cost: 0.04, model: 'claude-opus-5-5', mm: false }; aireadRenderReview()"]]) {
         await page.evaluate((f) => { closePropertyPanel(); (0, eval)(f); }, fn);
         await page.waitForTimeout(motion ? 300 : 60);

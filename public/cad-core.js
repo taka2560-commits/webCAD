@@ -219,9 +219,10 @@ function showCirclePanel() {
         <div class="cogo-note" id="circle-mode-desc" style="margin:-2px 0 6px;">${escapeHtml(CIRCLE_MODES.find(([k]) => k === mode)[2])}</div>
         <div class="prop-row" id="circle-r-row" style="${useR ? '' : 'opacity:0.5;'}">
             <label>半径${displayUnitTag('len')}:</label>
-            <input type="number" id="prop-circle-r" value="${displayUnitNum(parseFloat(lastParams.radius) || 50, 'len')}" min="0" step="any" placeholder="半径を入力">
+            <input type="number" id="prop-circle-r" data-ls="${displayUnitScale('len')}" value="${displayUnitNum(parseFloat(lastParams.radius) || 50, 'len')}" min="0" step="any" placeholder="半径を入力">
         </div>
         <button class="prop-btn" onclick="applyCirclePreset()">この設定で作図開始</button>
+        ${circleCoordSectionHtml()}
     `;
     showPropertyPanel('円 作図設定', html);
 }
@@ -240,7 +241,8 @@ function applyCirclePreset(){
     if(el && _circleUsesRadius(circleMode())) { // 固定半径・接線接線半径: 読めない・0 以下なら欄に理由を出して始めない（以前は黙って前の半径で始めた）
         const v = fieldNum(el, { gt: 0, what: '半径' });
         if(v === undefined) return;
-        lastParams.radius=String(fromDisplayUnit(v, 'len')); // 入力は表示の単位（オプションの長さの単位）
+        const ls = parseFloat(el.dataset.ls); // 欄を出したときの単位で読む（開いたまま単位を切り替えても見出しどおり）
+        lastParams.radius = String((isFinite(ls) && ls > 0) ? _circleFromScale(v, ls) : fromDisplayUnit(v, 'len')); // 入力は表示の単位（オプションの長さの単位）
     }
     saveLastParams();
     hidePropertyPanel();
@@ -530,6 +532,7 @@ function resetCommand() {
         const plineClose = document.getElementById('pline-close-btn'); if (plineClose) plineClose.style.display = 'none';
         const lineUndo = document.getElementById('line-undo-btn'); if (lineUndo) lineUndo.style.display = 'none';
         actionbar.style.display = 'none';
+        fitPanelAboveActionbar(); // バーが消えたら、パネルの高さの制限も外す（v5.58）
         const confirmBtn = actionbar.querySelector('button[onclick="dimConfirmPoint()"]');
         if (confirmBtn) { confirmBtn.style.display = ''; confirmBtn.textContent = '☑️ 確定'; } // タッチ非表示では「☑️ 確定（数）」にしている
         const cancelBtn = document.getElementById('dim-cancel-btn');
@@ -603,7 +606,28 @@ function showPropertyPanel(title, htmlContent) {
     applyPanelPosition(p); // 前に動かした位置を覚えている場合はそこに出す
     if(opening && typeof motionEnter === 'function') motionEnter(p); // UIの動き（試用）: 少し下から上がりながら出る（描き直しでは動かさない）
     if(typeof favUpdateActive === 'function') favUpdateActive(); // お気に入りのバー: パネルのボタンの光り方
+    fitPanelAboveActionbarSoon();
 }
+// コマンドの下のバー（☑確定・終了など）が出ているときは、パネルをその上で終わらせる（パネルの下の方のボタンがバーに隠れて押せないことがないように。
+// パネルの中はスクロールできる）。v5.58。画面いっぱい（□）・たたんだ（▁）ときはしない
+function fitPanelAboveActionbar() {
+    const p = document.getElementById('property-panel'), bar = document.getElementById('fs-dim-actionbar');
+    if(!p) return;
+    // 一度外してから測り直すと、パネルの中のスクロールが先頭に戻るので、決まった高さを直接入れる（同じなら触らない）。
+    // max-height なので、もともと短いパネルには何も起きない
+    let want = '';
+    if(p.style.display === 'flex' && !p.classList.contains('win-max') && !p.classList.contains('win-min') && bar) {
+        const bs = getComputedStyle(bar);
+        if(bs.display !== 'none' && bs.visibility !== 'hidden') {
+            const br = bar.getBoundingClientRect(), pr = p.getBoundingClientRect();
+            if(br.height > 0 && br.top > pr.top + 120) want = Math.floor(br.top - pr.top - 16) + 'px'; // 出す場所が無いほど狭いときは何もしない
+        }
+    }
+    if(p.style.maxHeight !== want) p.style.maxHeight = want;
+}
+// パネルが出る動き（少し下から上がる）の途中で測ると、終わったあとにバーへ少し重なるので、動きのあとにもう一度測る
+function fitPanelAboveActionbarSoon() { fitPanelAboveActionbar(); setTimeout(fitPanelAboveActionbar, 420); }
+window.addEventListener('resize', () => fitPanelAboveActionbar());
 
 // ===== パネルの ▁ たたむ・□ 画面いっぱい =====
 // ▁: 見出しだけにする（図面を広く見たいとき）。もう一度押すと広げる。
@@ -768,6 +792,7 @@ function showActionbarControls(options = {}) {
     const lineUndo = document.getElementById('line-undo-btn'); if(lineUndo) lineUndo.style.display = 'none';
     const writeBtn = document.getElementById('dim-meas-write'); if(writeBtn) writeBtn.style.display = 'none';
     const measBaseBtn = document.getElementById('dim-meas-base'); if(measBaseBtn) measBaseBtn.style.display = 'none';
+    fitPanelAboveActionbarSoon(); // 開いているパネルがバーに隠れないように（v5.58）
 }
 
 // テキスト用パネル開始関数

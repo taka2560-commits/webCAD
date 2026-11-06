@@ -268,6 +268,108 @@ function circleConfirm() {
     return true;
 }
 
+// ===== 座標で描く（v5.58） =====
+// 円の作図設定の下の欄で、中心の X（北）・Y（東）と半径を打って、その場で描く（続けて何個でも）。
+// 座標の読み方はコマンド欄の「X,Y」と同じ（画面の座標表示と同じ: UCS・オプションの座標の単位。X＝北・Y＝東）。
+// 測点の名前（番号）を入れると、その測点を中心にする（描くときに引き直し、測点の位置をそのまま使う。文字に直した数は通さない）。
+// 単位: 欄を出したときの単位（見出しの (m)・(mm)）で読む。パネルを開いたまま単位を切り替えても、見出しどおりに読む（1000倍ずれない）
+function circleCoordSectionHtml() {
+    const tag = displayUnitTag('coord'), rtag = displayUnitTag('len');
+    const mm = displayUnit('coord') === 'mm';
+    const ucsOn = typeof ucs !== 'undefined' && (ucs.angle !== 0 || ucs.originX !== 0 || ucs.originY !== 0);
+    return `
+        <div class="circle-coord" id="circle-coord" data-cs="${displayUnitScale('coord')}" data-ls="${displayUnitScale('len')}">
+            <div class="circle-coord-title">📍 座標で描く（X＝北・Y＝東。画面の座標と同じ）</div>
+            ${ucsOn ? '<div class="cogo-note">UCS が入っているので、UCS の座標で入れます（座標一覧の X・Y とは違います）。</div>' : ''}
+            <div class="prop-row"><label>測点:</label><input type="text" class="prop-val" id="circle-pt" autocomplete="off" placeholder="点名・番号（無くても可）"
+                oninput="pointSuggestUpdate(this, (v) => circleCoordPickPoint(v))" onchange="circleCoordPickPoint(this.value)"></div>
+            ${pointSuggestHtml('circle-pt')}
+            <div class="prop-row"><label>X（北）${tag}:</label><input type="text" inputmode="decimal" class="prop-val" id="circle-cx" autocomplete="off" placeholder="例 ${mm ? '-12345678' : '-12345.678'}" oninput="circleCoordTyped()"></div>
+            <div class="prop-row"><label>Y（東）${tag}:</label><input type="text" inputmode="decimal" class="prop-val" id="circle-cy" autocomplete="off" placeholder="例 ${mm ? '23456789' : '23456.789'}" oninput="circleCoordTyped()"></div>
+            <div class="prop-row"><label>半径${rtag}:</label><input type="text" inputmode="decimal" class="prop-val" id="circle-cr" autocomplete="off" value="${displayUnitNum(_circleR(), 'len')}"></div>
+            <button class="prop-btn" id="circle-coord-go" onclick="circleDrawAtCoord()">📍 この座標に円を描く</button>
+            <div class="cogo-note" id="circle-coord-note">続けて何個でも描けます（↩ で戻せます）。</div>
+        </div>`;
+}
+// 欄を出したときの単位で、打った数を図面の値にする（fromDisplayUnit と同じ形。倍率は欄に持っておく）
+function _circleFromScale(v, s) { return s === 1 ? v : +(v / s).toPrecision(12); }
+function _circleSectionScale(key, kind) {
+    const el = document.getElementById('circle-coord');
+    const s = el ? parseFloat(el.dataset[key]) : NaN;
+    return isFinite(s) && s > 0 ? s : displayUnitScale(kind);
+}
+function _circleCoordNote(t) { const n = document.getElementById('circle-coord-note'); if(n) n.textContent = t; }
+// 測点の名前から X・Y の欄を埋める（見せるだけ。描くときに測点の欄から引き直す）。見つからなければ X・Y を空にして知らせる
+window.circleCoordPickPoint = function(text) {
+    const s = String(text || '').trim();
+    const ex = document.getElementById('circle-cx'), ey = document.getElementById('circle-cy');
+    if(!s) { _circleCoordNote('打った座標を中心にします。'); return; }
+    const p = (typeof cogoFindPoint === 'function') ? cogoFindPoint(s) : null;
+    if(!p) {
+        if(ex) ex.value = ''; if(ey) ey.value = ''; // 前の測点の座標が残って、そこに描かないように
+        _circleCoordNote(`測点「${s}」が見つかりません。点名・番号を確かめてください。`);
+        return;
+    }
+    const u = wcsToUcs(p.x, p.y), cs = _circleSectionScale('cs', 'coord');
+    if(ex) ex.value = String(cs === 1 ? u.y : +(u.y * cs).toPrecision(12)); // X＝北＝UCS の y
+    if(ey) ey.value = String(cs === 1 ? u.x : +(u.x * cs).toPrecision(12));
+    _circleCoordNote(`測点「${p.name}」を中心にします。`);
+};
+// X・Y を打ち直したら、測点の欄は空にする（打った数を使う）
+window.circleCoordTyped = function() {
+    const pt = document.getElementById('circle-pt');
+    if(!pt || !pt.value) return;
+    pt.value = '';
+    const sug = document.getElementById('circle-pt-sug'); if(sug) sug.textContent = '';
+    _circleCoordNote('打った座標を中心にします。');
+};
+// 中心（WCS）と半径（図面の単位）で円を足す。戻り値は足した円（↩ で戻せる）
+function circleAddAt(cx, cy, r) {
+    if(!(isFinite(cx) && isFinite(cy) && r > 0 && isFinite(r))) return null;
+    saveUndo();
+    const e = { type: 'CIRCLE', layer: currentLayerIndex, color: null, cx, cy, radius: r };
+    entities.push(e);
+    if(typeof ensureEntityIds === 'function') ensureEntityIds();
+    return e;
+}
+window.circleDrawAtCoord = function() {
+    const ex = document.getElementById('circle-cx'), ey = document.getElementById('circle-cy'), er = document.getElementById('circle-cr'), ept = document.getElementById('circle-pt');
+    const r0 = fieldNum(er, { gt: 0, what: '半径' });
+    if(r0 === undefined) return;
+    const r = _circleFromScale(r0, _circleSectionScale('ls', 'len'));
+    let w, label = '';
+    const ptName = ept ? String(ept.value || '').trim() : '';
+    if(ptName) {
+        // 測点の欄があれば、描くときに引き直す（消えた・動いた測点の古い位置を使わない。見つからなければ描かない）
+        const p = (typeof cogoFindPoint === 'function') ? cogoFindPoint(ptName) : null;
+        if(!p) { if(typeof fieldError === 'function') fieldError(ept, `測点「${ptName}」が見つかりません`); _circleCoordNote(`測点「${ptName}」が見つかりません。点名・番号を確かめてください。`); return; }
+        if(typeof fieldOk === 'function') fieldOk(ept);
+        w = { x: p.x, y: p.y }; label = `測点「${p.name}」`;
+    } else {
+        const X = fieldNum(ex, { what: 'X（北）' });
+        if(X === undefined) return;
+        const Y = fieldNum(ey, { what: 'Y（東）' });
+        if(Y === undefined) return;
+        // コマンド欄の「X,Y」と同じ読み方（cad-command.js の processCommand）: 表示の単位 → 図面の単位、UCS（X＝北＝y・Y＝東＝x）→ WCS
+        const cs = _circleSectionScale('cs', 'coord');
+        w = ucsToWcs(_circleFromScale(Y, cs), _circleFromScale(X, cs));
+    }
+    const e = circleAddAt(w.x, w.y, r);
+    if(!e) return;
+    // 固定半径（タップで置く円）の半径は変えない（下のバー・プロンプトの「半径」と食い違わないように）
+    const u = wcsToUcs(w.x, w.y);
+    const msg = `円を描きました: 中心 ${label ? label + ' ' : ''}${coordPairText(u.x, u.y)}・半径 ${lengthText(r)}`;
+    addCommandLog('-> ' + msg);
+    if(navigator.vibrate) navigator.vibrate(20);
+    render();
+    // 画面の外に描いたときは、見に行けるようにする
+    const s = wcsToScreen(w.x, w.y), off = !(s.x >= 0 && s.y >= 0 && s.x <= canvas.width && s.y <= canvas.height);
+    if(off && typeof showSnack === 'function') showSnack(msg + '（画面の外です）', { kind: 'success', ms: 8000, action: { label: '🔍 見る', run: () => { _reanchorView(canvas.width / 2, canvas.height / 2, { x: w.x, y: w.y }); render(); } } });
+    else if(typeof showToast === 'function') showToast(msg, { kind: 'success', ms: 3000 });
+    _circleCoordNote('描きました。続けて次の座標を入れられます（↩ で戻せます）。');
+    return e;
+};
+
 // ===== 仮の線・円（cad-render.js の drawRubberBand から。点線の描き方の中で呼ぶ）。新しい描き方なら描いて true =====
 function drawCirclePreview(mp) {
     const m = cmdState.mode;
