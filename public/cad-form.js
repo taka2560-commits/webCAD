@@ -70,6 +70,22 @@ function fieldNum(el, opts) {
     return r.value;
 }
 
+// ===== ± ボタン（v5.58.1） =====
+// iPhone の数字だけのキーボード（inputmode="decimal"）にはマイナスが無いので、マイナスになる欄（座標・標高）の横に ± を置く。
+// 押すと欄の数の符号を入れ替える（空なら「-」を入れる）。欄の oninput も動かす
+function signToggleBtn(inputId) {
+    return `<button type="button" class="sign-btn" onclick="fieldToggleSign('${inputId}')" aria-label="プラス・マイナスを切り替える" title="プラス・マイナスを切り替える">±</button>`;
+}
+function fieldToggleSign(inputId) {
+    const el = document.getElementById(inputId);
+    if(!el) return;
+    const v = String(el.value || '').trim().replace(/^[−－ー―‐]/, '-'); // 全角・長音のマイナスも
+    el.value = v.startsWith('-') ? v.slice(1) : v.startsWith('+') ? '-' + v.slice(1) : '-' + v;
+    el.dispatchEvent(new window.Event('input', { bubbles: true }));
+    try { el.focus(); const n = el.value.length; el.setSelectionRange(n, n); } catch { /* 選べない欄 */ }
+}
+window.fieldToggleSign = fieldToggleSign;
+
 // ===== 点名の候補 =====
 // 点名の欄に打つと、図面の測点の名前・番号から合うものを最大6つ、欄の下にチップで出す（押すと入る）。
 // iPhone では datalist の候補が出にくいので、自前で出す

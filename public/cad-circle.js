@@ -284,8 +284,8 @@ function circleCoordSectionHtml() {
             <div class="prop-row"><label>測点:</label><input type="text" class="prop-val" id="circle-pt" autocomplete="off" placeholder="点名・番号（無くても可）"
                 oninput="pointSuggestUpdate(this, (v) => circleCoordPickPoint(v))" onchange="circleCoordPickPoint(this.value)"></div>
             ${pointSuggestHtml('circle-pt')}
-            <div class="prop-row"><label>X（北）${tag}:</label><input type="text" inputmode="decimal" class="prop-val" id="circle-cx" autocomplete="off" placeholder="例 ${mm ? '-12345678' : '-12345.678'}" oninput="circleCoordTyped()"></div>
-            <div class="prop-row"><label>Y（東）${tag}:</label><input type="text" inputmode="decimal" class="prop-val" id="circle-cy" autocomplete="off" placeholder="例 ${mm ? '23456789' : '23456.789'}" oninput="circleCoordTyped()"></div>
+            <div class="prop-row"><label>X（北）${tag}:</label><input type="text" inputmode="decimal" class="prop-val" id="circle-cx" autocomplete="off" placeholder="例 ${mm ? '-12345678' : '-12345.678'}" oninput="circleCoordTyped()">${signToggleBtn('circle-cx')}</div>
+            <div class="prop-row"><label>Y（東）${tag}:</label><input type="text" inputmode="decimal" class="prop-val" id="circle-cy" autocomplete="off" placeholder="例 ${mm ? '23456789' : '23456.789'}" oninput="circleCoordTyped()">${signToggleBtn('circle-cy')}</div>
             <div class="prop-row"><label>半径${rtag}:</label><input type="text" inputmode="decimal" class="prop-val" id="circle-cr" autocomplete="off" value="${displayUnitNum(_circleR(), 'len')}"></div>
             <button class="prop-btn" id="circle-coord-go" onclick="circleDrawAtCoord()">📍 この座標に円を描く</button>
             <div class="cogo-note" id="circle-coord-note">続けて何個でも描けます（↩ で戻せます）。</div>

@@ -31,7 +31,7 @@ function showPointPanel() {
     const name = _pt.next && !_ptNameTaken(_pt.next) ? _pt.next : _ptSuggestName();
     const html = `
         <div class="prop-row"><label for="prop-point-name">点名:</label><input type="text" id="prop-point-name" autocomplete="off" value="${escapeHtml(name)}" placeholder="例 P1"></div>
-        <div class="prop-row"><label for="prop-point-z">標高${displayUnitTag('len')}:</label><input type="text" id="prop-point-z" inputmode="decimal" autocomplete="off" value="${_pt.z === null ? '' : _pt.z}" placeholder="なし"></div>
+        <div class="prop-row"><label for="prop-point-z">標高${displayUnitTag('len')}:</label><input type="text" id="prop-point-z" inputmode="decimal" autocomplete="off" value="${_pt.z === null ? '' : _pt.z}" placeholder="なし">${signToggleBtn('prop-point-z')}</div>
         ${_cogoNote('図面をタップした所に、この点名で点を置き、座標一覧に入れます（この窓が出たままでも置けます。スナップも効きます）。点名は置くたびに次の番号になります。まちがえて置いたら「↩ 元に戻す」で消せます。')}
         <button class="prop-btn" onclick="applyPointPreset()">この点名で置き始める（窓を閉じる）</button>`;
     showPropertyPanel('点 作図設定', html);

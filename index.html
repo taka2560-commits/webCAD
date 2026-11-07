@@ -801,6 +801,9 @@
         .lm-bulk-start { width: 100%; padding: 6px 12px; border-radius: 14px; font-weight: bold; background: rgba(40,44,52,0.9); color: var(--brand); border: 1px solid var(--brand); }
         .lm-bulk { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 8px; background: rgba(var(--hl-rgb), 0.08); border: 1px solid rgba(var(--hl-rgb), 0.35); }
         .lm-bulk-help { font-size: 11px; color: #ccc; }
+        /* ± ボタン（cad-form.js。v5.58.1）: マイナスの無い数字のキーボード用。欄の横に小さく */
+        .sign-btn { flex: 0 0 auto; min-width: 36px; height: 32px; margin-left: 4px; padding: 0 8px; font: 700 16px/1 'Segoe UI', sans-serif; color: var(--text-color); background: var(--btn-glass); border: 1px solid var(--border-2); border-radius: var(--r-sub); cursor: pointer; }
+        .sign-btn:active { transform: scale(0.94); }
         /* 円を座標で描く欄（cad-circle.js。v5.58） */
         .circle-coord { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-2); display: flex; flex-direction: column; gap: 4px; }
         .circle-coord-title { font-size: 12px; font-weight: 700; color: var(--brand); }
