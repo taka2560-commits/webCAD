@@ -217,14 +217,34 @@ function dxfOutXdataChunks(e) {
 
 // ===== 読み直し: 拡張データ WEBCAD の寸法・ブロック「測点」を、アプリの図形に戻す =====
 // strings: 拡張データの文字（DXF は dxf-parser の extendedData.customStrings、DWG は xdata の WEBCAD の 1000）
-function webcadEntityFromXdata(strings) {
+function _webcadXdataObj(strings) {
     if(!Array.isArray(strings)) return null;
     const i = strings.findIndex(s => typeof s === 'string' && s.startsWith(DXF_OUT_APP + ':'));
     if(i < 0) return null;
     try {
         const o = JSON.parse(strings.slice(i).join('').slice(DXF_OUT_APP.length + 1));
-        return (o && o.type === 'DIMENSION') ? o : null;
+        return (o && typeof o === 'object') ? o : null;
     } catch { return null; }
+}
+function webcadEntityFromXdata(strings) {
+    const o = _webcadXdataObj(strings);
+    return (o && o.type === 'DIMENSION') ? o : null;
+}
+// 区画（SIMA の区画のポリライン）の名前・番号（v5.58.3）。以前は DXF に書いておらず、開き直すと区画名が消えて、SIMA 出力が「区画1」になっていた
+function webcadLotFromXdata(strings) {
+    const o = _webcadXdataObj(strings);
+    if(!o || !o.lot) return null;
+    const s = (v) => (typeof v === 'string' || typeof v === 'number') ? String(v).slice(0, 200) : '';
+    const r = { lotName: s(o.lotName), lotNum: s(o.lotNum) };
+    return (r.lotName || r.lotNum) ? r : null;
+}
+// 直前に書いた図形（区画のポリライン）の終わりに、区画名・区画番号の拡張データを足す
+function dxfOutLotXdata(d, e) {
+    const shapes = d.activeLayer && d.activeLayer.shapes, shape = shapes && shapes[shapes.length - 1];
+    if(!shape || typeof shape.tags !== 'function') return;
+    const chunks = dxfOutXdataChunks({ lot: 1, lotName: String(e.lotName || ''), lotNum: String(e.lotNum || '') });
+    const orig = shape.tags.bind(shape);
+    shape.tags = (m) => { orig(m); m.push(1001, DXF_OUT_APP); chunks.forEach(c => m.push(1000, c)); };
 }
 function webcadXdataStringsDwg(ent) {
     const x = (ent && ent.xdata || []).find(a => a && a.appName === DXF_OUT_APP);

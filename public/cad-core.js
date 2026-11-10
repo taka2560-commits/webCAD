@@ -1005,7 +1005,9 @@ function _undoSnapshot() {
     // レイアウト（cad-layout.js）は取り込みのたびに作り直し、中を書き換えないので、同じ配列を指すだけでよい
     // SIMA の変換の張り合わせ点（図面側の座標を「図面を SIMA に合わせる」で動かすので、↩・やり直しで一緒に戻す。cad-helmert-rev.js）
     const hp = (typeof _helm !== 'undefined' && _helm.src && _helm.pairs.length) ? { src: _helm.src.name, pairs: JSON.stringify(_helm.pairs) } : undefined;
-    return { v: 2, ids, strs, layers: JSON.stringify(layers), lay: (typeof cadLayouts !== 'undefined') ? cadLayouts : undefined, helm: hp };
+    // 現在の画層の名前（画層の並びが変わる ↩ のときだけ使う。v5.58.3）
+    const cur = layers[currentLayerIndex] ? layers[currentLayerIndex].name : undefined;
+    return { v: 2, ids, strs, layers: JSON.stringify(layers), lay: (typeof cadLayouts !== 'undefined') ? cadLayouts : undefined, helm: hp, cur };
 }
 function _applyUndoSnapshot(s) {
     if(Array.isArray(s)) { entities = s; } // 旧形式（entities配列のみ）との互換
@@ -1023,7 +1025,15 @@ function _applyUndoSnapshot(s) {
             cache.set(id, str);
         }
         entities = next;
+        const namesBefore = layers.map(l => l.name).join('\n');
         layers = JSON.parse(s.layers);
+        // 画層の並びが変わるとき（ファイルの置き換え・画層の追加や削除を戻す）は、そのときの現在の画層に戻す（v5.58.3）。
+        // 以前は番号のままで、置き換えを ↩ で戻すと現在の画層が 0 になり、次に描く線が画層 0 に入っていた。
+        // 並びが同じ（ふつうの作図の ↩）なら、選んでいる画層は変えない
+        if(typeof s.cur === 'string' && layers.map(l => l.name).join('\n') !== namesBefore) {
+            const ci = layers.findIndex(l => l.name === s.cur);
+            if(ci >= 0) currentLayerIndex = ci;
+        }
         _undoStrCache = cache;
         if(s.lay !== undefined && typeof layoutsRestoreRef === 'function') layoutsRestoreRef(s.lay);
         if(s.helm && typeof _helm !== 'undefined' && _helm.src && _helm.src.name === s.helm.src) { // 同じ SIMA を開いているときだけ

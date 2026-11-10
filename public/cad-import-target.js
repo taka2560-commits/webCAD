@@ -32,6 +32,8 @@ function _prepareImportTarget(next, onCancel) {
 }
 // 置き換え: 今の図面を消す（消す前の図面は ↩ 1回分として残し、読めなかったときに戻す）
 function _clearForReplace() {
+    // 途中のコマンドはやめる（v5.58.3）: 続けると、消した図面の点・図形で作図していた（前の図面の円の半径寸法・前の点からの線・オフセットのエラー）
+    if(cmdState.mode !== 'IDLE') resetCommand();
     _importUndo = undoStack[undoStack.length - 1];
     _importProject = (typeof window.getProjectState === 'function') ? window.getProjectState() : null;
     entities.length = 0;

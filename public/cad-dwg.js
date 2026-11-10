@@ -325,7 +325,15 @@ function convertDwgDatabaseToApp(db) {
                     // 逆に法線を持つ開いた線が閉じていた。POLYLINE2D の flag は DXF と同じく 1 が「閉じている」
                     const closed = !!ent.closed || !!ent.isClosed || (ent.type === 'LWPOLYLINE' ? !!(ent.flag & 512) : !!(ent.flag & 1));
                     const pts = expandBulgeVertices(verts, closed).map(v => ({ x: tx(v.x, v.y), y: ty(v.x, v.y) }));
-                    if (pts.length >= 2) push(Object.assign({ type: 'PLINE', points: pts, closed }, base), gid, blockName);
+                    if (pts.length >= 2) {
+                        const pl = Object.assign({ type: 'PLINE', points: pts, closed }, base);
+                        // アプリが書き出した区画（拡張データ WEBCAD に区画名・区画番号）は、区画に戻す（v5.58.3）
+                        if (closed && !gid && typeof webcadLotFromXdata === 'function') {
+                            const lot = webcadLotFromXdata(webcadXdataStringsDwg(ent));
+                            if (lot) { pl.lotName = lot.lotName; pl.lotNum = lot.lotNum; }
+                        }
+                        push(pl, gid, blockName);
+                    }
                     else noteSkip('POLYLINE');
                 } else noteSkip('POLYLINE');
             } else if (ent.type === 'ELLIPSE') {

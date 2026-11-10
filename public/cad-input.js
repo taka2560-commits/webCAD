@@ -547,6 +547,16 @@ function setupEventListeners() {
         const k = (e.key || '').toLowerCase();
         if((e.ctrlKey || e.metaKey) && k==='z'){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); return; }
         if((e.ctrlKey || e.metaKey) && k==='y'){ e.preventDefault(); redo(); return; }
+        // Enter: 図面をクリックしたあと（フォーカスがコマンド欄に無い）でも、線分・ポリラインを終える・タッチ非表示を確定する（v5.58.3。
+        // 以前はコマンド欄の中の Enter しか見ておらず、案内の「Enter:確定」どおりに押しても何も起きなかった）。
+        // ボタンなどにフォーカスがあるときは、そのボタンを押す動き（ブラウザの既定）に任せる
+        if(e.key === 'Enter' && !e.isComposing && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            if(t && t.closest && t.closest('button, a, summary, [role="button"], [tabindex]')) return;
+            if(cmdState.mode === 'WAITING_LINE_P2') { e.preventDefault(); resetCommand(); addCommandLog('-> LINE終了'); }
+            else if(cmdState.mode === 'WAITING_PLINE_NEXT') { e.preventDefault(); finishPline(false); }
+            else if(cmdState.mode === 'WAITING_LAYOFF_TOUCH') { e.preventDefault(); layoffConfirm(); }
+            return;
+        }
         if(e.key === 'Escape') {
             // ☰ メニュー・エラーの画面・プロジェクト一覧 → スナップの設定パネル → コマンド → 選択 → パネル の順に閉じる
             const menu = document.getElementById('top-menu-modal');

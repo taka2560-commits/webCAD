@@ -275,7 +275,13 @@ function _dxfConvertList(list, blocks, add, noteSkip, skip) {
                 dimEnts.forEach(add);
                 return;
             }
-            if(!addResults(convertDxfEntity(e))) noteSkip(e.type || '?');
+            const conv = convertDxfEntity(e);
+            // アプリが書き出した区画（拡張データ WEBCAD に区画名・区画番号）は、区画に戻す（v5.58.3）
+            if(conv && !Array.isArray(conv) && conv.type === 'PLINE' && conv.closed && e.extendedData && typeof webcadLotFromXdata === 'function') {
+                const lot = webcadLotFromXdata(e.extendedData.customStrings);
+                if(lot) { conv.lotName = lot.lotName; conv.lotNum = lot.lotNum; }
+            }
+            if(!addResults(conv)) noteSkip(e.type || '?');
         } catch(err) { noteSkip(e.type || '?'); console.warn('エンティティ変換エラー:', e.type, err); }
     });
     flushPt();
@@ -845,6 +851,8 @@ function exportDxf() {
             }
             else if(e.type === 'PLINE' && e.points && e.points.length >= 2) {
                 d.drawPolyline(e.points.map(p => [p.x, p.y]), !!e.closed);
+                // 区画の名前・番号は拡張データに入れる（読み直したときに区画に戻す。v5.58.3）
+                if(xs && (e.lotName || e.lotNum) && typeof dxfOutLotXdata === 'function') dxfOutLotXdata(d, e);
             }
             else if(e.type === 'POINT') {
                 if(xs && isSurveyPt(e)) { const lb = e.gid ? ptLabels.get(e.gid) : null; dxfOutSurveyPoint(xs, addRaw, withType, e, lb || null, lb ? (layers[lb.layer] ? layers[lb.layer].name : '0') : null); }

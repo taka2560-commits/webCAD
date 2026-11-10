@@ -225,6 +225,10 @@ function _handlePointInputCore(wcs, fromMouse) {
     }
     if(m==='WAITING_OFFSET_SIDE') {
         const e = entities[cmdState.offsetTarget];
+        if(!e) { // 選んだ図形が消えていた（↩・ファイルの置き換え）: 止まらずに、対象を選び直す（v5.58.3。以前はクリックのたびにエラー）
+            cmdState.mode = 'WAITING_OFFSET_SELECT'; cmdState.highlightIdx = -1; setPrompt('オフセット対象 (右クリックで終了):');
+            addCommandLog('-> 選んだ図形がなくなりました。オフセットの対象を選び直してください'); render(); return;
+        }
         const res = createOffsetEntity(e, cmdState.offsetDist, wcs.x, wcs.y);
         if(res) { saveUndo(); entities.push(res); addCommandLog('-> オフセット完了'); }
         cmdState.mode = 'WAITING_OFFSET_SELECT'; cmdState.highlightIdx = -1; setPrompt('オフセット対象 (右クリックで終了):');
@@ -315,6 +319,7 @@ function offsetPolylinePoints(points, closed, d) {
     return out;
 }
 function createOffsetEntity(e, d, wx, wy) {
+    if(!e) return null; // 図形が無い（消えた）
     const copy = JSON.parse(JSON.stringify(e));
     delete copy.bbox; // 元図形のbboxを引き継ぐとスナップ/描画カリングが誤判定する
     // オフセットで作った図形は独立した新しい図形（元のブロックのグループには入れない）
@@ -653,7 +658,11 @@ function processCommand(cmdText) {
     if(cmd !== 'U' && cmd !== 'UNDO' && typeof lineBeforeOtherCommand === 'function') lineBeforeOtherCommand(); // 線分の下のバーを片付ける（cad-line.js）
     // 作図・編集のコマンド（鏡像・尺度変更・配列・分割・結合・角の処理）と、その途中で入れる数（倍率・半径など）（cad-edit.js）
     if(typeof processEditCommand === 'function' && processEditCommand(cmd)) return;
-    if(cmd==='C' && cmdState.mode==='WAITING_PLINE_NEXT' && cmdState.points.length>=2) { finishPline(true); return; }
+    // 閉じるには3点以上（下のバーの「⭘閉じる」と同じ。v5.58.3: 以前は2点でも閉じて、行って戻るだけの「閉じた」ポリラインができていた）
+    if(cmd==='C' && cmdState.mode==='WAITING_PLINE_NEXT' && cmdState.points.length>=2) {
+        if(cmdState.points.length >= 3) { finishPline(true); return; }
+        _cmdInputError('閉じるには3点以上が必要です'); return false;
+    }
     if(cmd==='LAYOFF') {
         if (cmdState.mode === 'WAITING_LAYOFF_TOUCH') {
             resetCommand();
