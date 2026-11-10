@@ -608,21 +608,38 @@ function showPropertyPanel(title, htmlContent) {
     if(typeof favUpdateActive === 'function') favUpdateActive(); // お気に入りのバー: パネルのボタンの光り方
     fitPanelAboveActionbarSoon();
 }
-// コマンドの下のバー（☑確定・終了など）が出ているときは、パネルをその上で終わらせる（パネルの下の方のボタンがバーに隠れて押せないことがないように。
-// パネルの中はスクロールできる）。v5.58。画面いっぱい（□）・たたんだ（▁）ときはしない
+// パネルの高さの上限（max-height）を決める所は、ここ1か所（v5.58.2。以前は別窓（cad-subview.js）も書いていて、
+// 一度ヘルマート変換の別窓を使うと、下のバーに合わせた高さを消してしまっていた）。
+//  ・コマンドの下のバー（☑確定・終了など）が出ていて、パネルと横に重なるとき: バーの上で終わらせる
+//    （パネルの下の方のボタンがバーに隠れて押せないことがないように。パネルの中はスクロールできる。v5.58）
+//  ・スマホの幅で別窓（変換の図など）が出ているとき: 別窓の見出しを隠さないよう、別窓の上で終わらせる
+// 画面いっぱい（□）・たたんだ（▁）ときはしない
+const _panelFitSubviews = []; // 出ているかもしれない別窓（cad-subview.js が入れる）
 function fitPanelAboveActionbar() {
     const p = document.getElementById('property-panel'), bar = document.getElementById('fs-dim-actionbar');
     if(!p) return;
     // 一度外してから測り直すと、パネルの中のスクロールが先頭に戻るので、決まった高さを直接入れる（同じなら触らない）。
     // max-height なので、もともと短いパネルには何も起きない
-    let want = '';
-    if(p.style.display === 'flex' && !p.classList.contains('win-max') && !p.classList.contains('win-min') && bar) {
-        const bs = getComputedStyle(bar);
-        if(bs.display !== 'none' && bs.visibility !== 'hidden') {
-            const br = bar.getBoundingClientRect(), pr = p.getBoundingClientRect();
-            if(br.height > 0 && br.top > pr.top + 120) want = Math.floor(br.top - pr.top - 16) + 'px'; // 出す場所が無いほど狭いときは何もしない
+    let limit = Infinity;
+    if(p.style.display === 'flex' && !p.classList.contains('win-max') && !p.classList.contains('win-min')) {
+        const pr = p.getBoundingClientRect();
+        if(bar) {
+            const bs = getComputedStyle(bar);
+            if(bs.display !== 'none' && bs.visibility !== 'hidden') {
+                const br = bar.getBoundingClientRect();
+                const overlapX = br.left < pr.right && br.right > pr.left; // 横に離れていれば（パネルを動かした）制限しない
+                if(br.height > 0 && overlapX && br.top > pr.top + 120) limit = Math.min(limit, br.top - pr.top - 16); // 出す場所が無いほど狭いときは何もしない
+            }
+        }
+        if(window.innerWidth < 700) {
+            for(const el of _panelFitSubviews) {
+                if(!el || !el.isConnected || el.style.display === 'none') continue;
+                const b = el.getBoundingClientRect();
+                if(b.height > 0 && pr.top < b.top - 120) limit = Math.min(limit, b.top - pr.top - 6);
+            }
         }
     }
+    const want = isFinite(limit) ? Math.floor(limit) + 'px' : '';
     if(p.style.maxHeight !== want) p.style.maxHeight = want;
 }
 // パネルが出る動き（少し下から上がる）の途中で測ると、終わったあとにバーへ少し重なるので、動きのあとにもう一度測る
@@ -762,7 +779,9 @@ function makePanelDraggable(panel, handle, posKey) {
             try { localStorage.setItem(panel.dataset.posKey || PANEL_POS_KEY, JSON.stringify(pos)); } catch { /* 保存できなくても続行 */ }
         }
         try { handle.releasePointerCapture(drag.id); } catch { /* 解放できなくても続行 */ }
+        const moved = drag.moved;
         drag = null;
+        if(moved && panel.id === 'property-panel') fitPanelAboveActionbar(); // 動かした先で、下のバーとの重なりを測り直す
     };
     handle.addEventListener('pointerup', end);
     handle.addEventListener('pointercancel', end);

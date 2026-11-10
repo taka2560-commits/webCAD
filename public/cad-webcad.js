@@ -342,6 +342,7 @@ async function applyWebcadDoc(d, fileName) {
     // 保存一覧の同じ名前の図面を上書きしないよう、名前は付けずに開く（💾保存で名前を付ける）
     window.setCurrentProjectName(null);
     // 名前の無い図面は、ファイル名から（LINE で受け取った「名前_図面一式.pdf」も「名前」に。以前は「名前_図面一式.pdf.dxf」などになった）
+    if(typeof dropboxPackOpened === 'function') dropboxPackOpened(fileName); // Dropbox から開いた図面一式なら、保存先のフォルダを覚える（cad-dropbox.js）
     if(typeof setDrawingName === 'function') setDrawingName(d.project.drawingName || String(fileName || '').replace(/(_図面一式)?\.(webcad|pdf)$/i, '') || d.project.name);
     if(typeof zoomExtents === 'function') zoomExtents(); // 別の端末では画面の大きさが違う
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();

@@ -251,4 +251,16 @@ describe('画層の色をまとめて変える（v5.52）', () => {
         assert.equal(app.val('undoStack.length'), 0, '画層 0 には個別の線種の図形が無い');
         assert.deepEqual(app.errors(), []);
     });
+
+    it('「色をまとめて変える」の途中で「タッチで非表示」を始めても、選んだ画層は消えない（v5.58.2）', () => {
+        app.eval(`showLayerManagerPanel(); lmBulkColorMode(true); lmBulkToggle(1, true); lmBulkToggle(2, true); processCommand('LAYOFF');`);
+        assert.equal(app.val('cmdState.mode'), 'WAITING_LAYOFF_TOUCH');
+        assert.equal(app.val(`document.querySelectorAll('.lm-cpick:checked').length`), 2, '選びはそのまま');
+        assert.equal(app.val(`!!document.querySelector('.lm-bulk')`), true);
+        app.eval('resetCommand(); closePropertyPanel();');
+        // 閉じていたら、今までどおり開く
+        app.eval(`processCommand('LAYOFF')`);
+        assert.equal(app.val(`document.getElementById('property-panel-title').textContent`), '画層一括管理');
+        app.eval('resetCommand(); closePropertyPanel();');
+    });
 });

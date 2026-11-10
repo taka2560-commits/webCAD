@@ -664,7 +664,10 @@ function processCommand(cmdText) {
         cmdState.layoffPick = []; // 消す候補の画層
         addCommandLog('-> 画層タッチ非表示モード: 図面の図形をタップすると、その画層を消す候補にします（赤く光ります。もう一度タップで外す）。☑確定 で非表示にします（終了するには画面下の終了ボタン、Esc、またはもう一度タッチ非表示ボタンを押す）');
         
-        if (typeof window.showLayerManagerPanel === 'function') {
+        // 画層一括管理がもう開いていれば、中身を描き直すだけ（開き直すと「色をまとめて変える」で選んだ画層が黙って消えていた）
+        const _lmPanel = document.getElementById('property-panel'), _lmTitle = document.getElementById('property-panel-title');
+        if(_lmPanel && _lmPanel.style.display === 'flex' && _lmTitle && _lmTitle.textContent === '画層一括管理' && typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
+        else if (typeof window.showLayerManagerPanel === 'function') {
             window.showLayerManagerPanel();
         }
 

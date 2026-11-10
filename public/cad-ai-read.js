@@ -100,11 +100,12 @@ let _aireadBusy = false; // 読み取り中（2回送って料金が2回かか�
 let _aireadSdk = null;   // 読み込んだ SDK（例外の種類を見分ける）
 window.aireadPicked = async function(list) {
     const input = document.getElementById('airead-file');
+    const picked = list ? list.length : 0; // 欄を空にすると同じ FileList も空になる（Chrome）ので、先に数えておく
     const files = Array.from(list || []).slice(0, AIREAD_MAX_FILES);
     if(input) input.value = ''; // 同じ写真をもう一度選んでも読めるように
     if(!files.length) return;
     if(_aireadBusy) { showToast('いま読み取っています。終わるまでお待ちください', { kind: 'warn', ms: 2500 }); return; }
-    if(list.length > AIREAD_MAX_FILES) showToast(`${AIREAD_MAX_FILES}枚までにしました`, { kind: 'warn', ms: 2500 });
+    if(picked > AIREAD_MAX_FILES) showToast(`${picked}枚のうち、初めの ${AIREAD_MAX_FILES}枚だけを読みます（残りは分けて読んでください）`, { kind: 'warn', ms: 5000 });
     if(typeof navigator !== 'undefined' && navigator.onLine === false) { showToast('電波が無いので読み取れません', { kind: 'warn', ms: 3000 }); return; }
     _aireadBusy = true;
     const pick = document.getElementById('airead-pick');
@@ -233,13 +234,15 @@ async function aireadRequest(prepared) {
     };
 }
 function _aireadTrim(s) { return String(s === undefined || s === null ? '' : s).trim(); }
-// 数の文字: 全角を半角に、マイナスの形をそろえる。カンマは「1,234,567.890」のような桁の区切りのときだけ外す。
-// それ以外のカンマ・途中の空白は残す（数として読めないので取り込まない。「.」のつもりの「,」で値が 1000 倍になるのを防ぐ）
+// 数の文字: 全角を半角に、マイナスの形をそろえる。カンマは、桁の区切りと言い切れるときだけ外す:
+// 小数点がある（1,234.567）か、カンマが2組以上（1,234,567）。カンマ1組で小数点が無い「100,000」「12,345」は、
+// 小数点の読み違い（100.000・12.345）かもしれないので外さない（赤い欄にして、人が確かめる。外すと 1000 倍の数になる）。
+// それ以外のカンマ・途中の空白も残す（数として読めないので取り込まない）
 function _aireadNumText(s) {
     let t = _aireadTrim(s);
     t = (typeof cogoHalfWidth === 'function') ? cogoHalfWidth(t) : t;
     t = t.replace(/[−ー―‐－]/g, '-').trim();
-    if(/^[-+]?\d{1,3}(,\d{3})+(\.\d*)?$/.test(t)) t = t.replace(/,/g, '');
+    if(/^[-+]?\d{1,3}(,\d{3})+\.\d*$/.test(t) || /^[-+]?\d{1,3}(,\d{3}){2,}$/.test(t)) t = t.replace(/,/g, '');
     return t;
 }
 function _aireadIsNum(s) { return /^[-+]?(\d+\.?\d*|\.\d+)$/.test(s); }
@@ -285,7 +288,7 @@ function _aireadSumHtml() {
     const pts = A.rows.map((r) => (r.use ? aireadRowToPoint(r, A.mm, A.zmm) : null));
     const n = pts.filter(Boolean).length;
     const bad = A.rows.filter((r, i) => r.use && !pts[i]).length;
-    const nUnsure = A.rows.filter((r) => r.use && r.unsure).length;
+    const nUnsure = A.rows.filter((r, i) => pts[i] && r.unsure).length; // 取り込む行のうち
     return { n, html: `取り込む点: <b>${n}点</b>${nUnsure ? `（うち見比べていない、自信の無い行 ${nUnsure}）` : ''}${bad ? `<br><span style="color:#ff6b6b;">X・Y・標高が数でない行 ${bad} は取り込みません（赤い欄を直すか、「入れる」を外してください）</span>` : ''}` };
 }
 function _aireadRefreshSum() {

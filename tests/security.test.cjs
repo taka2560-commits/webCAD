@@ -41,7 +41,9 @@ describe('キーを外に漏らさない', () => {
     it('キー・token に見える文字は、コマンド欄・知らせ・エラーの記録で隠す（コピーして人に送っても漏れない）', () => {
         const m = (s) => app.val(`cadMaskSecrets(${JSON.stringify(s)})`);
         assert.equal(m(`key=${KEY} end`), 'key=sk-ant-…（隠しました） end');
-        assert.equal(m('Authorization: Bearer abcDEF123456789.xyz'), 'Authorization: Bearer …（隠しました）');
+        assert.equal(m('Authorization: Bearer abcDEF123456789.xyz_0123456789'), 'Authorization: Bearer …（隠しました）');
+        // 誤って隠さない（ファイル名・関数名・短い語）
+        for(const t of ['Dropbox から sl.2026-11-10_kyoukai_kakutei.dxf を読んでいます…', 'Bearer drawing-2026.dxf', 'desk-ant-20261110.dxf を保存しました', 'at sl.prototype.parseEntitiesAll (x.js:1:2)']) assert.equal(m(t), t);
         assert.equal(m('"x-api-key": "abcdefghijkl"'), '"x-api-key": "…（隠しました）"');
         assert.equal(m('token sl.' + 'B'.repeat(40)), 'token sl.…（隠しました）');
         assert.equal(m('token sl.u.' + 'A'.repeat(40)), 'token sl.…（隠しました）', '今の Dropbox の token の形');

@@ -96,6 +96,8 @@ async function runOne(browser, v, btn, motion) {
     if (hScroll > 1) fail(run, `横にスクロールできてしまいます（${hScroll}px）`);
     // 円を座標で描く（v5.58）: 円のコマンドの下のバーが出ていても、作図設定の「📍 この座標に円を描く」が隠れずに押せる
     const cgo = await page.evaluate(async () => {
+        // 別窓（変換の図）を一度作ったあとでも効く（v5.58.2: 別窓の側がパネルの高さを消していた）
+        if (typeof _helmView === 'function') { try { _helmView(); } catch { /* 無ければそのまま */ } }
         closePropertyPanel(); resetCommand(); processCommand('C');
         await new Promise((r) => setTimeout(r, 600)); // パネルが出る動きのあとの測り直し（420ms）を待つ
         const go = document.getElementById('circle-coord-go'); if (!go) return 'ボタンが無い';
@@ -117,6 +119,18 @@ async function runOne(browser, v, btn, motion) {
     const crd = await page.evaluate(() => { setCoordsDisplay(-12345.678, 23456.789); const c = document.getElementById('coords-display'), sb = document.getElementById('status-bar').getBoundingClientRect(), r = c.getBoundingClientRect();
         return { ok: r.right <= sb.right - 2 && [...c.children].every((e) => e.scrollWidth <= e.clientWidth + 1), r: { l: r.left, rr: r.right, sb: sb.right } }; });
     if (!crd.ok) fail(run, `下のバーの座標が切れています ${JSON.stringify(crd.r)}`);
+    // 大きめのスマホの幅（431〜600px）でも切れない（v5.58.2。スマホの組だけで確かめる）
+    if (v.width < 430) {
+        for (const wv of [440, 480, 520, 600]) {
+            await page.setViewportSize({ width: wv, height: vh });
+            await page.waitForTimeout(80);
+            const c2 = await page.evaluate(() => { setCoordsDisplay(-123456.789, 23456.789); const c = document.getElementById('coords-display'), sb = document.getElementById('status-bar').getBoundingClientRect(), r = c.getBoundingClientRect();
+                return { ok: r.right <= sb.right - 2 && r.left >= sb.left && [...c.children].every((e) => e.scrollWidth <= e.clientWidth + 1) && document.scrollingElement.scrollWidth <= innerWidth + 1, r: { l: r.left, rr: r.right, sb: sb.right } }; });
+            if (!c2.ok) fail(run, `幅 ${wv} で下のバーの座標が切れています ${JSON.stringify(c2.r)}`);
+        }
+        await page.setViewportSize({ width: vw, height: vh });
+        await page.waitForTimeout(80);
+    }
     // たたんだコマンドのボタンの文字が丸に収まる・OSNAP と ▼ が重ならない（v5.51.1）
     const pill = await page.evaluate(() => { const b = document.getElementById('command-pill'); return { sw: b.scrollWidth, cw: b.clientWidth }; });
     if (pill.sw > pill.cw + 1) fail(run, `たたんだコマンドのボタンの文字が切れています（${pill.sw}px / ${pill.cw}px）`);

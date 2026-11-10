@@ -276,14 +276,9 @@ function createSubView(opt) {
 function _subviewRect(a, b) { return [{ x: a.x, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: b.y }, { x: a.x, y: b.y }]; }
 // スマホの幅では、プロパティパネルが別窓の見出しを隠さないように、パネルの高さを別窓の上までにする（中身はスクロール）
 function _subviewFitPanel(el) {
-    const pp = document.getElementById('property-panel');
-    if(!pp) return;
-    let mh = '';
-    if(window.innerWidth < 700 && el.style.display !== 'none' && pp.style.display === 'flex') {
-        const a = pp.getBoundingClientRect(), b = el.getBoundingClientRect();
-        if(a.top < b.top - 120) mh = Math.round(b.top - a.top - 6) + 'px';
-    }
-    if(pp.style.maxHeight !== mh) pp.style.maxHeight = mh;
+    // 高さの上限を書くのは cad-core.js の fitPanelAboveActionbar だけ（下のバーに合わせた高さと取り合わないように）
+    if(typeof _panelFitSubviews !== 'undefined' && el && !_panelFitSubviews.includes(el)) _panelFitSubviews.push(el);
+    if(typeof fitPanelAboveActionbar === 'function') fitPanelAboveActionbar();
 }
 // 開くときの置き場所と大きさ（覚えている大きさ・位置があればそれ。無ければ、スマホの縦画面は下のほう、それ以外は左下）。
 // 左のツールバーは隠さない

@@ -205,6 +205,12 @@ function _viewInsets(pad) {
     if(tb && tb.left - cv.left < canvas.width / 3) ins.left = Math.max(pad, tb.right - cv.left + gap);
     if(top && top.top - cv.top < canvas.height / 3) ins.top = Math.max(pad, top.bottom - cv.top + gap);
     if(sb && cv.bottom - sb.bottom < canvas.height / 3) ins.bottom = Math.max(pad, cv.bottom - sb.top + gap);
+    // 座標読取（全画面）: 左の拡大の欄（＋・スライダー・−）と、右のボタンの列（v5.58.2）
+    if(document.body && document.body.classList.contains('fullscreen-mode')) {
+        const zp = shown('fs-zoom-panel'), fc = shown('fs-controls');
+        if(zp && zp.left - cv.left < canvas.width / 3) ins.left = Math.max(ins.left, zp.right - cv.left + gap);
+        if(fc && cv.right - fc.right < canvas.width / 3) ins.right = Math.max(ins.right, cv.right - fc.left + gap);
+    }
     if(canvas.width - ins.left - ins.right < 120 || canvas.height - ins.top - ins.bottom < 120) return { left: pad, right: pad, top: pad, bottom: pad };
     return ins;
 }

@@ -184,4 +184,25 @@ describe('全体表示: 離れた図形を除く', () => {
         }
         assert.deepEqual(app.errors(), []);
     });
+
+    it('座標読取（全画面）の全体表示は、左の拡大の欄・右のボタンの列の下に図面の端を隠さない（v5.58.2）', () => {
+        site(50);
+        app.eval(`window.__rects = { 'fs-zoom-panel': [14, 300, 70, 600], 'fs-controls': [330, 80, 376, 400] };
+            window.__oldW = canvas.width; window.__oldH = canvas.height; canvas.width = 390; canvas.height = 844;
+            window.__oldRect = Element.prototype.getBoundingClientRect;
+            Element.prototype.getBoundingClientRect = function() {
+                const r = this === canvas ? [0, 0, 390, 844] : window.__rects[this.id];
+                if(!r) return window.__oldRect.call(this);
+                return { left: r[0], top: r[1], right: r[2], bottom: r[3], width: r[2] - r[0], height: r[3] - r[1], x: r[0], y: r[1] };
+            }; document.body.classList.add('fullscreen-mode');`);
+        try {
+            const ins = app.val('_viewInsets(50)');
+            assert.equal(ins.left, 82, '左: 拡大の欄の右 70 + 12');
+            assert.equal(ins.right, 72, '右: ボタンの列の左 330 から');
+            app.eval(`document.body.classList.remove('fullscreen-mode')`);
+            assert.deepEqual(app.val('_viewInsets(50)'), { left: 50, right: 50, top: 50, bottom: 50 }, 'ふつうの画面では数えない');
+        } finally {
+            app.eval(`document.body.classList.remove('fullscreen-mode'); Element.prototype.getBoundingClientRect = window.__oldRect; canvas.width = window.__oldW; canvas.height = window.__oldH;`);
+        }
+    });
 });

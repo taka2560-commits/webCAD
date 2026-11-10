@@ -70,4 +70,26 @@ describe('座標読取の拡大・縮小の中心', () => {
         app.eval('updateFsCoordTooltip(0, 0, 5, 5, null, true); setDrawingName("別の図面")');
         assert.equal(app.val('window._fsZoomAnchor'), null);
     });
+
+    it('＋ は必ず拡大・− は必ず縮小（倍率の範囲はホイールと同じ 0.0001〜10000。範囲の外でも逆向きに飛ばない）', () => {
+        // 大きな図面の全体表示（0.00025）で −: 以前は 0.001 に飛んで拡大していた
+        app.eval('view.scale = 0.00025; fsZoomOut()');
+        assert.ok(Math.abs(app.val('view.scale') - 0.0002) < 1e-12, String(app.val('view.scale')));
+        app.eval('view.scale = 0.00025; fsZoomIn()');
+        assert.ok(Math.abs(app.val('view.scale') - 0.0003125) < 1e-12);
+        // 大きく寄った所（5000）で ＋: 以前は 1000 に飛んで引いていた
+        app.eval('view.scale = 5000; fsZoomIn()');
+        assert.equal(app.val('view.scale'), 6250);
+        // 端では止まるだけ。ピンチで範囲の外にいても、逆向きには動かさない
+        app.eval('view.scale = 10000; fsZoomIn()');
+        assert.equal(app.val('view.scale'), 10000);
+        app.eval('view.scale = 0.0001; fsZoomOut()');
+        assert.equal(app.val('view.scale'), 0.0001);
+        app.eval('view.scale = 20000; fsZoomIn()');
+        assert.equal(app.val('view.scale'), 20000, '範囲の外でも ＋ で引かない');
+        // スライダーも同じ範囲
+        assert.equal(app.val(`document.getElementById('fs-zoom-slider').min + ',' + document.getElementById('fs-zoom-slider').max`), '-4,4');
+        app.eval('fsZoomSlider(-3.6)');
+        assert.ok(Math.abs(app.val('view.scale') - Math.pow(10, -3.6)) < 1e-12);
+    });
 });

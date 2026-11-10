@@ -115,6 +115,10 @@ describe('座標表の読み取り', () => {
         assert.equal(t('－２３，４５６．７８９'), '-23456.789'); // 全角の桁区切り
         assert.equal(t('-12345,678'), '-12345,678', '小数点のつもりのカンマは外さない（外すと 1000 倍の数になる）');
         assert.equal(t('23456 789'), '23456 789');
+        // カンマ1組で小数点が無い値は、小数点の読み違いかもしれないので外さない（100.000 → 100,000 を 100000 にしない）
+        for(const v of ['100,000', '12,345', '-200,500']) assert.equal(t(v), v);
+        assert.equal(t('-35,012.345'), '-35012.345', '小数点があれば桁の区切り');
+        assert.equal(t('1,234,567'), '1234567', 'カンマが2組以上なら桁の区切り');
         assert.equal(t(' +12.5 '), '+12.5');
         const pt = (r, mm, zmm) => app.val(`aireadRowToPoint(${JSON.stringify(Object.assign({ num: '1', name: '', z: '' }, r))}, ${!!mm}, ${zmm === undefined ? 'undefined' : !!zmm})`);
         assert.equal(pt({ x: '-12345,678', y: '1.0' }), null);
@@ -224,5 +228,32 @@ describe('座標表の読み取り', () => {
         app.eval(`setAireadKey('')`);
         assert.equal(app.val('aireadEnabled()'), false);
         assert.deepEqual(app.errors(), []);
+    });
+
+    // ---- 不具合の総点検（v5.58.2）で見つけたもの ----
+    it('「100,000」「12,345」は取り込まず赤い欄にする（1000 倍の数として黙って取り込まない）。数えるのは取り込む行の「自信の無い行」だけ', async () => {
+        app.eval(`setAireadKey('${KEY}')`);
+        reply = answer([P('1', 'A', '100,000', '200,500', '12,345', true, '確認'), P('2', 'B', 'abc', '2.000', '', true, '読めない'), P('3', 'C', '1.000', '2.000', '', true, '確認')]);
+        await pick(['表.jpg']);
+        assert.equal(app.val('_airead.rows[0].x'), '100,000');
+        assert.equal(app.val(`document.querySelector('#airead-row-0 .airead-x').classList.contains('bad')`), true);
+        assert.match(sum(), /取り込む点: 1点（うち見比べていない、自信の無い行 1）.*数でない行 2/);
+        app.eval('aireadImport()');
+        await new Promise((r) => setTimeout(r, 30));
+        assert.equal(app.val(`collectSurveyPoints().length`), 1, '読めた1点だけ');
+    });
+
+    it('6枚以上選んだら、初めの5枚だけ読むと知らせる（欄を空にすると FileList も空になる Chrome でも）', async () => {
+        app.eval(`setAireadKey('${KEY}'); showAireadPanel()`);
+        reply = answer([P('1', 'A', '1.000', '2.000')]);
+        // Chrome と同じく、欄を空にしたら渡した一覧も空になる入れ物で確かめる
+        await app.eval(`(() => { const files = Array.from({ length: 8 }, (_, i) => new File(['x'], i + '.jpg', { type: 'image/jpeg' }));
+            const input = document.getElementById('airead-file'); const live = files.slice();
+            Object.defineProperty(input, 'value', { configurable: true, get() { return ''; }, set() { live.length = 0; } });
+            return aireadPicked(live); })()`);
+        await new Promise((r) => setTimeout(r, 30));
+        assert.equal(sent.length, 1);
+        assert.equal(sent[0].messages[0].content.filter((b) => b.type === 'image').length, 5);
+        assert.match(toast(), /8枚のうち、初めの 5枚だけ/);
     });
 });

@@ -172,7 +172,8 @@ async function dropboxDisconnect() {
     await _dbxRevoke();
     _dbxLs.set('cad_dropbox_auth', null);
     _dbxFolderCache = {};
-    _dbxBrowse = null;
+    _dbxBrowse = null; _dbxSeq++; // 進行中の一覧の応答は捨てる
+    if(_dbxBrowseShown()) hidePropertyPanel(); // つないでいないのに一覧が残らないように
     hideSnack();
     addCommandLog('-> Dropbox との接続を切りました');
     showToast('Dropbox との接続を切りました', { ms: 2500 });
@@ -208,6 +209,14 @@ async function _dbxCall(send) {
 
 // ===== 開く（アプリの中の一覧） =====
 function _dbxIsOpenable(name) { const n = String(name || '').toLowerCase(); return DBX_OPEN_EXTS.some((e) => n.endsWith(e)); }
+// 一覧の要求の通し番号。あとから届いた古い応答・閉じたあとの応答で、画面を描き直さない（v5.58.2）。
+// 接続を切る・アプリキーを変えるときにも進めて、進行中の要求を捨てる
+let _dbxSeq = 0;
+// 一覧のパネルがまだ出ているか（✕・Esc で閉じた、別のパネルに替わった、なら false）
+function _dbxBrowseShown() {
+    const p = document.getElementById('property-panel');
+    return !!p && p.style.display === 'flex' && !!document.getElementById('dbx-browse');
+}
 async function dropboxOpen() {
     if(!dropboxEnabled()) { _dbxNeedKey(); return; }
     if(!dropboxConnected()) { _dbxNeedConnect('から開く'); return; }
@@ -218,30 +227,45 @@ async function dropboxOpen() {
 }
 // フォルダの中身を読んで一覧を出す。fallbackRoot: 無いフォルダならいちばん上を出す
 async function dropboxBrowse(path, fallbackRoot) {
-    const p = _dbxNormFolder(path);
+    const p = _dbxNormFolder(path), seq = ++_dbxSeq;
     _dbxBrowse = { path: p, entries: [], others: 0, busy: true };
     _dbxRenderBrowse();
+    // 応答を待つあいだに、閉じた・別のフォルダへ移った・接続を切ったなら、この応答は捨てる（閉じたパネルを開き直さない）
+    const gone = () => {
+        if(seq !== _dbxSeq) return true;
+        if(_dbxBrowseShown()) return false;
+        _dbxBrowse = { path: p, entries: [], others: 0, busy: false }; // 次に開くときは、このフォルダから読み直す
+        return true;
+    };
     try {
         const list = (body) => _dbxCall((t) => window.fetch('https://api.dropboxapi.com/2/files/list_folder' + (body.cursor ? '/continue' : ''), { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
         let res = await list({ path: p, limit: 2000, include_non_downloadable_files: false });
+        if(gone()) return;
         if(!res) { _dbxBrowse = null; hidePropertyPanel(); return; }
         if(res.status === 409 && fallbackRoot && p) return dropboxBrowse('', false); // 保存先のフォルダがまだ無い: いちばん上
         let j = await res.json().catch(() => null);
+        if(gone()) return;
         if(!res.ok || !j) throw new Error((j && j.error_summary) || `一覧を読めませんでした（${res.status}）`);
         const all = [...(j.entries || [])];
-        while(j.has_more && all.length < DBX_LIST_MAX) {
-            res = await list({ cursor: j.cursor });
-            if(!res) return;
+        let hasMore = !!j.has_more, cursor = j.cursor, partial = false;
+        while(hasMore && all.length < DBX_LIST_MAX) {
+            res = await list({ cursor });
+            if(gone()) return;
+            if(!res) { _dbxBrowse = null; hidePropertyPanel(); return; } // 続きの途中で許可が切れた（つなぎ直しを出した）
             j = await res.json().catch(() => null);
-            if(!res.ok || !j) break;
+            if(gone()) return;
+            if(!res.ok || !j) { partial = true; break; } // 続きを読めなかった: 途中までを出して、そう知らせる
             all.push(...(j.entries || []));
+            hasMore = !!j.has_more; cursor = j.cursor;
         }
-        const folders = all.filter((e) => e['.tag'] === 'folder').sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-        const files = all.filter((e) => e['.tag'] === 'file' && _dbxIsOpenable(e.name)).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+        const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ja', { numeric: true }); // 図面2 → 図面10 の順
+        const folders = all.filter((e) => e['.tag'] === 'folder').sort(byName);
+        const files = all.filter((e) => e['.tag'] === 'file' && _dbxIsOpenable(e.name)).sort(byName);
         const others = all.filter((e) => e['.tag'] === 'file' && !_dbxIsOpenable(e.name)).length;
-        _dbxBrowse = { path: p, entries: [...folders, ...files], others, busy: false, more: !!j.has_more };
+        _dbxBrowse = { path: p, entries: [...folders, ...files], others, busy: false, more: hasMore && !partial, partial };
         _dbxRenderBrowse();
     } catch(err) {
+        if(gone()) return;
         _dbxBrowse = { path: p, entries: [], others: 0, busy: false, error: (err && err.message) || String(err) };
         _dbxRenderBrowse();
     }
@@ -254,7 +278,7 @@ function _dbxRenderBrowse() {
     B.path.split('/').filter(Boolean).forEach((seg, i, arr) => crumbs.push({ name: seg, path: '/' + arr.slice(0, i + 1).join('/') }));
     let h = '<div id="dbx-browse" style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:#ddd;">';
     h += '<div class="dbx-crumbs">' + crumbs.map((c, i) => `<button class="status-btn dbx-crumb" data-i="${i}" onclick="dropboxBrowseCrumb(${i})">${escapeHtml(c.name)}</button>`).join('<span class="dbx-sep">/</span>') + '</div>';
-    if(B.busy) h += '<div class="cogo-note">読んでいます…</div>';
+    if(B.busy) h += `<div class="cogo-note">${B.picking ? escapeHtml(B.picking) + ' を読んでいます…' : '読んでいます…'}</div>`;
     else if(B.error) h += `<div class="cogo-note" style="color:#ff6b6b;">${escapeHtml(B.error)}</div>`;
     else {
         h += '<div class="dbx-list" role="list">';
@@ -267,6 +291,7 @@ function _dbxRenderBrowse() {
         h += '</div>';
         if(B.others) h += `<div style="color:#888;font-size:10px;">ほかの種類のファイル ${B.others}個 は出していません</div>`;
         if(B.more) h += `<div style="color:#888;font-size:10px;">ファイルが多いので、${DBX_LIST_MAX}個までを出しています</div>`;
+        if(B.partial) h += '<div class="cogo-note" style="color:#ffcc66;">ファイルが多く、途中までしか読めていません（ここに無いファイルがあります）。上のフォルダ名を押して、読み直してください。</div>';
     }
     h += '</div>';
     showPropertyPanel('☁ Dropbox から開く', h);
@@ -286,19 +311,27 @@ window.dropboxBrowsePick = async function(i) {
     const B = _dbxBrowse; const e = B && B.entries[i];
     if(!e || B.busy || e['.tag'] !== 'file') return;
     if((e.size || 0) > DBX_OPEN_MAX) { showToast(`大きすぎて開けません（${_dbxSizeText(DBX_OPEN_MAX)} まで）`, { kind: 'warn', ms: 3500 }); return; }
-    showToast(`Dropbox から ${e.name} を読んでいます…`, { ms: 2500 });
+    // 読んでいるあいだは一覧を押せなくする（続けて2回押すと、同じ図面を2回取り込んで図形が重なっていた。v5.58.2）
+    const seq = ++_dbxSeq;
+    B.busy = true; B.picking = e.name;
+    _dbxRenderBrowse();
+    const back = () => { if(_dbxBrowse === B) { B.busy = false; B.picking = null; if(seq === _dbxSeq && _dbxBrowseShown()) _dbxRenderBrowse(); } };
     try {
         const res = await _dbxCall((t) => window.fetch('https://content.dropboxapi.com/2/files/download', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Dropbox-API-Arg': dropboxApiArg({ path: e.id || e.path_lower }) } }));
-        if(!res) return;
+        if(!res) { back(); return; }
         if(!res.ok) { const j = await res.json().catch(() => null); throw new Error((j && j.error_summary) || `読めませんでした（${res.status}）`); }
         const blob = await res.blob();
+        // 読んでいるあいだに閉じた・接続を切ったなら、開かない（やめたものとして扱う）
+        if(seq !== _dbxSeq || !_dbxBrowseShown()) { back(); return; }
         const file = new File([blob], e.name, { type: 'application/octet-stream' });
         _dbxLastOpened = { id: e.id || null, name: e.name, pending: true };
         if(e.id) _dbxFolderCache[e.id] = _dbxParent(e.path_display || e.path_lower || '');
         addCommandLog(`-> Dropbox から開きます: ${e.path_display || e.name}`);
+        B.busy = false; B.picking = null;
         hidePropertyPanel();
         openIncomingFile(file);
     } catch(err) {
+        back();
         showToast(`Dropbox から開けませんでした: ${(err && err.message) || err}`, { kind: 'error', ms: 4500 });
     }
 };
@@ -380,7 +413,7 @@ window.setDropboxAppKey = function(v) {
     const changed = k !== (_dbxLs.get('cad_dropbox_key') || '');
     if(changed) _dbxRevokeOld(_dbxAuth(), dropboxAppKey()); // 前のアプリの許可は、Dropbox 側でも取り消す（待たずに裏で）
     _dbxLs.set('cad_dropbox_key', k);
-    if(changed) { _dbxLs.set('cad_dropbox_auth', null); _dbxLs.set('cad_dropbox_pkce', null); _dbxPkce = null; _dbxFolderCache = {}; _dbxBrowse = null; } // 別のアプリのキーなら、つなぎ直す
+    if(changed) { _dbxLs.set('cad_dropbox_auth', null); _dbxLs.set('cad_dropbox_pkce', null); _dbxPkce = null; _dbxFolderCache = {}; _dbxBrowse = null; _dbxSeq++; } // 別のアプリのキーなら、つなぎ直す
     if(typeof showOptionsPanel === 'function' && document.getElementById('opt-dropbox')) showOptionsPanel();
 };
 window.setDropboxFolder = function(v) {
@@ -391,16 +424,20 @@ window.setDropboxFolder = function(v) {
 };
 // 図面が変わったとき（cad-core.js の setDrawingName から）。Dropbox から開いたファイルの図面になったときだけ、そのフォルダを覚える。
 // 名前で見分ける（開くのをやめた・時間がかかった・ほかのファイルを開いたときに、間違ったフォルダを覚えないよう）。
-// 図面一式（.webcad・PDF）は中の図面名になるので、開いた直後の1回（「新規図面」以外）をその図面とみなす
+// 図面一式（.webcad・PDF）は中の図面名になるので、中身を読み終えた所（cad-webcad.js の applyWebcadDoc）で dropboxPackOpened が確かめる
 function _dbxBase(n) { return String(n || '').replace(/\.[^./]+$/, '').replace(/_図面一式$/, '').trim(); }
 function dropboxDrawingChanged(name) {
     const L = _dbxLastOpened;
     if(!L) return;
-    if(L.pending) {
-        const pack = /\.(webcad|pdf)$/i.test(L.name);
-        if(name === L.name || _dbxBase(name) === _dbxBase(L.name) || (pack && name && name !== '新規図面')) { L.pending = false; return; }
-    }
+    if(L.confirmed) { L.confirmed = false; return; } // 図面一式を読み終えた直後の1回
+    if(L.pending && (name === L.name || _dbxBase(name) === _dbxBase(L.name))) { L.pending = false; return; }
     _dbxLastOpened = null;
+}
+// 図面一式（.webcad・PDF）の中身を図面にする直前に呼ぶ。Dropbox から開いたそのファイルなら、保存先のフォルダを覚える
+// （PDF を下絵にした・開くのをやめたときは呼ばれないので、次に開いた別の図面の保存先にならない。v5.58.2）
+function dropboxPackOpened(fileName) {
+    const L = _dbxLastOpened;
+    if(L && L.pending && fileName && String(fileName) === L.name) { L.pending = false; L.confirmed = true; }
 }
 
 window.dropboxOpen = dropboxOpen;

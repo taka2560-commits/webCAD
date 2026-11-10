@@ -254,8 +254,10 @@ describe('Dropbox 連携', () => {
         app.eval(`_dbxLastOpened = { id: 'id:abc', name: '平面図.DWG', pending: true }; setDrawingName('平面図.dwg')`);
         assert.equal(await save('a.dxf'), '/案件A/a.dxf');
         // 図面一式は中の図面名になる
-        app.eval(`_dbxFolderCache = {}; _dbxLastOpened = { id: 'id:abc', name: '現場A_図面一式.pdf', pending: true }; setDrawingName('現場Aの図面')`);
+        app.eval(`_dbxFolderCache = {}; _dbxLastOpened = { id: 'id:abc', name: '現場A_図面一式.pdf', pending: true }; dropboxPackOpened('現場A_図面一式.pdf'); setDrawingName('現場Aの図面')`);
         assert.equal(await save('b.dxf'), '/案件A/b.dxf');
+        app.eval(`setDrawingName('次の図面')`);
+        assert.equal(await save('b.dxf'), '/WebCAD/b.dxf', 'そのあと別の図面にしたら、決めた保存先に戻る');
     });
 
     it('許可が取り消された（refresh token が使えない）ら、つなぎ直しを出して印を消す。access token の期限切れは取り直して1回だけ送り直す', async () => {
@@ -293,5 +295,89 @@ describe('Dropbox 連携', () => {
         await new Promise((r) => setTimeout(r, 30));
         assert.equal(calls.find((c) => c.url.endsWith('/auth/token/revoke')).opt.headers.Authorization, 'Bearer FRESH');
         assert.equal(app.val('dropboxConnected()'), false);
+    });
+
+    // ---- 不具合の総点検（v5.58.2）で見つけたもの ----
+    const LIST = 'https://api.dropboxapi.com/2/files/list_folder', DL = 'https://content.dropboxapi.com/2/files/download';
+    const fileEntry = (name, id) => ({ '.tag': 'file', name, id, path_display: '/案件/' + name, size: 100 });
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    it('一覧のファイルを続けて2回押しても、1回だけ開く（同じ図面を2回取り込んで図形が重ならない）。読んでいるあいだは一覧を押せない', async () => {
+        connect();
+        routes[LIST] = { status: 200, json: { has_more: false, entries: [fileEntry('a.dxf', 'id:a'), fileEntry('b.dxf', 'id:b')] } };
+        await app.eval(`dropboxBrowse('/案件')`);
+        await wait(30);
+        let release;
+        const gate = new Promise((r) => { release = r; });
+        const realFetch = w.fetch;
+        w.fetch = async (url, opt) => { if(String(url) === DL) await gate; return realFetch(url, opt); };
+        routes[DL] = { status: 200, text: '0 EOF' };
+        app.eval(`window.__opened = []; window.__oi = openIncomingFile; openIncomingFile = (f) => { window.__opened.push(f.name); };
+            dropboxBrowsePick(0); dropboxBrowsePick(0); dropboxBrowsePick(1); dropboxBrowseUp();`);
+        await wait(20);
+        assert.match(app.val(`document.getElementById('dbx-browse').textContent`), /a\.dxf を読んでいます/);
+        assert.equal(app.val(`document.querySelectorAll('#dbx-browse .dbx-file').length`), 0, '読んでいるあいだは一覧を出さない');
+        release();
+        await wait(40);
+        assert.deepEqual(app.val('window.__opened'), ['a.dxf']);
+        assert.equal(calls.filter((c) => c.url === DL).length, 1, 'ダウンロードも1回');
+        app.eval('openIncomingFile = window.__oi');
+        w.fetch = realFetch;
+    });
+
+    it('一覧を読んでいる途中で閉じた・別のパネルにした・接続を切ったら、遅れて届いた応答で一覧を開き直さない', async () => {
+        connect();
+        let release;
+        const slow = () => { const gate = new Promise((r) => { release = r; }); const real = w.fetch;
+            w.fetch = async (url, opt) => { if(String(url) === LIST) { await gate; w.fetch = real; } return real(url, opt); }; };
+        routes[LIST] = { status: 200, json: { has_more: false, entries: [fileEntry('a.dxf', 'id:a')] } };
+        // ✕ で閉じて、別のパネルを開いた
+        slow(); app.eval(`dropboxBrowse('/案件')`); await wait(10);
+        app.eval(`closePropertyPanel(); showLayerManagerPanel();`);
+        release(); await wait(40);
+        assert.equal(app.val(`document.getElementById('property-panel-title').textContent`), '画層一括管理');
+        assert.equal(app.val(`!!document.getElementById('dbx-browse')`), false);
+        // 閉じただけ（開き直さない）。次に開くと同じフォルダから読み直す
+        slow(); app.eval(`closePropertyPanel(); dropboxBrowse('/案件')`); await wait(10);
+        app.eval('closePropertyPanel()');
+        release(); await wait(40);
+        assert.notEqual(app.val(`document.getElementById('property-panel').style.display`), 'flex', '閉じたまま');
+        assert.equal(app.val('_dbxBrowse.path'), '/案件');
+        assert.equal(app.val('_dbxBrowse.busy'), false);
+        // 途中で接続を切った
+        routes['https://api.dropboxapi.com/2/auth/token/revoke'] = { status: 200, json: null };
+        slow(); app.eval(`dropboxBrowse('/案件')`); await wait(10);
+        await app.eval('dropboxDisconnect()');
+        release(); await wait(40);
+        assert.equal(app.val('_dbxBrowse'), null);
+        assert.equal(app.val(`document.getElementById('property-panel').style.display === 'flex' && !!document.getElementById('dbx-browse')`), false, 'つないでいないのに一覧を出さない');
+        assert.deepEqual(app.errors(), []);
+    });
+
+    it('多いフォルダの続きを読めなかったら、途中までを出して「途中まで」と知らせる（エラーの英語を出さない・読んでいますのまま残らない）。並びは数の順', async () => {
+        connect();
+        routes[LIST] = { status: 200, json: { has_more: true, cursor: 'C1', entries: [fileEntry('図面10.dxf', 'id:10'), fileEntry('図面2.dxf', 'id:2'), fileEntry('図面1.dxf', 'id:1')] } };
+        routes[LIST + '/continue'] = { status: 503, json: null }; // 本文が JSON でない
+        await app.eval(`dropboxBrowse('/案件')`);
+        await wait(30);
+        assert.deepEqual(app.val(`[...document.querySelectorAll('#dbx-browse .dbx-name')].map((e) => e.textContent.replace('📄 ', ''))`), ['図面1.dxf', '図面2.dxf', '図面10.dxf']);
+        assert.match(app.val(`document.getElementById('dbx-browse').textContent`), /途中までしか読めていません/);
+        assert.equal(app.val('_dbxBrowse.busy'), false);
+        // 続きの途中で許可が切れた: 一覧を閉じて、つなぎ直しを出す
+        routes[LIST + '/continue'] = { status: 401, json: { error: { '.tag': 'invalid_access_token' } } };
+        await app.eval(`dropboxBrowse('/案件')`);
+        await wait(30);
+        assert.equal(app.val('_dbxBrowse'), null);
+        assert.deepEqual(snack().acts, ['☁ つなぐ']);
+        assert.deepEqual(app.errors(), []);
+    });
+
+    it('Dropbox から選んだ PDF を下絵にした・開くのをやめたあと、次に開いた別の図面の保存先をそのフォルダにしない', async () => {
+        connect();
+        routes['https://content.dropboxapi.com/2/files/upload'] = (url, opt) => ({ status: 200, json: { path_display: JSON.parse(opt.headers['Dropbox-API-Arg']).path } });
+        app.eval(`_dbxFolderCache = { 'id:p': '/写真/2026' }; _dbxLastOpened = { id: 'id:p', name: '現場写真.pdf', pending: true }; setDrawingName('別の現場.dxf')`);
+        await app.eval(`dropboxSaveBlob(new Blob(['x']), 'c.dxf').then((p) => { window.__saved = p; })`);
+        await wait(30);
+        assert.equal(app.val('window.__saved'), '/WebCAD/c.dxf');
     });
 });

@@ -539,6 +539,17 @@
             #btn-area-select .sb-state { display: none; }
             #btn-loupe { padding: 0 3px; }
         }
+        /* 幅 431〜600px（大きめのスマホの縦など）: 🔍 を足した分、座標が画面の外に出ていた（v5.58.2）。
+           「モデル」と「: OFF」を隠し、ボタンを少し詰めて、座標は残りの幅に収める */
+        @media screen and (min-width: 431px) and (max-width: 600px) {
+            #status-bar { gap: 4px; padding: 0 8px; }
+            #status-bar > div { gap: 4px !important; }
+            #status-bar .paper-space-label { display: none; }
+            #btn-area-select .sb-state { display: none; }
+            .status-btn { padding: 0 8px; }
+            #btn-loupe { padding: 0 5px; }
+            #coords-display { min-width: 0; }
+        }
         /* プロジェクト一覧のスタイル */
         .project-item { display:flex; align-items:center; padding:10px 12px; border-bottom:1px solid #333; cursor:pointer; transition:background 0.2s; gap:8px; }
         .project-item:hover { background:rgba(97,175,239,0.15); }
@@ -1401,7 +1412,7 @@
         <!-- 案C: ズームパネル (幅広スライダー) -->
         <div id="fs-zoom-panel">
             <button onclick="fsZoomIn()" title="ズームイン">＋</button>
-            <input type="range" id="fs-zoom-slider" min="-3" max="3" step="0.02" value="0" orient="vertical" oninput="fsZoomSlider(this.value)">
+            <input type="range" id="fs-zoom-slider" min="-4" max="4" step="0.02" value="0" orient="vertical" oninput="fsZoomSlider(this.value)">
             <button onclick="fsZoomOut()" title="ズームアウト">−</button>
         </div>
     </div>
@@ -1732,20 +1743,23 @@
             return { cx, cy, wb: screenToWcs(cx, cy) };
         }
 
-        // ズームイン（読んだ点を中心）
+        // 倍率の範囲は、ホイール・ピンチ（cad-input.js）と同じ 0.0001〜10000（v5.58.2）。
+        // 以前は 0.001〜1000 で、大きな図面の全体表示（0.00025 など）で − を押すと 0.001 に飛び、縮小のつもりが拡大していた
+        const FS_ZOOM_MIN = 0.0001, FS_ZOOM_MAX = 10000;
+        // ズームイン（読んだ点を中心）。＋ は必ず拡大（端では止まるだけ）
         function fsZoomIn() {
             if(typeof view === 'undefined') return;
             const { cx, cy, wb } = _fsZoomCenter();
-            _applyRotZoom(cx, cy, wb, Math.min(view.scale * 1.25, 1000));
+            _applyRotZoom(cx, cy, wb, Math.max(view.scale, Math.min(view.scale * 1.25, FS_ZOOM_MAX)));
             if(window.updateZoomSlider) window.updateZoomSlider();
             render();
         }
 
-        // ズームアウト（読んだ点を中心）
+        // ズームアウト（読んだ点を中心）。− は必ず縮小（端では止まるだけ）
         function fsZoomOut() {
             if(typeof view === 'undefined') return;
             const { cx, cy, wb } = _fsZoomCenter();
-            _applyRotZoom(cx, cy, wb, Math.max(view.scale / 1.25, 0.001));
+            _applyRotZoom(cx, cy, wb, Math.min(view.scale, Math.max(view.scale / 1.25, FS_ZOOM_MIN)));
             if(window.updateZoomSlider) window.updateZoomSlider();
             render();
         }
@@ -1755,7 +1769,8 @@
             if(typeof view === 'undefined') return;
             const { cx, cy, wb } = _fsZoomCenter();
             const targetScale = Math.pow(10, parseFloat(val));
-            _applyRotZoom(cx, cy, wb, Math.max(0.001, Math.min(1000, targetScale)));
+            if(!isFinite(targetScale)) return;
+            _applyRotZoom(cx, cy, wb, Math.max(FS_ZOOM_MIN, Math.min(FS_ZOOM_MAX, targetScale)));
             if(typeof noteViewGesture === 'function') noteViewGesture(); // スライダー操作中は軽い描画にする
             render();
         }
@@ -1764,7 +1779,7 @@
         window.updateZoomSlider = function() {
             const slider = document.getElementById('fs-zoom-slider');
             if(slider && typeof view !== 'undefined') {
-                const logVal = Math.log10(Math.max(0.001, Math.min(1000, view.scale)));
+                const logVal = Math.log10(Math.max(FS_ZOOM_MIN, Math.min(FS_ZOOM_MAX, view.scale)));
                 slider.value = logVal;
             }
         };
