@@ -155,7 +155,7 @@ function _handlePointInputCore(wcs, fromMouse) {
         saveUndo(); entities.push({type:'ARC',layer:currentLayerIndex,color:null,cx:cc.x,cy:cc.y,radius:r,startAngle:sa,endAngle:ea,counterclockwise:ccw});
         addCommandLog('-> 円弧作成'); resetCommand(); return;
     }
-    if(m==='WAITING_PLINE_NEXT') { cmdState.points.push({x:wcs.x,y:wcs.y}); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 点追加: ${coordPairText(u.x, u.y)} [Enter:確定/C:閉合]`); render(); return; }
+    if(m==='WAITING_PLINE_NEXT') { cmdState.points.push({x:wcs.x,y:wcs.y}); cmdState.plineRedo = []; _plineBar(); setPrompt('次の点:'); const u=wcsToUcs(wcs.x,wcs.y); addCommandLog(`-> 点追加: ${coordPairText(u.x, u.y)} [Enter:確定/C:閉合]`); render(); return; }
 
     if(m==='WAITING_ELLIPSE_CENTER') { cmdState.startWcs={x:wcs.x,y:wcs.y}; cmdState.mode='WAITING_ELLIPSE_X'; setPrompt('X方向の端点:'); addCommandLog(`-> 中心: ${coordLogText(wcs)}`); render(); return; }
     if(m==='WAITING_ELLIPSE_X') { cmdState.points=[{x:wcs.x,y:wcs.y}]; cmdState.mode='WAITING_ELLIPSE_Y'; setPrompt('Y方向の端点 (または距離):'); addCommandLog(`-> X端点: ${coordLogText(wcs)}`); render(); return; }
@@ -417,6 +417,47 @@ function finishPline(close) {
     else addCommandLog('-> キャンセル（点が不足）');
     resetCommand();
 }
+// ポリラインの途中で、最後に打った点を取り消す（下のバーの ↶ 1つ戻す・コマンド U・Ctrl+Z。v5.58.4）。取り消したら true。
+// 以前は取り消す手段が無く（Ctrl+Z は前の作図を消した）、打ちまちがえたら初めからやり直しだった
+function plineUndoStep() {
+    if(cmdState.mode !== 'WAITING_PLINE_NEXT' || !cmdState.points.length) return false;
+    (cmdState.plineRedo = cmdState.plineRedo || []).push(cmdState.points.pop()); // Ctrl+Y で戻せるように
+    const n = cmdState.points.length;
+    if(typeof snapSetLastInput === 'function') snapSetLastInput(n ? cmdState.points[n - 1] : null); // 「@X,Y」も戻した点から
+    setPrompt(n ? '次の点:' : '始点:'); // 以前は点を打っても「始点:」のままだった
+    addCommandLog(n ? '-> 最後の点を取り消しました' : '-> 始点を取り消しました');
+    if(typeof showToast === 'function') showToast(n ? '↶ 最後の点を取り消しました' : '↶ 始点を取り消しました', 1500);
+    _plineBar();
+    render();
+    return true;
+}
+// 取り消した点を戻す（Ctrl+Y・Ctrl+Shift+Z）。戻したら true。新しい点を打つと、戻せる点は捨てる。
+// （これが無いと、点を取り消した直後の Ctrl+Y で、関係の無い前の取り消しがやり直された）
+function plineRedoStep() {
+    if(cmdState.mode !== 'WAITING_PLINE_NEXT' || !(cmdState.plineRedo && cmdState.plineRedo.length)) return false;
+    const p = cmdState.plineRedo.pop();
+    cmdState.points.push(p);
+    if(typeof snapSetLastInput === 'function') snapSetLastInput(p);
+    setPrompt('次の点:');
+    addCommandLog('-> 取り消した点を戻しました');
+    _plineBar();
+    render();
+    return true;
+}
+// ↶ 1つ戻す は、点を打ってから出す
+function _plineBar() {
+    const ub = document.getElementById('line-undo-btn');
+    if(ub) ub.style.display = (cmdState.mode === 'WAITING_PLINE_NEXT' && cmdState.points.length) ? '' : 'none';
+    if(typeof fitPanelAboveActionbar === 'function') fitPanelAboveActionbar(); // ボタンが増えた・減った: バーの位置とパネルの高さを測り直す
+}
+// ポリラインの途中で別のコマンドを始めたとき、ポリラインのボタン（⭘ 閉じる・↶ 1つ戻す）を残さない
+function _plineBarCleanup() {
+    if(cmdState.mode === 'WAITING_PLINE_NEXT') return;
+    const pc = document.getElementById('pline-close-btn'); if(pc) pc.style.display = 'none';
+    const ub = document.getElementById('line-undo-btn');
+    if(ub && !(typeof _isLineMode === 'function' && _isLineMode(cmdState.mode))) ub.style.display = 'none'; // 線分に移ったときは、線分の側が決める
+    if(typeof fitPanelAboveActionbar === 'function') fitPanelAboveActionbar();
+}
 
 // 指定されたパス(線分群)と交差する図形をトリム(カット/単体削除)する
 function executeTrim(trimPath) {
@@ -655,6 +696,7 @@ function processCommand(cmdText) {
         }
     }
     // WAITING_TEXT_STR was removed
+    if(cmdState.mode === 'WAITING_PLINE_NEXT') Promise.resolve().then(_plineBarCleanup); // 別のコマンドに移ったら、ポリラインのボタンを片付ける（v5.58.4）
     if(cmd !== 'U' && cmd !== 'UNDO' && typeof lineBeforeOtherCommand === 'function') lineBeforeOtherCommand(); // 線分の下のバーを片付ける（cad-line.js）
     // 作図・編集のコマンド（鏡像・尺度変更・配列・分割・結合・角の処理）と、その途中で入れる数（倍率・半径など）（cad-edit.js）
     if(typeof processEditCommand === 'function' && processEditCommand(cmd)) return;
@@ -736,7 +778,7 @@ function processCommand(cmdText) {
     }
     else if(cmd==='A'||cmd==='ARC') { cmdState.mode='WAITING_ARC_P1'; cmdState.points=[]; setPrompt('始点:'); setActiveTool('ARC'); addCommandLog('-> 始点を指定'); }
     else if(cmd==='PL'||cmd==='PLINE') {
-        cmdState.mode='WAITING_PLINE_NEXT'; cmdState.points=[]; setPrompt('始点:'); setActiveTool('PLINE'); addCommandLog('-> 始点を指定');
+        cmdState.mode='WAITING_PLINE_NEXT'; cmdState.points=[]; cmdState.plineRedo=[]; setPrompt('始点:'); setActiveTool('PLINE'); addCommandLog('-> 始点を指定');
         // スマホでも完了できるよう、画面下に「☑確定（完了）」「⭘閉じる」「❌終了」を出す
         showActionbarControls({});
         const pc = document.getElementById('pline-close-btn'); if(pc) pc.style.display = '';

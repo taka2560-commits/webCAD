@@ -118,6 +118,7 @@ function lineAddSegment(wcs, fromMouse) {
 
 // ↶ 1つ戻す（画面の下のバー・コマンド U）。線分の段階なら処理して true
 function lineUndoStep() {
+    if(cmdState.mode === 'WAITING_PLINE_NEXT' && typeof plineUndoStep === 'function') return plineUndoStep(); // ポリライン: 最後に打った点（cad-command.js）
     if(!_isLineMode(cmdState.mode)) return false;
     cmdState.lineCand = null;
     const ids = cmdState.lineIds || [];
@@ -224,6 +225,15 @@ function lineFloatUpdate() {
         _lfShownAt = Date.now();
     }
     b.dataset.cx = String(c.x); b.dataset.cy = String(c.y);
+    // 下のバーに重なるなら、バーの上（入らなければ下）に置く（v5.58.4。スマホの幅では、バーが右下のボタンをよけて上がることがある）
+    const bar = document.getElementById('fs-dim-actionbar');
+    if(bar && bar.style.display !== 'none') {
+        const br = bar.getBoundingClientRect(), hw = (b.offsetWidth || 64) / 2, hh = (b.offsetHeight || 48) / 2, pad = 8;
+        if(br.width > 0 && br.height > 0 && q.x + hw > br.left - pad && q.x - hw < br.right + pad && q.y + hh > br.top - pad && q.y - hh < br.bottom + pad) {
+            const up = br.top - pad - hh;
+            q.y = up - hh >= 40 ? up : Math.min(vh - hh - 4, br.bottom + pad + hh);
+        }
+    }
     b.style.left = `${Math.round(q.x)}px`; b.style.top = `${Math.round(q.y)}px`;
     b.classList.toggle('lf-dim', !!touchState.down); // 指で狙い直している間は押せない
 }

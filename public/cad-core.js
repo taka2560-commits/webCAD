@@ -566,6 +566,7 @@ function toggleCommandLine() {
     const area = document.getElementById('command-line-area');
     if (!area) return;
     area.classList.toggle('collapsed');
+    fitPanelAboveActionbarSoon(); // 下のバーが欄の上へ動く（index.html）ので、開いているパネルがバーに隠れないように（v5.58.4）
 }
 // ピルに現在のコマンド名・プロンプト文を反映する（setPrompt / setActiveTool から呼ばれる）
 function updateCommandPill() {
@@ -615,8 +616,39 @@ function showPropertyPanel(title, htmlContent) {
 //  ・スマホの幅で別窓（変換の図など）が出ているとき: 別窓の見出しを隠さないよう、別窓の上で終わらせる
 // 画面いっぱい（□）・たたんだ（▁）ときはしない
 const _panelFitSubviews = []; // 出ているかもしれない別窓（cad-subview.js が入れる）
+// 下のバーが、右下の「⌨ コマンド」（たたんだコマンド欄）・「?」のボタンに重なるときは、その上に出す（v5.58.4）。
+// スマホの幅で、ボタンが4つ（ポリラインの ☑確定・⭘閉じる・↶ 1つ戻す・❌終了）になると「⌨ コマンド」を覆い、押すと ❌終了 に当たっていた。
+// 重ならない幅（3つまで・広い画面）では何も変えない。コマンド欄を開いているときは CSS が欄の上に出す（index.html）
+function _actionbarAvoidButtons(bar) {
+    if(!bar) return;
+    const before = bar.classList.contains('ab-up') ? bar.style.getPropertyValue('--ab-lift') : '';
+    const done = () => { // 位置が変わったら、点の横の ☑確定 も置き直す（cad-line.js）
+        const now = bar.classList.contains('ab-up') ? bar.style.getPropertyValue('--ab-lift') : '';
+        if(now !== before && typeof lineFloatUpdate === 'function') lineFloatUpdate();
+    };
+    bar.classList.remove('ab-up');
+    const area = document.getElementById('command-line-area');
+    if(!area || !area.classList.contains('collapsed') || document.body.classList.contains('fullscreen-mode')) return done();
+    const bs = getComputedStyle(bar);
+    if(bs.display === 'none' || bs.visibility === 'hidden') return done();
+    const b = bar.getBoundingClientRect();
+    if(!(b.width > 0 && b.height > 0)) return done();
+    let top = null; // バーの下の端を合わせる高さ（重なる部品の上の端）
+    for(const el of [area, document.getElementById('guide-help-btn')]) { // 下にある順
+        if(!el) continue;
+        const r = el.getBoundingClientRect();
+        if(!(r.width > 0 && r.height > 0)) continue;
+        const bottom = top === null ? b.bottom : top - 8, t0 = bottom - b.height;
+        if(b.right > r.left - 4 && b.left < r.right + 4 && bottom > r.top - 4 && t0 < r.bottom + 4) top = r.top;
+    }
+    if(top === null) return done();
+    bar.style.setProperty('--ab-lift', Math.round(window.innerHeight - top + 8) + 'px');
+    bar.classList.add('ab-up');
+    done();
+}
 function fitPanelAboveActionbar() {
     const p = document.getElementById('property-panel'), bar = document.getElementById('fs-dim-actionbar');
+    _actionbarAvoidButtons(bar);
     if(!p) return;
     // 一度外してから測り直すと、パネルの中のスクロールが先頭に戻るので、決まった高さを直接入れる（同じなら触らない）。
     // max-height なので、もともと短いパネルには何も起きない

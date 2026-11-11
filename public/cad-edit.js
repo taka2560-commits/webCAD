@@ -427,6 +427,11 @@ function editDoFillet(wcs) {
     const o = _editFilletOpts();
     const r = editFilletLines(e1, cmdState.filletTap, e2, wcs, o);
     if(r.error) { _editToast(r.error); return false; }
+    // 何も変わらないとき（すでに角になっている2本を、半径 0 で処理）は、↩ の履歴を増やさない（v5.58.4。以前は「何も戻らない ↩」が1回分できた）
+    if(!r.arc && !r.seg) {
+        const same = (e, l) => Math.hypot(e.x1 - l.x1, e.y1 - l.y1) + Math.hypot(e.x2 - l.x2, e.y2 - l.y2) <= 1e-9 * (Math.hypot(e.x2 - e.x1, e.y2 - e.y1) + 1);
+        if(same(e1, r.l1) && same(e2, r.l2)) { _editToast('すでに角になっています'); return false; }
+    }
     saveUndo();
     Object.assign(e1, r.l1); Object.assign(e2, r.l2);
     delete e1.bbox; delete e2.bbox;

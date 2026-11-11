@@ -536,7 +536,27 @@ function setupEventListeners() {
         render();
     }, {passive:true});
 
+    // 文字キーをコマンド欄に入れてはいけない場面（図面が見えていない）: ☰ メニュー・エラーの画面・保存一覧・スナップの設定とシート・
+    // 図面を覆うパネル（スマホの幅・画面いっぱい）。フォーカスがどこにあるかではなく、開いているかで見る（Esc の順と同じ）
+    const _typeToCommandBlocked = () => {
+        const shown = (id, v) => { const el = document.getElementById(id); return !!el && el.style.display === v; };
+        if(shown('top-menu-modal', 'flex') || shown('osnap-panel', 'block')) return true;
+        const ep = document.getElementById('cad-err-panel');
+        if(ep && ep.classList.contains('show')) return true;
+        const pl = document.getElementById('project-list-panel');
+        if(pl && pl.style.display && pl.style.display !== 'none') return true;
+        if(typeof snapSheetIsOpen === 'function' && snapSheetIsOpen()) return true;
+        const pp = document.getElementById('property-panel');
+        return !!pp && pp.style.display === 'flex' && !pp.classList.contains('win-min') && typeof panelCoversDrawing === 'function' && panelCoversDrawing();
+    };
     commandInput.addEventListener('keydown',(e)=>{
+        // 欄が空のときの Ctrl+Z / Ctrl+Y: ポリラインの最後の点を取り消す・戻す（v5.58.4。座標を打って入れた点は、フォーカスが欄に残るので）
+        if((e.ctrlKey || e.metaKey) && !e.altKey && commandInput.value === '') {
+            const kk = (e.key || '').toLowerCase();
+            const done = (kk === 'z' && !e.shiftKey) ? (typeof plineUndoStep === 'function' && plineUndoStep())
+                : ((kk === 'y' || (kk === 'z' && e.shiftKey)) ? (typeof plineRedoStep === 'function' && plineRedoStep()) : false);
+            if(done) { e.preventDefault(); return; }
+        }
         if(e.key==='Enter'){const v=commandInput.value.trim(); if(v){addCommandLog(v); if(processCommand(v) === false) commandInput.select(); else commandInput.value='';} else{if(cmdState.mode==='WAITING_LINE_P2'){resetCommand();addCommandLog('-> LINE終了');}else if(cmdState.mode==='WAITING_PLINE_NEXT'){finishPline(false);}else if(cmdState.mode==='WAITING_LAYOFF_TOUCH'){layoffConfirm();}}}
         if(e.key==='Escape'){if(cmdState.mode!=='IDLE'){addCommandLog('* キャンセル *');processCommand('CANCEL');}}
     });
@@ -545,8 +565,8 @@ function setupEventListeners() {
         if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return; // 入力欄の中（文字の取り消しなど）
         if(typeof cadDialogOpen === 'function' && cadDialogOpen()) return; // 確認画面を出しているあいだ（Esc は確認画面を閉じる）
         const k = (e.key || '').toLowerCase();
-        if((e.ctrlKey || e.metaKey) && k==='z'){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); return; }
-        if((e.ctrlKey || e.metaKey) && k==='y'){ e.preventDefault(); redo(); return; }
+        if((e.ctrlKey || e.metaKey) && k==='z'){ e.preventDefault(); if(e.shiftKey) { if(!(typeof plineRedoStep === 'function' && plineRedoStep())) redo(); } else if(!(typeof plineUndoStep === 'function' && plineUndoStep())) undo(); return; } // ポリラインの途中は、最後に打った点を取り消す・戻す
+        if((e.ctrlKey || e.metaKey) && k==='y'){ e.preventDefault(); if(!(typeof plineRedoStep === 'function' && plineRedoStep())) redo(); return; }
         // Enter: 図面をクリックしたあと（フォーカスがコマンド欄に無い）でも、線分・ポリラインを終える・タッチ非表示を確定する（v5.58.3。
         // 以前はコマンド欄の中の Enter しか見ておらず、案内の「Enter:確定」どおりに押しても何も起きなかった）。
         // ボタンなどにフォーカスがあるときは、そのボタンを押す動き（ブラウザの既定）に任せる
@@ -555,6 +575,18 @@ function setupEventListeners() {
             if(cmdState.mode === 'WAITING_LINE_P2') { e.preventDefault(); resetCommand(); addCommandLog('-> LINE終了'); }
             else if(cmdState.mode === 'WAITING_PLINE_NEXT') { e.preventDefault(); finishPline(false); }
             else if(cmdState.mode === 'WAITING_LAYOFF_TOUCH') { e.preventDefault(); layoffConfirm(); }
+            return;
+        }
+        // 文字キー: 図面をクリックしたあと（フォーカスが入力欄に無い）でも、打った字がコマンド欄に入る（v5.58.4。たたんでいれば開く）。
+        // 以前は、図面をクリックしたあとに「c」「10,20」と打っても、どこにも入らなかった。パネル・メニューの中では何もしない
+        if(e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && e.keyCode !== 229 && /^[a-zA-Z0-9@<.-]$/.test(e.key)) {
+            if(t && t.closest && t.closest('#property-panel, #top-menu-modal, #project-list-panel, #cad-err-panel, #osnap-panel')) return;
+            if(_typeToCommandBlocked()) return; // メニュー・一覧・画面いっぱいのパネルなどを開いているあいだは、裏のコマンド欄に入れない
+            if(document.body.classList.contains('fullscreen-mode') || (typeof layoutActive === 'function' && layoutActive())) return;
+            const area = document.getElementById('command-line-area');
+            if(!area || !commandInput) return;
+            if(area.classList.contains('collapsed')) toggleCommandLine();
+            commandInput.focus(); // 押した字は、このあとブラウザがコマンド欄に入れる
             return;
         }
         if(e.key === 'Escape') {

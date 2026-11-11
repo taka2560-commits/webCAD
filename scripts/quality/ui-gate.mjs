@@ -106,6 +106,57 @@ async function runOne(browser, v, btn, motion) {
         const ok = hit === go || go.contains(hit); resetCommand(); closePropertyPanel(); return ok ? 'ok' : `隠れている（${hit && (hit.id || hit.className)}）`;
     });
     if (cgo !== 'ok') fail(run, `円の「📍 この座標に円を描く」が押せません: ${cgo}`);
+    // ポリラインの下のバー（v5.58.4）: ↶ 1つ戻す を足した4つのボタンが画面に収まり、コマンド欄を開いても欄に重ならない
+    const plb = await page.evaluate(async () => {
+        resetCommand(); processCommand('PLINE'); handlePointInput({ x: 0, y: 0 }, true); handlePointInput({ x: 5, y: 0 }, true);
+        const area = document.getElementById('command-line-area'), bar = document.getElementById('fs-dim-actionbar');
+        const btns = [...bar.querySelectorAll(':scope > button')].filter((b) => getComputedStyle(b).display !== 'none');
+        const names = btns.map((b) => b.textContent.trim());
+        await new Promise((r) => setTimeout(r, 500)); // バーの位置の測り直し（420ms）のあと
+        const inView = btns.every((b) => { const r = b.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 0.5 && r.top >= 0 && r.bottom <= innerHeight + 0.5; });
+        // スマホの幅では4つのボタンで幅が広がる: 右下の「⌨ コマンド」「?」を覆わない（覆うと、押したときに ❌ 終了 に当たる）
+        const b0 = bar.getBoundingClientRect();
+        const covered = ['command-line-area', 'guide-help-btn'].filter((id) => { const el = document.getElementById(id); if (!el || getComputedStyle(el).display === 'none') return false;
+            const r = el.getBoundingClientRect(); return r.width > 0 && b0.left < r.right && r.left < b0.right && b0.top < r.bottom && r.top < b0.bottom; });
+        const was = area.classList.contains('collapsed');
+        if (was) toggleCommandLine();
+        await new Promise((r) => setTimeout(r, 500));
+        const b = bar.getBoundingClientRect(), c = area.getBoundingClientRect();
+        const shown = getComputedStyle(area).display !== 'none' && c.height > 60;
+        const clear = !shown || b.bottom <= c.top + 0.5;
+        if (was) toggleCommandLine();
+        resetCommand();
+        await new Promise((r) => setTimeout(r, 300));
+        // 別のコマンドに移ったら、ポリラインのボタンは残さない
+        processCommand('PLINE'); handlePointInput({ x: 0, y: 0 }, true); processCommand('TRIM');
+        await new Promise((r) => setTimeout(r, 50));
+        const left = ['pline-close-btn', 'line-undo-btn'].filter((id) => getComputedStyle(document.getElementById(id)).display !== 'none');
+        resetCommand();
+        return { names, inView, clear, covered, left, bar: [b.top, b.bottom], cmd: [c.top, c.bottom], bar0: [b0.left, b0.top, b0.right, b0.bottom] };
+    });
+    if (!plb.names.some((n) => n.includes('1つ戻す'))) fail(run, `ポリラインの下のバーに「↶ 1つ戻す」がありません ${JSON.stringify(plb.names)}`);
+    if (!plb.inView) fail(run, 'ポリラインの下のバーのボタンが画面からはみ出しています');
+    if (!plb.clear) fail(run, `下のバーが、開いたコマンド欄に重なっています ${JSON.stringify(plb)}`);
+    if (plb.covered.length) fail(run, `ポリラインの下のバーが、右下のボタンを覆っています ${JSON.stringify(plb.covered)} ${JSON.stringify(plb.bar0)}`);
+    if (plb.left.length) fail(run, `別のコマンドに移っても、ポリラインのボタンが残っています ${JSON.stringify(plb.left)}`);
+    // 図形を選んでコマンド欄を開いても、選択バーが入力欄に重ならない（v5.58.4）
+    const selb = await page.evaluate(async () => {
+        resetCommand(); const n0 = entities.length;
+        entities.push({ type: 'LINE', layer: currentLayerIndex, color: null, x1: 0, y1: 0, x2: 5, y2: 5 });
+        cmdState.selectedIndices = [entities.length - 1]; if (typeof updateSelectionBar === 'function') updateSelectionBar();
+        const area = document.getElementById('command-line-area'), sb = document.getElementById('sel-actionbar');
+        const was = area.classList.contains('collapsed');
+        if (was) toggleCommandLine();
+        await new Promise((r) => setTimeout(r, 500));
+        const s = sb.getBoundingClientRect(), c = area.getBoundingClientRect();
+        const shown = getComputedStyle(sb).display !== 'none' && s.height > 0, open = getComputedStyle(area).display !== 'none' && c.height > 60;
+        const ok = !shown || !open || s.bottom <= c.top + 0.5 || s.right <= c.left || s.left >= c.right;
+        if (was) toggleCommandLine();
+        cmdState.selectedIndices = []; entities.length = n0; if (typeof updateSelectionBar === 'function') updateSelectionBar(); render();
+        await new Promise((r) => setTimeout(r, 300));
+        return { ok, shown, s: [s.top, s.bottom], c: [c.top, c.bottom] };
+    });
+    if (!selb.ok) fail(run, `選択バーが、開いたコマンド欄に重なっています ${JSON.stringify(selb)}`);
     // ルーペの 🔍（v5.57）: 下のバーの中にあって、ほかのボタンと重ならず、押すと切り替わる
     const lb = await rectOf(page, '#btn-loupe');
     if (!lb || !inside(lb, vw, vh) || overlap(lb, await rectOf(page, '#btn-area-select')) || overlap(lb, await rectOf(page, '#ucs-label'))) fail(run, `ルーペの 🔍 が下のバーに収まっていません ${JSON.stringify(lb)}`);

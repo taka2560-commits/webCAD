@@ -151,6 +151,7 @@ function _cogoShowBar(withConfirm) {
     if(cb) cb.style.display = withConfirm ? '' : 'none';
     ['dim-mode-toggle', 'dim-dir-toggle', 'pline-close-btn'].forEach((id) => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
     if(typeof _hideMeasureButtons === 'function') _hideMeasureButtons();
+    if(typeof fitPanelAboveActionbarSoon === 'function') fitPanelAboveActionbarSoon(); // 開いているパネルがバーに隠れないように（v5.58.4）
 }
 // スマホ・画面いっぱいのパネルでは、図面が見えるようにパネルを隠す（指定が終わるとまた開く）
 function _cogoPanelDuringPick() { if(!panelCoversDrawing()) _cogoOwner(_cogo.pick && _cogo.pick.owner).render(); else hidePropertyPanel(); }

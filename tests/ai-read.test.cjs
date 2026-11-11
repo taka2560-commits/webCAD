@@ -256,4 +256,39 @@ describe('座標表の読み取り', () => {
         assert.equal(sent[0].messages[0].content.filter((b) => b.type === 'image').length, 5);
         assert.match(toast(), /8枚のうち、初めの 5枚だけ/);
     });
+
+    // ---- v5.58.4 ----
+    it('1つ直しても、同じ行の欄は作り直さない（次に押した欄が消えて、スマホのキーボードが閉じないように）。色・印はその場で変える', async () => {
+        app.eval(`setAireadKey('${KEY}')`);
+        reply = answer([P('1', 'A', '-1.000', '2.000', '', true, 'X が読みにくい'), P('2', 'B', '-3.000', '4.000')]);
+        await pick(['表.jpg']);
+        app.eval(`window.__row = document.getElementById('airead-row-0'); window.__y = document.querySelector('#airead-row-0 .airead-y'); window.__x = document.querySelector('#airead-row-0 .airead-x');
+            window.__y.focus(); aireadEdit(0, 'x', 'abc')`);
+        assert.equal(app.val(`document.getElementById('airead-row-0') === window.__row && document.querySelector('#airead-row-0 .airead-y') === window.__y`), true, '行・欄は同じ部品のまま');
+        assert.equal(app.val('document.activeElement === window.__y'), true, 'フォーカスは次の欄のまま');
+        assert.equal(app.val(`window.__x.classList.contains('bad') && window.__row.classList.contains('ng')`), true, '数でない欄は赤い');
+        app.eval(`aireadEdit(0, 'x', '－１．５００')`);
+        assert.equal(app.val(`window.__x.value`), '-1.500', '直した値（半角）を欄に戻す');
+        assert.equal(app.val(`window.__x.classList.contains('bad') || window.__row.classList.contains('ng')`), false);
+        assert.equal(app.val(`!!window.__row.querySelector('.airead-why')`), true);
+        app.eval('aireadConfirm(0)');
+        assert.equal(app.val(`!!window.__row.querySelector('.airead-why') || window.__row.classList.contains('unsure')`), false, '「見比べた」で印を外す');
+        app.eval(`aireadEdit(0, 'use', false)`);
+        assert.equal(app.val(`window.__row.classList.contains('off') && !window.__row.querySelector('.airead-use').checked`), true);
+    });
+
+    it('取り込む値の例（m に直したあと）を出す: mm・標高も mm の取り違えに、取り込む前に気づける', async () => {
+        app.eval(`setAireadKey('${KEY}')`);
+        reply = answer([P('1', 'A', '-12345.678', '23456.789', '3456')], { unit: 'mm' });
+        await pick(['表.jpg']);
+        assert.match(sum(), /1点目はこの値で取り込みます: X -12\.346 m・Y 23\.457 m・標高 3\.456 m/);
+        app.eval('aireadSetZmm(false)');
+        assert.match(sum(), /X -12\.346 m・Y 23\.457 m・標高 3456\.000 m/);
+        app.eval('aireadSetMm(false)');
+        assert.match(sum(), /X -12345\.678 m・Y 23456\.789 m・標高 3456\.000 m/);
+        app.eval(`aireadEdit(0, 'z', '')`);
+        assert.doesNotMatch(sum(), /標高/);
+        app.eval(`aireadEdit(0, 'use', false)`);
+        assert.doesNotMatch(sum(), /この値で取り込みます/);
+    });
 });

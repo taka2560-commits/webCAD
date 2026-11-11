@@ -380,4 +380,97 @@ describe('Dropbox 連携', () => {
         await wait(30);
         assert.equal(app.val('window.__saved'), '/WebCAD/c.dxf');
     });
+
+    // ---- v5.58.4 ----
+    it('エラーの知らせは日本語にする（英語の error_summary をそのまま出さない）。通信できないときも', async () => {
+        const T = (status, j, fb) => app.val(`_dbxErrText(${status}, ${JSON.stringify(j)}, ${JSON.stringify(fb || '読めませんでした')})`);
+        assert.match(T(409, { error_summary: 'path/not_found/..' }), /見つかりません/);
+        assert.match(T(409, { error_summary: 'path/insufficient_space/.' }), /空きが足りません/);
+        assert.match(T(409, { error_summary: 'path/no_write_permission/...' }), /書き込めません/);
+        assert.match(T(409, { error_summary: 'path/disallowed_name/' }), /名前/);
+        assert.match(T(429, { error_summary: 'too_many_requests/..' }), /混み合っています/);
+        assert.match(T(503, null), /Dropbox の側/);
+        assert.equal(T(409, { error_summary: 'other/..' }, '保存できませんでした'), '保存できませんでした（other）');
+        assert.equal(T(400, null, '保存できませんでした'), '保存できませんでした（400）');
+        assert.match(app.val(`_dbxCatchText(new TypeError('Failed to fetch'))`), /通信できませんでした/);
+        assert.equal(app.val(`_dbxCatchText(new Error('見つかりません'))`), '見つかりません');
+        // 一覧: 見つからないフォルダ
+        connect();
+        routes[LIST] = { status: 409, json: { error_summary: 'path/not_found/..' } };
+        await app.eval(`dropboxBrowse('/無い')`);
+        await wait(20);
+        const txt = app.val(`document.getElementById('property-panel').textContent`);
+        assert.match(txt, /見つかりません/);
+        assert.doesNotMatch(txt, /not_found/);
+        // 保存: 空きが無い
+        routes['https://content.dropboxapi.com/2/files/upload'] = { status: 409, json: { error_summary: 'path/insufficient_space/..' } };
+        await app.eval(`dropboxSaveBlob(new Blob(['x']), 'c.dxf')`);
+        await wait(20);
+        const tt = app.val(`document.getElementById('cad-toast').textContent`);
+        assert.match(tt, /保存できませんでした: Dropbox の空きが足りません/);
+    });
+
+    it('許可が足りないときは、Dropbox が答えた許可の名前で知らせる', async () => {
+        connect();
+        routes[LIST] = { status: 401, json: { error: { '.tag': 'missing_scope', required_scope: 'files.metadata.read' } } };
+        await app.eval(`dropboxBrowse('')`);
+        await wait(20);
+        assert.match(snack().msg, /files\.metadata\.read にチェック/);
+        // おかしな名前（知らせに混ぜない）: 既定の名前
+        app.eval('hideSnack()');
+        routes[LIST] = { status: 401, json: { error: { '.tag': 'missing_scope', required_scope: '<b>x</b> を押す' } } };
+        await app.eval(`dropboxBrowse('')`);
+        await wait(20);
+        assert.match(snack().msg, /files\.content\.read にチェック/);
+        assert.equal(app.val('dropboxConnected()'), true, '許可が足りないだけでは、接続は消さない');
+    });
+
+    it('混み合っている（429）ときは、少し待って1回だけ送り直す', async () => {
+        connect();
+        app.eval('_dbxRetryUnitMs = 5');
+        try {
+            let n = 0;
+            routes[LIST] = () => (++n === 1 ? { status: 429, json: { error_summary: 'too_many_requests/..' } } : { status: 200, json: { entries: [fileEntry('a.dxf', 'id:a')], has_more: false } });
+            await app.eval(`dropboxBrowse('')`);
+            await wait(60);
+            assert.equal(n, 2);
+            assert.match(app.val(`document.getElementById('property-panel').textContent`), /a\.dxf/);
+            // 2回とも 429 なら、送り直しは1回で止めて知らせる
+            n = 0;
+            routes[LIST] = () => { n++; return { status: 429, json: { error_summary: 'too_many_requests/..' } }; };
+            await app.eval(`dropboxBrowse('')`);
+            await wait(60);
+            assert.equal(n, 2);
+            assert.match(app.val(`document.getElementById('property-panel').textContent`), /混み合っています/);
+        } finally { app.eval('_dbxRetryUnitMs = 1000'); }
+    });
+
+    it('接続を切るときは、端末から先に消す（Dropbox 側の取り消しを待たない）', async () => {
+        connect();
+        let atRevoke = null;
+        routes['https://api.dropboxapi.com/2/auth/token/revoke'] = () => { atRevoke = app.val('dropboxConnected()'); return { status: 200, json: null }; };
+        await app.eval('dropboxDisconnect()');
+        await wait(20);
+        assert.equal(atRevoke, false, '取り消しを送る時点で、端末からは消えている');
+        assert.equal(calls.find((c) => c.url.endsWith('/auth/token/revoke')).opt.headers.Authorization, 'Bearer AT1');
+        assert.equal(app.val('dropboxConnected()'), false);
+    });
+
+    // ---- v5.58.4 G3 ----
+    it('言い換えの取り違えをしない（別の not_found・プログラムのまちがい）。取り直しの途中で接続を切ったら、古い答えで接続を戻さない', async () => {
+        assert.doesNotMatch(app.val(`_dbxErrText(409, { error_summary: 'properties_error/template_not_found/..' }, '保存できませんでした')`), /見つかりません/);
+        assert.match(app.val(`_dbxErrText(409, { error_summary: 'path/not_found/..' }, '読めませんでした')`), /見つかりません/);
+        assert.match(app.val(`_dbxErrText(409, { error_summary: 'not_found/.' }, '読めませんでした')`), /見つかりません/);
+        assert.equal(app.val(`_dbxCatchText(new TypeError('x is not a function'))`), 'x is not a function');
+        assert.match(app.val(`_dbxCatchText(new TypeError('Load failed'))`), /通信できませんでした/);
+        // access token が切れている → 取り直しの応答が届く前に「切る」
+        connect();
+        app.eval(`localStorage.setItem('cad_dropbox_auth', JSON.stringify({ access: 'EXPIRED', exp: Date.now() - 1000, refresh: 'RT1' }))`);
+        routes['https://api.dropboxapi.com/oauth2/token'] = () => { app.eval(`_dbxLs.set('cad_dropbox_auth', null)`); return { status: 200, json: { access_token: 'LATE', expires_in: 14400 } }; };
+        await app.eval(`_dbxToken().then((t) => { window.__tk = t; })`);
+        await wait(20);
+        assert.equal(app.val('window.__tk'), null);
+        assert.equal(app.val('dropboxConnected()'), false, '切ったはずの接続が戻らない');
+        assert.equal(snack(), null, '「許可が切れました」も出さない');
+    });
 });

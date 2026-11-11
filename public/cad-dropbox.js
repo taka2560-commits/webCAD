@@ -145,21 +145,19 @@ async function _dbxToken(force) {
     if(!force && a.access && a.exp > Date.now()) return a.access;
     try {
         const j = await _dbxTokenRequest({ grant_type: 'refresh_token', refresh_token: a.refresh, client_id: dropboxAppKey() });
+        // 取り直しているあいだに接続を切った・つなぎ直したら、古い答えで書き戻さない（切ったはずの接続が戻っていた）
+        const now = _dbxAuth();
+        if(!now || now.refresh !== a.refresh) return null;
         return _dbxSaveAuth(j, a.refresh).access;
     } catch(err) {
+        const now = _dbxAuth();
+        if(!now || now.refresh !== a.refresh) return null;
         if(err.grant) { _dbxLost(); return null; }
         throw err;
     }
 }
-// Dropbox 側でも許可を取り消す（端末から消すだけだと、Dropbox に refresh token が残る）。使える token が無ければ何もしない
-async function _dbxRevoke() {
-    if(!dropboxConnected() || !_dbxOnline()) return;
-    try {
-        const t = await _dbxToken();
-        if(t) await window.fetch('https://api.dropboxapi.com/2/auth/token/revoke', { method: 'POST', headers: { Authorization: 'Bearer ' + t } });
-    } catch { /* 取り消せなくても端末からは消す */ }
-}
-// アプリキーを変える前の許可を取り消す（前のキーで token を取り直してから）。失敗しても続ける
+// Dropbox 側でも許可を取り消す（端末から消すだけだと、Dropbox に refresh token が残る）。
+// 接続を切る・アプリキーを変える前の許可を取り消す（そのキーで token を取り直してから）。失敗しても続ける
 async function _dbxRevokeOld(auth, appKey) {
     if(!auth || !auth.refresh || !appKey || !_dbxOnline()) return;
     try {
@@ -169,7 +167,8 @@ async function _dbxRevokeOld(auth, appKey) {
     } catch { /* 取り消せなくても端末からは消す */ }
 }
 async function dropboxDisconnect() {
-    await _dbxRevoke();
+    // 端末からは先に消す（v5.58.4。以前は Dropbox 側の取り消しを待ってからで、電波が悪いと「切る」を押しても何も起きないように見えた）
+    const auth = _dbxAuth(), key = dropboxAppKey();
     _dbxLs.set('cad_dropbox_auth', null);
     _dbxFolderCache = {};
     _dbxBrowse = null; _dbxSeq++; // 進行中の一覧の応答は捨てる
@@ -178,7 +177,33 @@ async function dropboxDisconnect() {
     addCommandLog('-> Dropbox との接続を切りました');
     showToast('Dropbox との接続を切りました', { ms: 2500 });
     if(typeof showOptionsPanel === 'function' && document.getElementById('opt-dropbox')) showOptionsPanel();
+    await _dbxRevokeOld(auth, key); // Dropbox 側の取り消しは、画面を直したあとで
 }
+
+// Dropbox のエラーを、分かる言葉にする（v5.58.4。以前は英語の error_summary をそのまま出していた）
+function _dbxErrText(status, j, fallback) {
+    const s = String((j && (j.error_summary || (typeof j.error === 'string' ? j.error : ''))) || '');
+    const has = (k) => s.includes(k);
+    if(status === 429 || has('too_many_requests') || has('too_many_write_operations')) return 'Dropbox が混み合っています。少し待ってから、もう一度お試しください';
+    if(has('insufficient_space')) return 'Dropbox の空きが足りません';
+    if(has('no_write_permission')) return 'このフォルダには書き込めません';
+    if(has('disallowed_name')) return 'この名前は Dropbox で使えません';
+    if(has('restricted_content')) return 'Dropbox が、このファイルを扱えない内容として止めました';
+    if(has('malformed_path')) return '場所（フォルダの名前）が正しくありません';
+    if(/(^|\/)not_found/.test(s)) return '見つかりません（消された・動かされたのかもしれません）'; // template_not_found などは別
+    if(has('unsupported_file') || has('not_file')) return 'このファイルは Dropbox から取り出せません';
+    if(status >= 500) return 'Dropbox の側で問題が起きています。少し待ってから、もう一度お試しください';
+    const tag = s.replace(/[/.\s]+$/, '').slice(0, 80);
+    return tag ? `${fallback}（${tag}）` : `${fallback}（${status}）`;
+}
+// 通信できなかったとき（fetch が失敗）も、分かる言葉にする
+function _dbxCatchText(err) {
+    const m = (err && err.message) || String(err);
+    if(/Failed to fetch|NetworkError|Load failed|network (error|connection)/i.test(m)) return '通信できませんでした（電波・回線を確かめてください）';
+    return m;
+}
+let _dbxRetryUnitMs = 1000; // 混み合っているときに待つ時間の単位（テストで短くする）
+const DBX_RETRY_MAX_S = 5;
 
 // Dropbox の API を呼ぶ。token の期限切れは取り直して1回だけ送り直す。許可が取り消されていればつなぎ直しを出して null。
 // 許可（scope）が足りなければ、つなぎ直しを出して null（v5.56 で「読む」許可を足したため、前につないだ人はつなぎ直しが要る）
@@ -199,9 +224,22 @@ async function _dbxCall(send) {
         if(res.status === 401) {
             const t2 = j && j.error && j.error['.tag'];
             if(t2 === 'missing_scope') {
-                showSnack('Dropbox の許可が足りません。Dropbox のアプリの Permissions で files.content.read にチェックして Submit し、つなぎ直してください', { kind: 'warn', ms: 12000, action: { label: '☁ つなぐ', run: () => dropboxConnectStart() } });
+                // 足りない許可の名前は Dropbox の答えから（v5.58.4。以前はいつも files.content.read と出していた）
+                const rs = j.error.required_scope, need = (typeof rs === 'string' && /^[a-z_.]{3,60}$/.test(rs)) ? rs : 'files.content.read';
+                showSnack(`Dropbox の許可が足りません。Dropbox のアプリの Permissions で ${need} にチェックして Submit し、つなぎ直してください`, { kind: 'warn', ms: 12000, action: { label: '☁ つなぐ', run: () => dropboxConnectStart() } });
             } else _dbxLost();
             return null;
+        }
+    }
+    // 混み合っている（429）: 言われた秒数（無ければ 1 秒。長すぎるときは待たない）だけ待って、1回だけ送り直す（v5.58.4）
+    if(res.status === 429) {
+        let wait = 1;
+        try { const h = Number(res.headers && res.headers.get && res.headers.get('Retry-After')); if(h > 0) wait = h; } catch { /* 1 秒 */ }
+        if(wait <= DBX_RETRY_MAX_S) {
+            await new Promise((r) => setTimeout(r, wait * _dbxRetryUnitMs));
+            token = await _dbxToken();
+            if(!token) return null;
+            res = await send(token);
         }
     }
     return res;
@@ -245,7 +283,7 @@ async function dropboxBrowse(path, fallbackRoot) {
         if(res.status === 409 && fallbackRoot && p) return dropboxBrowse('', false); // 保存先のフォルダがまだ無い: いちばん上
         let j = await res.json().catch(() => null);
         if(gone()) return;
-        if(!res.ok || !j) throw new Error((j && j.error_summary) || `一覧を読めませんでした（${res.status}）`);
+        if(!res.ok || !j) throw new Error(_dbxErrText(res.status, j, '一覧を読めませんでした'));
         const all = [...(j.entries || [])];
         let hasMore = !!j.has_more, cursor = j.cursor, partial = false;
         while(hasMore && all.length < DBX_LIST_MAX) {
@@ -266,7 +304,7 @@ async function dropboxBrowse(path, fallbackRoot) {
         _dbxRenderBrowse();
     } catch(err) {
         if(gone()) return;
-        _dbxBrowse = { path: p, entries: [], others: 0, busy: false, error: (err && err.message) || String(err) };
+        _dbxBrowse = { path: p, entries: [], others: 0, busy: false, error: _dbxCatchText(err) };
         _dbxRenderBrowse();
     }
 }
@@ -319,7 +357,7 @@ window.dropboxBrowsePick = async function(i) {
     try {
         const res = await _dbxCall((t) => window.fetch('https://content.dropboxapi.com/2/files/download', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Dropbox-API-Arg': dropboxApiArg({ path: e.id || e.path_lower }) } }));
         if(!res) { back(); return; }
-        if(!res.ok) { const j = await res.json().catch(() => null); throw new Error((j && j.error_summary) || `読めませんでした（${res.status}）`); }
+        if(!res.ok) { const j = await res.json().catch(() => null); throw new Error(_dbxErrText(res.status, j, '読めませんでした')); }
         const blob = await res.blob();
         // 読んでいるあいだに閉じた・接続を切ったなら、開かない（やめたものとして扱う）
         if(seq !== _dbxSeq || !_dbxBrowseShown()) { back(); return; }
@@ -332,7 +370,7 @@ window.dropboxBrowsePick = async function(i) {
         openIncomingFile(file);
     } catch(err) {
         back();
-        showToast(`Dropbox から開けませんでした: ${(err && err.message) || err}`, { kind: 'error', ms: 4500 });
+        showToast(`Dropbox から開けませんでした: ${_dbxCatchText(err)}`, { kind: 'error', ms: 4500 });
     }
 };
 
@@ -374,13 +412,13 @@ async function dropboxSaveBlob(blob, filename) {
         if(!res) return null;
         let j = null;
         try { j = await res.json(); } catch { /* 下で知らせる */ }
-        if(!res.ok || !j) throw new Error((j && (j.error_summary || j.error)) || `保存できませんでした（${res.status}）`);
+        if(!res.ok || !j) throw new Error(_dbxErrText(res.status, j, '保存できませんでした'));
         const saved = j.path_display || path;
         addCommandLog(`-> Dropbox に保存しました: ${saved}`);
         showToast(`Dropbox に保存しました: ${saved}`, { kind: 'success', ms: 4500 });
         return saved;
     } catch(err) {
-        showToast(`Dropbox に保存できませんでした: ${(err && err.message) || err}`, { kind: 'error', ms: 5000 });
+        showToast(`Dropbox に保存できませんでした: ${_dbxCatchText(err)}`, { kind: 'error', ms: 5000 });
         return null;
     }
 }

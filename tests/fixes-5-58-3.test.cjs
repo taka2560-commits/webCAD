@@ -66,7 +66,7 @@ describe('v5.58.3 の不具合の修正', () => {
         const lots = [{ num: '7', name: '848-1', refs: [{ num: '1' }, { num: '2' }, { num: '3' }, { num: '4' }] }];
         app.eval(`addSurveyData(${JSON.stringify(pts)}, ${JSON.stringify(lots)}); entities.push({ type: 'PLINE', layer: 0, color: null, closed: true, points: [{ x: 50, y: 50 }, { x: 60, y: 50 }, { x: 60, y: 60 }] });`);
         const sima0 = app.val(`buildSimaText('t').text`);
-        assert.match(sima0, /D00,1,848-1,1,/);
+        assert.match(sima0, /D00,7,848-1,1,/);
         const out = exportText(app);
         const L = out.split(/\r?\n/);
         const i = L.findIndex((s) => s.startsWith('WEBCAD:') && s.includes('"lot":1'));
@@ -77,7 +77,7 @@ describe('v5.58.3 の不具合の修正', () => {
         assert.equal(pl.length, 2);
         assert.deepEqual({ ...pl.find((e) => e.n) }, { n: '848-1', k: '7', c: true, p: 4 });
         assert.equal(pl.filter((e) => e.n === undefined).length, 1, 'ふつうのポリラインは区画にしない');
-        assert.match(app.val(`buildSimaText('t').text`), /D00,1,848-1,1,/);
+        assert.match(app.val(`buildSimaText('t').text`), /D00,7,848-1,1,/);
     });
 
     it('区画の拡張データ: DWG に保存し直したもの（読込エンジンの形）でも戻る。中身がおかしければ区画にしない', () => {

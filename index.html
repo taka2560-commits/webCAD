@@ -963,6 +963,14 @@
         #sel-actionbar { bottom: calc(18px + 38px * var(--btn-k, 1)); right: calc(18px + 40px * var(--btn-k, 1)); }
         body.fullscreen-mode #sel-actionbar { left: calc(28px + 44px * var(--btn-k, 1)); right: calc(26px + 46px * var(--btn-k, 1)); }
         body:not(.fullscreen-mode) #fs-dim-actionbar { bottom: calc(18px + 38px * var(--btn-k, 1)) !important; }
+        /* コマンド欄を開いているときは、下のバーを欄の上に出す（v5.58.4。以前は入力欄に重なって、打った字・案内が隠れた）。欄の高さは 160px（幅 430px までは 120px） */
+        body:not(.fullscreen-mode):has(#command-line-area:not(.collapsed)) #fs-dim-actionbar { bottom: calc(182px + 38px * var(--btn-k, 1)) !important; }
+        @media screen and (max-width: 430px) { body:not(.fullscreen-mode):has(#command-line-area:not(.collapsed)) #fs-dim-actionbar { bottom: calc(142px + 38px * var(--btn-k, 1)) !important; } }
+        /* 選択バーも同じ（図形を選んで字を打つと、コマンド欄が開いて入力欄に重なっていた） */
+        body:not(.fullscreen-mode):has(#command-line-area:not(.collapsed)) #sel-actionbar { bottom: calc(182px + 38px * var(--btn-k, 1)); }
+        @media screen and (max-width: 430px) { body:not(.fullscreen-mode):has(#command-line-area:not(.collapsed)) #sel-actionbar { bottom: calc(142px + 38px * var(--btn-k, 1)); } }
+        /* 下のバーが「⌨ コマンド」「?」のボタンに重なる幅のときは、その上に出す（高さは cad-core.js の _actionbarAvoidButtons が決める） */
+        body:not(.fullscreen-mode) #fs-dim-actionbar.ab-up { bottom: var(--ab-lift, calc(28px + 118px * var(--btn-k, 1))) !important; }
         #fav-bar.fav-v { max-height: calc(100vh - 152px - 118px * var(--btn-k, 1)); max-height: calc(100dvh - 152px - 118px * var(--btn-k, 1)); }
         #fav-bar.fav-h { max-width: calc(100vw - 24px - 52px * var(--btn-k, 1)); }
         #guide-hint { top: calc(24px + 44px * var(--btn-k, 1)); }
@@ -1424,7 +1432,7 @@
         <button id="dim-dir-toggle" onclick="dimToggleDir()" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⚙ 自動 (X/Y)</button>
         <button id="dim-snap-cycle" onclick="cycleSnapCandidate()" title="重なったスナップの候補を切り替え" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⇄</button>
         <button id="pline-close-btn" onclick="plineCloseFromBar()" title="始点に戻って閉じた形にする" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">⭘ 閉じる</button>
-        <button id="line-undo-btn" onclick="lineUndoStep()" title="最後に引いた線を消して、その始点から引き直す（線が無ければ始点を取り消す）" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">↶ 1つ戻す</button>
+        <button id="line-undo-btn" onclick="lineUndoStep()" title="線分: 最後に引いた線を消して、その始点から引き直す（線が無ければ始点を取り消す）。ポリライン: 最後に打った点を取り消す" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">↶ 1つ戻す</button>
         <button id="dim-meas-write" onclick="measureWriteDims()" style="display:none; background:#00ff88; color:#000; border:none; padding:8px 16px; border-radius:16px; font-weight:bold; font-size:14px;">📐 記入</button>
         <button id="dim-meas-base" onclick="measureSetBase()" style="display:none; background:#444; color:#fff; border:1px solid #666; padding:6px 12px; border-radius:12px; font-size:12px;">📍 基点</button>
         <button id="dim-cancel-btn" onclick="issueCommand('CANCEL')" style="background:transparent; color:#ff6b6b; border:1px solid #ff6b6b; padding:6px 12px; border-radius:12px; font-size:12px;">❌ 終了</button>

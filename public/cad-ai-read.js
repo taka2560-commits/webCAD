@@ -289,7 +289,10 @@ function _aireadSumHtml() {
     const n = pts.filter(Boolean).length;
     const bad = A.rows.filter((r, i) => r.use && !pts[i]).length;
     const nUnsure = A.rows.filter((r, i) => pts[i] && r.unsure).length; // 取り込む行のうち
-    return { n, html: `取り込む点: <b>${n}点</b>${nUnsure ? `（うち見比べていない、自信の無い行 ${nUnsure}）` : ''}${bad ? `<br><span style="color:#ff6b6b;">X・Y・標高が数でない行 ${bad} は取り込みません（赤い欄を直すか、「入れる」を外してください）</span>` : ''}` };
+    // 取り込む値の例（m に直したあと）: 単位（mm・標高も mm）や X・Y の順の取り違えに、取り込む前に気づけるように（v5.58.4）
+    const p0 = pts.find(Boolean), f3 = (v) => Number(v).toFixed(3);
+    const eg = p0 ? `<br>1点目はこの値で取り込みます: X ${f3(p0.X)} m・Y ${f3(p0.Y)} m${(p0.z === null || p0.z === undefined) ? '' : `・標高 ${f3(p0.z)} m`}` : '';
+    return { n, html: `取り込む点: <b>${n}点</b>${nUnsure ? `（うち見比べていない、自信の無い行 ${nUnsure}）` : ''}${eg}${bad ? `<br><span style="color:#ff6b6b;">X・Y・標高が数でない行 ${bad} は取り込みません（赤い欄を直すか、「入れる」を外してください）</span>` : ''}` };
 }
 function _aireadRefreshSum() {
     const s = _aireadSumHtml();
@@ -302,11 +305,22 @@ function _aireadRefreshSum() {
 function _aireadRefreshRow(i) {
     const el = document.getElementById(`airead-row-${i}`);
     if(!el || !_airead) return;
-    const active = document.activeElement, keepKey = active && active.closest && active.closest(`#airead-row-${i}`) ? active.dataset.key : null;
     const t = document.createElement('div');
     t.innerHTML = _aireadRowHtml(_airead.rows[i], i);
-    el.replaceWith(t.firstElementChild);
-    if(keepKey) { const n = document.querySelector(`#airead-row-${i} [data-key="${keepKey}"]`); if(n) n.focus(); }
+    const n = t.firstElementChild;
+    // 欄は作り直さず、色と値だけ合わせる（v5.58.4）。以前は行ごと作り直していて、同じ行の別の欄を押した瞬間に
+    // その欄が消えて、スマホではキーボードが閉じていた（直した欄の change は、次の欄にフォーカスが移る前に起きる）
+    el.className = n.className;
+    n.querySelectorAll('input').forEach((ni) => {
+        const oi = ni.dataset.key ? el.querySelector(`input[data-key="${ni.dataset.key}"]`) : el.querySelector('input.airead-use');
+        if(!oi) return;
+        oi.className = ni.className;
+        if(ni.type === 'checkbox') oi.checked = ni.checked;
+        else if(oi.value !== ni.value) oi.value = ni.value;
+    });
+    const ow = el.querySelector('.airead-why'), nw = n.querySelector('.airead-why');
+    if(ow && !nw) ow.remove();
+    else if(!ow && nw) el.appendChild(nw);
 }
 function aireadRenderReview() {
     const A = _airead;

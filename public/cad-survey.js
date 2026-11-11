@@ -319,7 +319,7 @@ function _prepareExport() {
             if(!p) { p = { num: String(next++), name: `${lotName}-${vi + 1}`, X: s.X, Y: s.Y, z: null }; pts.push(p); byKey.set(k, p); }
             return p;
         });
-        return { name: lotName, refs };
+        return { name: lotName, num: lot.num, refs };
     });
     return { pts, lots, lotAdded: pts.length - base };
 }
@@ -334,8 +334,12 @@ function buildSimaText(title) {
     L.push('A99,');
     if(lots.length) {
         L.push('Z00,区画ﾃﾞｰﾀ,');
+        // 区画番号: 取り込んだ番号がすべての区画にあり、重なっていなければそのまま（v5.58.4。以前はいつも 1 からの連番で、取り込んだ 7 が 1 になった）。
+        // 1つでも無い・数でない・重なるときは、1 からの連番
+        const nums = lots.map(l => String(l.num === undefined || l.num === null ? '' : l.num).trim());
+        const keepNum = nums.every(n => /^\d{1,9}$/.test(n)) && new Set(nums.map(Number)).size === nums.length;
         lots.forEach((lot, i) => {
-            L.push(`D00,${i + 1},${_simaField(lot.name)},1,`);
+            L.push(`D00,${keepNum ? nums[i] : i + 1},${_simaField(lot.name)},1,`);
             lot.refs.forEach(p => L.push(`B01,${_simaField(p.num)},${_simaField(p.name)},`));
             L.push('D99,');
         });

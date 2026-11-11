@@ -643,6 +643,10 @@ function handleDimPointInput(mode, wcs) {
     }
     if(mode === 'WAITING_DIMRAD_POS') {
         const e = cmdState.dimTarget;
+        if(!e || !entities.includes(e)) { // 選んだ円・弧が消えていた（↩ など）: 無い図形の寸法を作らず、選び直す（v5.58.4）
+            cmdState.mode = 'WAITING_DIMRAD_SELECT'; cmdState.dimTarget = null; setPrompt('円/弧を選択: (☑️確定)');
+            addCommandLog('-> 選んだ円/弧がなくなりました。選び直してください'); if(typeof render==='function') render(); return;
+        }
         const angle = Math.atan2(wcs.y - e.cy, wcs.x - e.cx);
         saveUndo(); entities.push({type:'DIMENSION', subType:'RADIUS', layer:currentLayerIndex, color:null, center:{x:e.cx,y:e.cy}, radius:e.radius, angle:angle, textOverride:null});
         addCommandLog('-> 半径寸法作成'); cmdState.mode = 'WAITING_DIMRAD_SELECT'; cmdState.dimTarget = null; setPrompt('円/弧を選択: (☑️確定)'); if(typeof render==='function') render(); return;
@@ -658,6 +662,10 @@ function handleDimPointInput(mode, wcs) {
     }
     if(mode === 'WAITING_DIMDIA_POS') {
         const e = cmdState.dimTarget;
+        if(!e || !entities.includes(e)) { // 選んだ円・弧が消えていた（↩ など）: 無い図形の寸法を作らず、選び直す（v5.58.4）
+            cmdState.mode = 'WAITING_DIMDIA_SELECT'; cmdState.dimTarget = null; setPrompt('円/弧を選択: (☑️確定)');
+            addCommandLog('-> 選んだ円/弧がなくなりました。選び直してください'); if(typeof render==='function') render(); return;
+        }
         const angle = Math.atan2(wcs.y - e.cy, wcs.x - e.cx);
         saveUndo(); entities.push({type:'DIMENSION', subType:'DIAMETER', layer:currentLayerIndex, color:null, center:{x:e.cx,y:e.cy}, radius:e.radius, angle:angle, textOverride:null});
         addCommandLog('-> 直径寸法作成'); cmdState.mode = 'WAITING_DIMDIA_SELECT'; cmdState.dimTarget = null; setPrompt('円/弧を選択: (☑️確定)'); if(typeof render==='function') render(); return;
@@ -863,6 +871,7 @@ function _showDimActionBar(isContinuous) {
     if(toggleBtn) toggleBtn.style.display = isContinuous ? 'inline-block' : 'none';
     const dirBtn = document.getElementById('dim-dir-toggle');
     if(dirBtn) dirBtn.style.display = isContinuous ? 'inline-block' : 'none';
+    if(typeof fitPanelAboveActionbarSoon === 'function') fitPanelAboveActionbarSoon(); // 開いているパネルがバーに隠れないように（v5.58.4）
 }
 
 // ===== 基点測定 =====
@@ -982,6 +991,7 @@ function _showMeasureBar(stage) {
     const modeBtn = document.getElementById('dim-mode-toggle'); if(modeBtn) modeBtn.style.display = 'none';
     const dirBtn = document.getElementById('dim-dir-toggle'); if(dirBtn) dirBtn.style.display = 'none';
     const writeBtn = document.getElementById('dim-meas-write'); if(writeBtn) writeBtn.style.display = (stage === 'TO') ? '' : 'none';
+    if(typeof fitPanelAboveActionbarSoon === 'function') fitPanelAboveActionbarSoon(); // 開いているパネルがバーに隠れないように（v5.58.4）
     const baseBtn = document.getElementById('dim-meas-base'); if(baseBtn) baseBtn.style.display = (stage === 'TO') ? '' : 'none';
 }
 
