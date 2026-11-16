@@ -5,6 +5,7 @@
 //   ・選び方は鏡像・尺度変更と同じ（選んでから始める・タップ・範囲選択）
 //   ・張り合わせ点は SIMA の変換と同じ別窓の方式（別窓で動かす側の点をタップ → 図面で合わせる先の点を ☑確定）
 //   ・別窓のタップは、動かす図形に吸い付く（端点・中点・交点・中心・四半円点・線の上。図面のスナップと同じ計算。v5.59.1）
+//   ・動かす側の点も、図面の上で指定できる（📍 図面で組を指定: 動かす側の点 → 合わせる先の点。続けて次の組。v5.59.2）
 //   ・組の入れ替え・使う／外す・点名で組にする・鏡像の知らせ・合わない組の知らせ・確かめの画面・全体表示・↩ 1回で戻る
 const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
@@ -467,6 +468,263 @@ describe('図形の張り合わせ（HALIGN）', () => {
         assert.doesNotMatch(panel(), /組が少ないので/, '縮尺も求める: 4組あれば見分けられる');
         app.eval('alignDeletePair(3)');
         assert.match(panel(), /組が少ないので/, '縮尺も求める: 3組では見分けられない');
+    });
+
+    // ===== 📍 図面で組を指定（v5.59.2）: 動かす側の点も、図面のスナップ（なぞって ☑確定）で指定する =====
+    describe('図面で組を指定', () => {
+        const prompt = () => app.val(`document.getElementById('command-prompt').textContent`);
+        const key = () => app.val('cogoIsPicking() && _cogo.pick ? _cogo.pick.keys[_cogo.pick.i] : ""');
+
+        it('動かす側の点 → 合わせる先の点 の順に指定して1組。続けて次の組へ。❌終了 でパネルに戻る。動かすと、ぴったり合う', () => {
+            start([0, 1, 2, 3]);
+            assert.match(panel(), /📍 図面で組を指定/);
+            assert.equal(app.val(`!!document.getElementById('align-pick-draw')`), true);
+            app.eval('alignPickInDrawing()');
+            assert.equal(key(), 'AS');
+            assert.match(prompt(), /動かす側の点をなぞって ☑確定/);
+            assert.match(toast(), /動かす側の点 → 合わせる先の点 の順に/);
+            assert.equal(app.val(`document.getElementById('fs-dim-actionbar').style.display`), 'flex', '☑確定・❌終了 の帯');
+            pt(0, 0);
+            assert.equal(key(), 'AT', '続けて、合わせる先の点');
+            assert.match(prompt(), /合わせる先の点をなぞって ☑確定/);
+            assert.deepEqual({ ...app.val('_align.sel') }, { x: 0, y: 0, t: '' }, '選んだ動かす側の点を、すぐ印にする（描き直しを待たない）');
+            assert.doesNotThrow(() => app.eval('drawAlignOverlay(); _alignViewInst.drawNow();'));
+            assert.equal(app.val('_align.pairs.length'), 0);
+            pt(1000, 1000);
+            assert.deepEqual(JSON.parse(app.val('JSON.stringify(_align.pairs)')), [{ src: { x: 0, y: 0 }, dst: { x: 1000, y: 1000, name: '' }, use: true }]);
+            assert.equal(key(), 'AS', '組が決まったら、続けて次の組の動かす側の点');
+            assert.equal(app.val('_align.sel'), null);
+            assert.match(panel(), /あと 1組/, 'PC ではパネルを出したまま、表が増える');
+            // 2組目（90° 回して (1000,1000) へ: (40,0) → (1000,1040)）
+            pt(40, 0); pt(1000, 1040);
+            assert.equal(app.val('_align.pairs.length'), 2);
+            assert.equal(key(), 'AS');
+            // 動かす側の点だけ選んで ❌終了: その点は捨てる。組はそのまま
+            pt(40, 25);
+            assert.equal(key(), 'AT');
+            app.eval(`processCommand('CANCEL')`);
+            assert.equal(app.val('cogoIsPicking()'), false);
+            assert.equal(app.val('_align.sel'), null);
+            assert.equal(app.val('_align.loop'), false);
+            assert.equal(app.val('_align.pairs.length'), 2);
+            assert.match(panel(), /回転/);
+            assert.equal(app.val('_cogo.slots.AS === undefined && _cogo.slots.AT === undefined'), true, '指定の残りを残さない');
+            go();
+            const e = app.val('({ a: [entities[0].x1, entities[0].y1, entities[0].x2, entities[0].y2], c: [entities[2].cx, entities[2].cy, entities[2].radius] })');
+            [1000, 1000, 1000, 1040].forEach((v, i) => assert.ok(near(e.a[i], v, 1e-9), JSON.stringify(e)));
+            assert.ok(near(e.c[0], 990, 1e-9) && near(e.c[1], 1020, 1e-9) && e.c[2] === 4, '円 (20,10) → (1000 − 10, 1000 + 20)');
+            assert.equal(app.val('undoStack.length'), 1);
+        });
+
+        it('同じ動かす側の点を指定し直すと、その組を入れ替える。別窓のタップに切り替えたら、その1組だけで続きの指定はしない', () => {
+            start([0, 1, 2, 3]);
+            app.eval('alignPickInDrawing()');
+            pt(0, 0); pt(1000, 1000);
+            pt(0, 0); pt(1000, 1001);
+            assert.equal(app.val('_align.pairs.length'), 1);
+            assert.equal(app.val('_align.pairs[0].dst.y'), 1001);
+            assert.equal(key(), 'AS');
+            // 図面で動かす側の点を待っているあいだに、別窓で点を選んだ: 別窓の点を使い、合わせる先の点へ
+            app.eval(`alignSelectSource({ x: 40, y: 25, t: '端点' })`);
+            assert.equal(key(), 'AT');
+            assert.equal(app.val('_align.loop'), false);
+            pt(975, 1040);
+            assert.equal(app.val('cogoIsPicking()'), false, '別窓からの1組が終わったら、パネルに戻る');
+            assert.deepEqual({ ...app.val('_align.pairs[1].src') }, { x: 40, y: 25 });
+            // 図面で動かす側の点を選んだあとに、別窓で選び直した: 別窓の点が勝つ（前の指定の残りを使わない）
+            app.eval('alignPickInDrawing()');
+            pt(40, 0);
+            app.eval(`alignSelectSource({ x: 20, y: 10, t: '中心' })`);
+            pt(990, 1020);
+            assert.deepEqual({ ...app.val('_align.pairs[2].src') }, { x: 20, y: 10 });
+            assert.equal(app.val('_align.pairs.length'), 3);
+        });
+
+        it('動かす側の点が、動かさない図形の点だったら知らせる（動かす図形の点・両方に重なる点・どこにも重ならない点では出さない）', () => {
+            start([0, 1, 2, 3]);
+            assert.deepEqual([...app.val(`[_alignPointSide({ x: 0, y: 0 }), _alignPointSide({ x: 1000, y: 1000 }), _alignPointSide({ x: 7, y: 7 })]`)], ['sel', 'other', '']);
+            app.eval(`entities.push({ type: 'LINE', layer: 0, color: null, x1: 40, y1: 25, x2: 60, y2: 25 }); _bumpGeomEpoch();`);
+            assert.equal(app.val(`_alignPointSide({ x: 40, y: 25 })`), 'both');
+            app.eval(`alignPickInDrawing()`);
+            app.eval(`showToast('x', 10)`);
+            pt(40, 25);
+            assert.doesNotMatch(toast(), /動かさない図形の上/);
+            pt(975, 1040);
+            pt(1000, 1040);
+            assert.match(toast(), /動かす側の点が、動かさない図形の上にあります/);
+            app.eval(`processCommand('CANCEL')`);
+            assert.equal(app.val('_align.pairs.length'), 1);
+        });
+
+        it('スマホの幅: 指定のあいだはパネルを隠して別窓をたたんだまま、続けて次の組へ。選んだ動かす側の点は、すぐ印になる。❌終了 で元に戻る', () => {
+            app.eval('window.innerWidth = 390');
+            start([0, 1]);
+            app.eval('alignPickInDrawing()');
+            assert.equal(panel(), '');
+            assert.equal(app.val('_alignViewInst.collapsed && _align.folded'), true);
+            pt(0, 0);
+            assert.deepEqual({ ...app.val('_align.sel') }, { x: 0, y: 0, t: '' }, 'パネルを隠していても、選んだ動かす側の点を、すぐ印にする');
+            assert.equal(app.val('_cogo.slots.AS'), undefined);
+            pt(1000, 1000);
+            assert.equal(key(), 'AS');
+            assert.equal(panel(), '', '続きの指定のあいだも隠したまま');
+            assert.equal(app.val('_alignViewInst.collapsed && _align.folded'), true, '別窓もたたんだまま');
+            pt(40, 0); pt(1000, 1040);
+            assert.equal(app.val('_align.pairs.length'), 2);
+            app.eval(`processCommand('CANCEL')`);
+            assert.match(panel(), /回転/);
+            assert.equal(app.val('_alignViewInst.collapsed || _align.folded'), false);
+        });
+
+        it('やめる・動かす・図面を開き直すと、続きの指定も終わる。張り合わせの外では始まらない', () => {
+            assert.equal(app.val('alignPickInDrawing()'), false);
+            assert.equal(app.val('cogoIsPicking()'), false);
+            start([0, 1]);
+            app.eval('alignPickInDrawing()');
+            pt(0, 0);
+            app.eval('alignCancel()');
+            assert.equal(app.val('cogoIsPicking() || _align.on || _align.loop'), false);
+            assert.equal(app.val('_cogo.slots.AS === undefined'), true);
+            // やめたあとに始め直しても、前の点を引き継がない
+            app.eval(`cmdState.selectedIndices = [0, 1]; processCommand('HALIGN'); alignPickInDrawing();`);
+            assert.equal(key(), 'AS');
+            assert.equal(app.val('_align.sel'), null);
+            pt(0, 0); pt(1000, 1000); pt(40, 0); pt(1000, 1040);
+            // 指定の途中で「▶ 動かす」（PC ではパネルが出ている）
+            go();
+            assert.equal(app.val('cogoIsPicking() || _align.on'), false);
+            assert.ok(near(app.val('entities[0].x2'), 1000, 1e-9) && near(app.val('entities[0].y2'), 1040, 1e-9));
+        });
+
+        // ===== G3（別の担当の点検）で見つかった点の直し =====
+        it('どちらの図形の上か: 公共座標でも、10cm となりの点と取り違えない。動かさない図形の中点・円の上でも知らせる。見えない図形は数えない', () => {
+            const side = (x, y) => app.val(`_alignPointSide({ x: ${x}, y: ${y} })`);
+            // 公共座標の大きさ。動かす線と、その端点・中点から 10cm の所にある動かさない測点
+            app.eval(`layers.push({ name: '隠す', color: '#ffffff', visible: false });
+                entities.push({ type: 'LINE', layer: 0, color: null, x1: 23470.5, y1: -112360.25, x2: 23510.5, y2: -112360.25 },
+                    { type: 'POINT', layer: 0, color: null, x: 23490.5, y: -112360.15, name: 'T1' }, { type: 'POINT', layer: 0, color: null, x: 23470.5, y: -112360.35, name: 'T2' },
+                    { type: 'LINE', layer: 0, color: null, x1: 23800, y1: -112800, x2: 23900, y2: -112800 }, { type: 'CIRCLE', layer: 0, color: null, cx: 23700, cy: -112700, radius: 5 },
+                    { type: 'LINE', layer: 0, color: null, x1: 23490.5, y1: -112370, x2: 23490.5, y2: -112350 },
+                    { type: 'POINT', layer: 1, color: null, x: 23300, y: -112300, name: 'H' }, { type: 'POINT', layer: 0, color: null, x: 23310, y: -112300, name: 'H2', hidden: true }, { type: 'PIN', layer: 0, x: 23320, y: -112300 });
+                cmdState.selectedIndices = [0]; processCommand('HALIGN');`);
+            assert.equal(side(23490.5, -112360.25), 'both', '動かす線の中点。動かさない線 (x=23490.5) とも交わる');
+            assert.equal(side(23480.5, -112360.25), 'sel', '動かす線の上（要の点でなくても）');
+            assert.equal(side(23470.5, -112360.25), 'sel', '動かす線の端点。10cm となりの T2 とは取り違えない（以前は both）');
+            assert.equal(side(23470.5, -112360.35), 'other', '10cm となりの測点 T2 そのもの（以前は both で、知らせが出なかった）');
+            assert.equal(side(23490.5, -112360.15), 'other', '動かさない線の上にある測点 T1（動かす線から 10cm）');
+            assert.equal(side(23850, -112800), 'other', '動かさない線の中点');
+            assert.equal(side(23705, -112700), 'other', '動かさない円の四半円点');
+            assert.equal(side(23700 + 5 * Math.cos(1), -112700 + 5 * Math.sin(1)), 'other', '動かさない円の上');
+            assert.equal(side(23600, -112600), '', 'どの図形の上でもない');
+            assert.deepEqual([side(23300, -112300), side(23310, -112300), side(23320, -112300)], ['', '', ''], '非表示の画層・非表示・写真のピンは数えない');
+            // 知らせ: 動かさない線の中点を動かす側にした
+            app.eval(`alignPickInDrawing(); showToast('x', 10);`);
+            pt(23850, -112800);
+            assert.match(toast(), /動かす側の点が、動かさない図形の上にあります/);
+            app.eval(`processCommand('CANCEL'); showToast('x', 10); alignPickInDrawing();`);
+            pt(23480.5, -112360.25);
+            assert.doesNotMatch(toast(), /動かさない図形の上/, '動かす線の上の点では出さない');
+            // 表の点名: 10cm となりの測点の名前を出さない（座標を出す）
+            pt(1000, 1000); app.eval(`processCommand('CANCEL')`);
+            app.eval(`_align.pairs.push({ src: { x: 23470.5, y: -112360.25 }, dst: { x: 5, y: 5, name: '' }, use: true }); alignPanel();`);
+            assert.doesNotMatch(app.val(`document.querySelector('#property-panel .cogo-table').textContent`), /T2|T1/);
+        });
+
+        it('☑確定 を続けて2度押しても、1つずれない（同じ点はすぐには合わせる先にしない）。案内に、何組目のどちらの点かを出す', () => {
+            start([0, 1, 2, 3]);
+            app.eval('alignPickInDrawing()');
+            assert.match(prompt(), /^組 No\.1: 動かす側の点をなぞって ☑確定/);
+            pt(0, 0); pt(0, 0); // 続けて2度
+            assert.equal(app.val('_align.pairs.length'), 0, '組にしない');
+            assert.equal(key(), 'AT', '合わせる先の点を聞き直す');
+            assert.deepEqual({ ...app.val('_align.sel') }, { x: 0, y: 0, t: '' });
+            assert.match(toast(), /同じ点を続けて押しました/);
+            assert.match(prompt(), /^組 No\.1: 合わせる先の点をなぞって ☑確定/);
+            pt(1000, 1000);
+            assert.deepEqual(JSON.parse(app.val('JSON.stringify(_align.pairs)')), [{ src: { x: 0, y: 0 }, dst: { x: 1000, y: 1000, name: '' }, use: true }]);
+            assert.match(prompt(), /^組 No\.2: 動かす側の点/);
+            // 少し間をおいた同じ点は、そのまま組にする（その点は動かさない）
+            pt(40, 0); app.eval('_align.selAt -= 5000');
+            assert.match(prompt(), /^組 No\.2: 合わせる先の点/);
+            pt(40, 0);
+            assert.deepEqual({ ...app.val('_align.pairs[1].dst') }, { x: 40, y: 0, name: '' });
+            // 指定し直すときは、その組の番号
+            pt(0, 0);
+            assert.match(prompt(), /^組 No\.1: 合わせる先の点/);
+            app.eval(`processCommand('CANCEL')`);
+            // 別窓から選んだとき（続きの指定ではない）も、番号を出す
+            app.eval(`alignSelectSource({ x: 40, y: 25 })`);
+            assert.match(prompt(), /^組 No\.3: 合わせる先の点/);
+        });
+
+        it('組を指定したあとに動かす図形が動いたら知らせる（動かす側の点は、指定したときの位置のまま）。元に戻れば出さない', () => {
+            start([0, 1, 2, 3]);
+            app.eval('alignPickInDrawing()');
+            pt(0, 0); pt(1000, 1000); pt(40, 0); pt(1000, 1040);
+            app.eval(`processCommand('CANCEL')`);
+            assert.doesNotMatch(panel(), /動かす図形が変わっています/);
+            assert.equal(app.val('Object.keys(_align.pairs[0]).join(",")'), 'src,dst,use', '図形のしるしは、組の形には出さない');
+            // 動かす図形を東へ 100 動かした（MOVE・↩ など）
+            app.eval(`[0, 1, 2, 3].forEach((i) => editTransformEntity(entities[i], editMoveXform(100, 0))); _bumpGeomEpoch(); alignPanel();`);
+            assert.match(panel(), /組を指定したあとに、動かす図形が変わっています/);
+            app.eval(`window.__cc = cadChoose; cadChoose = (o) => { window.__dlg = o; }; try { alignApply(); } finally { cadChoose = window.__cc; }`);
+            assert.match(app.val('window.__dlg.message'), /動かす図形が変わっています/, '確かめの画面にも出す');
+            // 元の位置に戻した: 出さない
+            app.eval(`[0, 1, 2, 3].forEach((i) => editTransformEntity(entities[i], editMoveXform(-100, 0))); _bumpGeomEpoch(); alignPanel();`);
+            assert.doesNotMatch(panel(), /動かす図形が変わっています/);
+            // 動いたあとに指定し直した組は、新しい位置のしるしになる
+            app.eval(`[0, 1, 2, 3].forEach((i) => editTransformEntity(entities[i], editMoveXform(100, 0))); _bumpGeomEpoch(); alignDeletePair(1); alignDeletePair(0); alignPickInDrawing();`);
+            pt(100, 0); pt(1000, 1000); pt(140, 0); pt(1000, 1040);
+            app.eval(`processCommand('CANCEL')`);
+            assert.doesNotMatch(panel(), /動かす図形が変わっています/);
+            // 点名で組にした組にも、しるしを付ける
+            assert.equal(app.val('typeof _alignStamp({}).sig'), 'string');
+        });
+
+        it('❌終了 を通らずに指定が終わっても（別のコマンドを始めた）、選んだ点・続きの指定・たたんだ別窓を残さない。動かす図形が無くなったら続けない', () => {
+            app.eval('window.innerWidth = 390');
+            start([0, 1]);
+            app.eval('alignPickInDrawing()');
+            pt(0, 0);
+            assert.equal(app.val('_align.folded && !!_align.sel && _align.loop'), true);
+            app.eval(`processCommand('LINE'); processCommand('CANCEL'); processCommand('HALIGN');`); // 途中の張り合わせに戻る
+            assert.match(panel(), /張り合わせ点/);
+            assert.equal(app.val('!!_align.sel || _align.loop || _align.folded || _alignViewInst.collapsed'), false);
+            // 求積の区画を選ぶ段階にしても、張り合わせのパネルを出さない（前の点の指定の残りを消す）
+            app.eval('alignPickInDrawing()');
+            app.eval('cogoPickLot()');
+            assert.equal(app.val('_cogo.pick'), null);
+            app.eval(`processCommand('CANCEL'); window.innerWidth = 1024; processCommand('HALIGN');`);
+            // 続きの指定の途中に、動かす図形が消えた: 次の組へは進まない
+            app.eval('alignPickInDrawing()');
+            pt(0, 0); pt(1000, 1000);
+            assert.equal(key(), 'AS');
+            pt(40, 0);
+            app.eval(`entities.splice(0, 2); _bumpGeomEpoch();`);
+            pt(1000, 1040);
+            assert.equal(app.val('cogoIsPicking()'), false);
+            assert.equal(app.val('_align.loop'), false);
+            assert.match(panel(), /動かす図形がありません/);
+        });
+
+        it('タブレットの幅: 別窓が ☑確定 の帯に重なるときは、指定のあいだ別窓をたたむ（別窓のほうが前に出て、帯を押せなくなるため）。重ならなければたたまない', () => {
+            start([0, 1]);
+            // 画面の大きさをまねる（jsdom では大きさが 0 なので）: 別窓は左下、帯は下の真ん中
+            const rect = (l, t, r, b) => `() => ({ left: ${l}, top: ${t}, right: ${r}, bottom: ${b}, width: ${r - l}, height: ${b - t} })`;
+            app.eval(`window.innerWidth = 800; _alignViewInst.el.getBoundingClientRect = ${rect(60, 400, 420, 700)}; document.getElementById('fs-dim-actionbar').getBoundingClientRect = ${rect(300, 650, 520, 700)};`);
+            app.eval('alignPickInDrawing()');
+            assert.equal(app.val('_alignViewInst.collapsed && _align.folded'), true, '図面で指定: 重なるのでたたむ');
+            app.eval(`processCommand('CANCEL')`);
+            assert.equal(app.val('_alignViewInst.collapsed || _align.folded'), false, '終わると広げ直す');
+            app.eval('alignSelectSource({ x: 0, y: 0 })');
+            assert.equal(app.val('_alignViewInst.collapsed && _align.folded'), true, '別窓のタップ: 重なるのでたたむ');
+            pt(1000, 1000);
+            assert.equal(app.val('_alignViewInst.collapsed || _align.folded'), false);
+            // 重ならない位置なら、たたまない（PC で別窓を見ながら指定できる）
+            app.eval(`_alignViewInst.el.getBoundingClientRect = ${rect(60, 100, 420, 400)}; alignPickInDrawing();`);
+            assert.equal(app.val('_alignViewInst.collapsed || _align.folded'), false);
+            app.eval(`processCommand('CANCEL'); delete _alignViewInst.el.getBoundingClientRect; delete document.getElementById('fs-dim-actionbar').getBoundingClientRect;`);
+        });
     });
 
     // ===== 別窓のスナップ（v5.59.1）: 端点・頂点・中心だけでなく、図形（中点・交点・四半円点・線の上）にも吸い付く =====

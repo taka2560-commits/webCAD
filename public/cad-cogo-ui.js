@@ -163,9 +163,13 @@ function _cogoStartPick() {
     addCommandLog(`-> [測量計算] ${label}を指定（測点に吸い付きます）`);
     _cogoShowBar(true);
     _cogoPanelDuringPick();
+    // 持ち主に、点の指定が1つ進んだことを知らせる（あれば）。パネルを隠しているスマホでは、指定の途中に render が呼ばれないため（張り合わせ。v5.59.2）
+    const own = _cogoOwner(p.owner);
+    if(typeof own.step === 'function') own.step(key);
     render();
 }
 window.cogoPickLot = function() {
+    _cogo.pick = null; // 前の点の指定（ほかの画面のもの）の残りを消す。残っていると、その持ち主のパネルが出た（v5.59.2）
     resetCommand();
     cmdState.mode = COGO_LOT_MODE;
     setPrompt('求積する区画をタップ');

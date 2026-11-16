@@ -1,10 +1,11 @@
 // ===== Web CAD 図形の張り合わせ（図面の中の図形を、ヘルマート変換で合わせる） =====
-// cad-align.js - コマンド HALIGN（別名 ALIGN・AL）。v5.59（別窓の点は、図形へのスナップでも指定できる。v5.59.1）
+// cad-align.js - コマンド HALIGN（別名 ALIGN・AL）。v5.59（別窓の点は、図形へのスナップでも指定できる。v5.59.1。動かす側の点も図面で指定できる。v5.59.2）
 //   図面の中の図形（別の図面から取り込んだ区画・任意座標で描いた現況など）を、同じ図面の中の点（遠くの公共点でも）に合わせて、
 //   回転・移動（・縮尺）で動かす。
 //   ・対象の選び方は、鏡像・尺度変更と同じ（選んでから始める／タップ／範囲選択。cad-edit.js の _editBegin・editAreaSelect）
 //   ・張り合わせ点の指定は、SIMA の変換（cad-helmert.js）と同じ別窓の方式:
 //       動かす図形を別窓（cad-subview.js）に出す → 別窓で「動かす側の点」をタップ → 図面で「合わせる先の点」をなぞって ☑確定。
+//       動かす側の点は、図面の上でも指定できる（「📍 図面で組を指定」: 動かす側の点 → 合わせる先の点 の順に、図面のスナップでなぞって ☑確定。❌終了 まで続けて次の組）。
 //       別窓のタップは、動かす図形に吸い付く（図面のスナップと同じ計算。端点・中心・挿入点はいつも。中点・交点・四半円点・図心・等分点・近接点は OSNAP の設定のとおり）
 //       図面は自由に動かせるので、動かす図形から遠く離れた点（公共点など）にも合わせられる
 //   ・縮尺: 「1/1」（回転・移動だけ）／「縮尺も求める」（ヘルマート変換）。縮尺を求めたときは、文字・寸法の大きさも同じ倍率で変わる（尺度変更と同じ）
@@ -32,6 +33,8 @@ const _align = {
     calc: null,     // 計算の結果（alignCompute。組・縮尺が変わったら作り直す）
     keys: null,     // 別窓で拾える点（図形の要の点）と、それを作ったときの図形データの世代
     folded: false,  // 図面で点を指定するあいだ、別窓をたたんだか
+    loop: false,    // 「📍 図面で組を指定」の途中（組が決まったら、続けて次の組の動かす側の点へ。❌終了 でやめる）
+    selAt: 0,       // 図面で動かす側の点を決めた時刻（☑確定 を続けて2度押したときに、同じ点を合わせる先にしないため）
     viewClosed: false, // 別窓を ✕ で閉じた（「🗺 別窓を開く」まで出さない）
 };
 function alignIsMode(m) { return typeof m === 'string' && m.startsWith('WAITING_HALIGN_'); }
@@ -123,8 +126,8 @@ function alignStart(idxs) {
     const ids = (idxs || []).filter((i) => entities[i] && entities[i].type !== 'PIN').map((i) => entities[i].id);
     if(!ids.length) { _editToast('張り合わせ: 動かす図形がありません'); return false; }
     if(cogoIsPicking()) _cogo.pick = null;
-    Object.assign(_align, { on: true, ids, pairs: [], sel: null, hover: null, calc: null, keys: null, folded: false, viewClosed: false });
-    delete _cogo.slots.AT;
+    Object.assign(_align, { on: true, ids, pairs: [], sel: null, hover: null, calc: null, keys: null, folded: false, loop: false, viewClosed: false });
+    delete _cogo.slots.AT; delete _cogo.slots.AS;
     resetCommand(); // 選ぶ段階を終える（選択の印も消す。動かす図形は、図面にオレンジで出す）
     addCommandLog(`-> [張り合わせ] 動かす図形 ${ids.length}個。別窓で動かす側の点をタップ → 図面で合わせる先の点を ☑確定（2組以上）`);
     _alignShow();
@@ -143,8 +146,8 @@ function _alignShow() {
 function alignReset() {
     const was = _align.on;
     if(cogoIsPicking() && _cogo.pick && _cogo.pick.owner === 'align') { _cogo.pick = null; resetCommand(); }
-    Object.assign(_align, { on: false, ids: [], pairs: [], sel: null, hover: null, calc: null, keys: null, folded: false, viewClosed: false });
-    if(typeof _cogo !== 'undefined') delete _cogo.slots.AT;
+    Object.assign(_align, { on: false, ids: [], pairs: [], sel: null, hover: null, calc: null, keys: null, folded: false, loop: false, viewClosed: false });
+    if(typeof _cogo !== 'undefined') { delete _cogo.slots.AT; delete _cogo.slots.AS; }
     if(_alignViewInst && _alignViewInst.isOpen()) _alignViewInst.hide();
     if(was && _alignPanelShown()) closePropertyPanel();
     if(was && typeof renderOverlay === 'function') renderOverlay();
@@ -246,7 +249,26 @@ function _alignKeyCache() {
             seen.add(k); pts.push({ x: q.x, y: q.y, t: _alignKeyType(e, n) });
         });
     });
-    return (_align.keys = { ep, n: entities.length, pts, set });
+    // 動かす図形の位置のしるし（組を指定したあとに図形が動いた・変わったことに気づくため。同じ図形なら同じ値）
+    let sum = 0;
+    pts.forEach((q, i) => { sum += q.x * (1 + (i % 7) * 1e-3) + q.y * 1.618; });
+    return (_align.keys = { ep, n: entities.length, pts, set, sig: pts.length + ':' + sum });
+}
+// 組に、指定したときの動かす図形のしるしを付ける（数えられない属性にして、保存・比べる形には出さない）
+function _alignStamp(pr) { Object.defineProperty(pr, 'sig', { value: _alignKeyCache().sig, enumerable: false, writable: true, configurable: true }); return pr; }
+// 組を指定したあとに、動かす図形が動いた・変わった（↩・移動など）。組の「動かす側の点」は座標で覚えているので、ずれているかもしれない
+function _alignStale() {
+    const cur = _alignKeyCache().sig;
+    return _align.pairs.some((p) => p.use !== false && p.sig !== undefined && p.sig !== cur);
+}
+// 張り合わせの点を、図面で指定している途中か
+function _alignPicking() { return cogoIsPicking() && !!_cogo.pick && _cogo.pick.owner === 'align'; }
+// 点の指定が、❌終了・Esc を通らずに終わっていたら（別のコマンドを始めた・ほかの画面で点を指定した）、選んだ点・続きの指定・たたんだ別窓を片付ける
+function _alignTidy() {
+    if(_alignPicking()) return;
+    _align.loop = false;
+    if(_align.sel) { _align.sel = null; if(_alignViewInst) _alignViewInst.redraw(); }
+    if(_align.folded) { _align.folded = false; if(_alignViewInst) _alignViewInst.setCollapsed(false); }
 }
 function _alignKeys() { return _alignKeyCache().pts; }
 // 別窓で吸い付く種類: 端点・中心・挿入点はいつも。ほかは、図面の OSNAP の設定（種類ごとの入・切）と同じ。
@@ -337,23 +359,66 @@ function alignSelectSource(pt) {
     // スマホ・画面いっぱいの別窓では、図面が見えるように別窓をたたむ（自分でたたんでいたら、そのまま）。指定が終わると広げ直す
     if((window.innerWidth < 700 || v.maximized) && !v.collapsed) { v.setCollapsed(true); _align.folded = true; }
     v.redraw();
+    _align.loop = false; // 別窓で選んだときは、この1組だけ（図面での続きの指定はやめる）
+    delete _cogo.slots.AS; delete _cogo.slots.AT; // 前の指定の残りを使わない
     cogoPick('AT', 'align');
+    if(subviewCoversBar(v)) { v.setCollapsed(true); _align.folded = true; } // ☑確定 の帯に重なるなら、指定のあいだたたむ（タブレットの幅）
     return true;
 }
-// 点の指定のあと（パネルを描き直す前）: 合わせる先の点が決まっていれば組にする
+// 「📍 図面で組を指定」: 動かす側の点 → 合わせる先の点 の順に、図面のスナップ（なぞって ☑確定）で指定する。組が決まったら、続けて次の組（❌終了・Esc でやめる）
+window.alignPickInDrawing = function() {
+    if(!_align.on || !_alignTargets().length) return false;
+    _align.sel = null; _align.hover = null; _align.loop = true;
+    delete _cogo.slots.AS; delete _cogo.slots.AT;
+    // スマホ・画面いっぱいの別窓では、図面が見えるように別窓をたたむ（指定が終わると広げ直す）
+    const v = _alignViewInst;
+    if(v) v.redraw(); // 別窓で選んでいた点の印を消す
+    if(v && v.isOpen() && (window.innerWidth < 700 || v.maximized) && !v.collapsed) { v.setCollapsed(true); _align.folded = true; }
+    addCommandLog('-> [張り合わせ] 図面で、動かす側の点 → 合わせる先の点 の順に、なぞって ☑確定（続けて次の組。終わるときは ❌終了）');
+    if(typeof showToast === 'function') showToast('図面で、動かす側の点 → 合わせる先の点 の順に、なぞって ☑確定。終わるときは ❌終了', 3600);
+    cogoPick('AS', 'align');
+    if(subviewCoversBar(v)) { v.setCollapsed(true); _align.folded = true; } // ☑確定 の帯に重なるなら、指定のあいだたたむ（タブレットの幅）
+    return true;
+};
+// 図面で指定した「動かす側の点」を受け取る（このあと、合わせる先の点を指定する）。
+// パネルを隠しているスマホでは、指定の途中にパネルを描き直さないので、点の指定が1つ進むたびに呼ぶ（持ち主の step。cad-cogo-ui.js の _cogoStartPick）
+function _alignTakeSource() {
+    const a = typeof _cogo !== 'undefined' ? _cogo.slots.AS : null;
+    if(!a) return;
+    delete _cogo.slots.AS;
+    if(!_align.on || !isFinite(a.x) || !isFinite(a.y)) return;
+    _align.sel = { x: a.x, y: a.y, t: '' };
+    _align.selAt = Date.now();
+    // 動かさない図形の点だった（その点は動かないので、思った所に合わない）
+    if(_alignPointSide(a) === 'other') _editToast('動かす側の点が、動かさない図形の上にあります。動かす側は、動かす図形（オレンジ）の点にしてください');
+    if(_alignViewInst) _alignViewInst.redraw();
+}
+// 点の指定のあと（パネルを描き直す前）: 図面で指定した動かす側の点を受け取り、合わせる先の点が決まっていれば組にする。
+// 戻り値: 続けて次の組を指定するか（「📍 図面で組を指定」の途中）
 function _alignAfterPick() {
-    const picking = cogoIsPicking();
-    if(!picking && _align.folded) { _align.folded = false; if(_alignViewInst) _alignViewInst.setCollapsed(false); }
+    const picking = cogoIsPicking(), unfold = () => { if(_align.folded) { _align.folded = false; if(_alignViewInst) _alignViewInst.setCollapsed(false); } };
+    _alignTakeSource();
     const s = _cogo.slots.AT;
     if(!s) {
-        if(!picking && _align.sel) { _align.sel = null; if(_alignViewInst) _alignViewInst.redraw(); } // ❌終了で指定をやめた
-        return;
+        if(!picking) { // ❌終了で指定をやめた
+            _align.loop = false;
+            if(_align.sel) { _align.sel = null; if(_alignViewInst) _alignViewInst.redraw(); }
+            unfold();
+        }
+        return false;
     }
     delete _cogo.slots.AT;
     const src = _align.sel;
     _align.sel = null;
-    if(!_align.on || !src) return;
-    const pr = { src: { x: src.x, y: src.y }, dst: { x: s.x, y: s.y, name: s.name || '' }, use: true };
+    if(!_align.on || !src) { _align.loop = false; unfold(); return false; }
+    // ☑確定 を続けて2度押した（動かす側の点と同じ点が、すぐ合わせる先に入った）: 組にしないで、合わせる先の点を聞き直す。
+    // 続きの指定では、余分な1回で、その先の組がみな1つずれてしまうため（少し間をおいた同じ点は、そのまま組にする＝その点は動かさない）
+    if(_align.loop && !picking && s.x === src.x && s.y === src.y && Date.now() - (_align.selAt || 0) < 600) {
+        _align.sel = src;
+        _editToast('同じ点を続けて押しました。合わせる先の点を指定してください（同じ点に合わせるなら、もう一度 ☑確定）');
+        return 'at';
+    }
+    const pr = _alignStamp({ src: { x: src.x, y: src.y }, dst: { x: s.x, y: s.y, name: s.name || '' }, use: true });
     const tol = 1e-9 * (Math.abs(src.x) + Math.abs(src.y) + 1);
     let k = _align.pairs.findIndex((p) => Math.abs(p.src.x - src.x) <= tol && Math.abs(p.src.y - src.y) <= tol); // 同じ点を指定し直したときは、同じ番号のまま入れ替える
     if(k >= 0) _align.pairs[k] = pr; else { _align.pairs.push(pr); k = _align.pairs.length - 1; }
@@ -363,25 +428,55 @@ function _alignAfterPick() {
     // 合わせる先が、動かす図形の点だった（一緒に動くので、思った所に合わない）
     if(_alignOnTargetsOnly(pr.dst)) _editToast('合わせる先の点が、動かす図形の上にあります（その点も一緒に動きます）。合わせる先は、動かさない図形の点にしてください');
     if(_alignViewInst) _alignViewInst.redraw();
+    const again = _align.loop && !picking && _alignTargets().length > 0; // 動かす図形が無くなったら、続けない
+    if(!again) { _align.loop = false; unfold(); }
+    return again;
+}
+// 点の指定の案内に、何組目かを出す（続けて指定していて、いまどちらの点を待っているかを取り違えないように）
+function _alignPickPrompt(key) {
+    if(!_align.on || !COGO_SLOT_LABELS[key] || typeof setPrompt !== 'function') return;
+    const src = _align.sel, tol = src ? 1e-9 * (Math.abs(src.x) + Math.abs(src.y) + 1) : 0;
+    const k = src ? _align.pairs.findIndex((p) => Math.abs(p.src.x - src.x) <= tol && Math.abs(p.src.y - src.y) <= tol) : -1;
+    setPrompt(`組 No.${k >= 0 ? k + 1 : _align.pairs.length + 1}: ${COGO_SLOT_LABELS[key][0]}をなぞって ☑確定`);
 }
 if(typeof COGO_SLOT_LABELS !== 'undefined') {
+    COGO_SLOT_LABELS.AS = ['動かす側の点', '動'];
     COGO_SLOT_LABELS.AT = ['合わせる先の点', '先'];
-    cogoRegisterPickOwner('align', { slots: () => ['AT'], render: () => { _alignAfterPick(); if(_align.on) alignPanel(); }, update: () => {} });
+    cogoRegisterPickOwner('align', { slots: () => ['AS', 'AT'], update: () => {}, step: (key) => { _alignTakeSource(); _alignPickPrompt(key); }, render: () => {
+        // 「📍 図面で組を指定」の途中は、組が決まったら続けて次の組の動かす側の点へ（その中でパネルも描き直す）。'at' は、合わせる先の点の聞き直し
+        const next = _alignAfterPick();
+        if(next && _align.on) { delete _cogo.slots.AS; delete _cogo.slots.AT; cogoPick(next === 'at' ? 'AT' : 'AS', 'align'); return; }
+        if(_align.on) alignPanel();
+    } });
 }
-// 点 p が、動かす図形の要の点に重なっていて、動かさない図形の要の点には重なっていない
-function _alignOnTargetsOnly(p) {
-    const sel = new Set(_alignTargets());
-    if(!sel.size) return false;
-    const tol = 1e-6 * (Math.abs(p.x) + Math.abs(p.y) + 1);
+// 点 p が、どちらの図形の上にあるか: 'sel'（動かす図形だけ）・'other'（動かさない図形だけ）・'both'・''（どの図形の上でもない）。
+// 「上」は、要の点（端点・頂点・中心・文字の位置）と、線・円の上（中点・線の上の点・四半円点など。図面のスナップと同じ計算）。
+// 近さの境は、座標の大きさの 1e-9 倍（公共座標で 0.1mm ほど。以前は 1e-6 倍で、公共座標では 14cm となりの点も「同じ点」にしていた）。
+// 動かさない図形は、見えているものだけ（非表示・非表示の画層・写真のピンは数えない）
+function _alignPointSide(p) {
+    const cache = _alignKeyCache();
+    if(!cache.set.size || !p || !isFinite(p.x) || !isFinite(p.y)) return '';
+    const tol = 1e-9 * (Math.abs(p.x) + Math.abs(p.y) + 1);
+    const shown = (e) => !!e && !e.hidden && e.type !== 'PIN' && !(layers[e.layer] && layers[e.layer].visible === false);
     const hit = (e) => _alignKeyPoints(e).some((q) => Math.abs(q.x - p.x) <= tol && Math.abs(q.y - p.y) <= tol);
-    let onSel = false;
-    for(let i = 0; i < entities.length; i++) {
+    let onSel = cache.pts.some((q) => Math.abs(q.x - p.x) <= tol && Math.abs(q.y - p.y) <= tol), onOther = false;
+    for(let i = 0; i < entities.length && !onOther; i++) {
         const e = entities[i];
-        if(!e || e.hidden || !hit(e)) continue;
-        if(sel.has(i)) onSel = true; else return false;
+        if(e && !cache.set.has(e) && shown(e) && hit(e)) onOther = true;
     }
-    return onSel;
+    // 線・円の上: 点のまわり tol の中に、その図形に吸い付く点（端点・中心・挿入点・線の上の点）があるか
+    const F = { main: true, end: true, cen: true, ins: true, near: true }, keep = _snapHoverTmp;
+    const on = (only) => {
+        _snapHoverTmp = { d: Infinity, src: null };
+        try { return collectSnapPoints(p.x, p.y, null, F, 1, { scale: 1 / tol, only }).some((q) => Math.hypot(q.x - p.x, q.y - p.y) <= tol); }
+        finally { _snapHoverTmp = keep; }
+    };
+    if(!onSel) onSel = on((e) => cache.set.has(e));
+    if(!onOther) onOther = on((e) => !cache.set.has(e) && shown(e));
+    return onSel ? (onOther ? 'both' : 'sel') : (onOther ? 'other' : '');
 }
+// 点 p が、動かす図形の上にあって、動かさない図形の上には無い
+function _alignOnTargetsOnly(p) { return _alignPointSide(p) === 'sel'; }
 function _alignChanged() {
     _align.calc = null;
     alignPanel();
@@ -412,7 +507,7 @@ window.alignPairByName = function() {
         if(!d) return;
         if(dupS.has(name) || dupD.has(name)) { skipped++; return; } // 同じ点名が2つ以上: どれと組にするか決められない
         if(_align.pairs.some((q) => Math.hypot(q.src.x - s.x, q.src.y - s.y) <= tolOf(s))) return; // もう組にしている
-        _align.pairs.push({ src: { x: s.x, y: s.y }, dst: { x: d.x, y: d.y, name }, use: true });
+        _align.pairs.push(_alignStamp({ src: { x: s.x, y: s.y }, dst: { x: d.x, y: d.y, name }, use: true }));
         added++;
     });
     const more = skipped ? `（同じ点名が2つ以上ある ${skipped}点は、組にしていません）` : '';
@@ -437,7 +532,8 @@ window.alignApply = function() {
     const vals = [c.T.a, c.T.b, c.T.c, c.T.d, c.T.tx, c.T.ty, c.T.ox, c.T.oy];
     if(!vals.every((v) => typeof v === 'number' && isFinite(v)) || !(c.T.k > 0)) { _editToast('張り合わせ: 変換を求められません（点を選び直してください）'); return false; }
     const keep = _alignKeep();
-    const sig = sol.sigma0 === null ? '' : `\n張り合わせ点の残差の標準偏差: ${formatSurveyNumber(sol.sigma0)}m`;
+    const sig = (sol.sigma0 === null ? '' : `\n張り合わせ点の残差の標準偏差: ${formatSurveyNumber(sol.sigma0)}m`) +
+        (_alignStale() ? '\n⚠ 組を指定したあとに、動かす図形が変わっています。動かす側の点がずれていないか、確かめてください。' : '');
     cadChoose({ title: ALIGN_TITLE,
         message: `張り合わせ点 ${sol.n}組から、図形 ${idxs.length}個を${keep ? '複写して、合わせる先に置きます' : '合わせる先へ動かします'}。\n${alignDescText(sol)}${sig}\n（↩ で戻せます）`,
         choices: [{ label: keep ? `複写して置く（${idxs.length}）` : `動かす（${idxs.length}）`, value: 'go', kind: 'primary' }] }, (v) => {
@@ -468,7 +564,7 @@ function alignApplyNow() {
 
 // ===== パネル =====
 function _alignPtLabel(p, named) {
-    const tol = 1e-6 * (Math.abs(p.x) + Math.abs(p.y) + 1);
+    const tol = 1e-9 * (Math.abs(p.x) + Math.abs(p.y) + 1); // 公共座標でも、となりの測点（10cm となりなど）の名前を出さない
     const hit = p.name ? p : named.find((q) => Math.abs(q.x - p.x) <= tol && Math.abs(q.y - p.y) <= tol);
     if(hit && (hit.name || hit.num)) return escapeHtml(hit.name || hit.num);
     const s = wcsToSurvey(p.x, p.y);
@@ -490,6 +586,7 @@ function alignResultHtml(c) {
     if(worst >= 0 && acc) kv.push(['最大の較差', `${cogoFix(c.rows[worst].d * 1000, 1)} mm（No.${worst + 1}）`]);
     let h = _cogoKv(kv);
     if(!acc) h += '<div class="cogo-warn">⚠ ' + (sol.mode === 'sim' ? '縮尺も求めるときは、3組以上で精度を確かめられます（2組では、ちょうど合わせるだけです）' : '組を増やすと、精度を確かめられます（点の取り違えに気づけます）') + '</div>';
+    if(_alignStale()) h += '<div class="cogo-warn">⚠ 組を指定したあとに、動かす図形が変わっています（動かした・↩ など）。組の「動かす側の点」は指定したときの位置のままなので、ずれていないか確かめてください（ずれていたら、✕ で消して指定し直します）。</div>';
     if(c.mirror) h += '<div class="cogo-warn">⚠ 裏返し（鏡像）の図形かもしれません。裏返すと、ずっとよく合います。先に ⇋ 鏡像 で映してから、張り合わせてください。</div>';
     const flagged = pairs.map((p, k) => (p.use !== false && c.rows[k] && c.rows[k].flag ? k + 1 : 0)).filter(Boolean);
     if(c.scaleHint) h += `<div class="cogo-warn">⚠ 長さが合っていません（縮尺を ${c.scaleHint.toFixed(6)} にすると合います）。単位・縮尺の違う図形なら、「縮尺も求める」にしてください。点の取り違えかもしれません。</div>`;
@@ -504,6 +601,7 @@ function alignResultHtml(c) {
 }
 function alignPanel() {
     if(!_align.on) return;
+    _alignTidy();
     const pairs = _align.pairs, n = _alignTargets().length;
     const pc = document.getElementById('property-panel-content'), keepScroll = _alignPanelShown() && pc ? pc.scrollTop : 0;
     let h = '';
@@ -517,9 +615,10 @@ function alignPanel() {
     h += `<label class="edit-chk"><input type="checkbox" class="sw" role="switch" ${_alignKeep() ? 'checked' : ''} onchange="alignSetKeep(this.checked)"> 元の図形を残す（複写して置く）</label>`;
     const c = _alignCalc();
     h += `<div class="ts-sec">張り合わせ点${pairs.length ? `（計算に使う ${c.nUse} / ${pairs.length}組）` : ''}・動かす図形 ${n}個</div>`;
-    h += '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="alignPairByName()" title="動かす図形の中の測点と、動かさない測点で、点名が同じものを組にする">🔗 点名が同じ点を組にする</button>' +
+    h += '<div class="cogo-btns"><button class="prop-btn btn-sub" id="align-pick-draw" onclick="alignPickInDrawing()" title="図面の上で、動かす側の点 → 合わせる先の点 の順に、スナップで指定する（続けて次の組。終わるときは ❌終了）">📍 図面で組を指定</button>' +
+        '<button class="prop-btn btn-sub" onclick="alignPairByName()" title="動かす図形の中の測点と、動かさない測点で、点名が同じものを組にする">🔗 点名が同じ点を組にする</button>' +
         (_align.viewClosed ? '<button class="prop-btn btn-sub" onclick="alignOpenView()">🗺 別窓を開く</button>' : '') + '</div>';
-    if(!pairs.length) h += _editNote('別窓（動かす図形）で「動かす側の点」をタップ → 図面で「合わせる先の点」をなぞって ☑確定（PC はクリック）。別窓でも図面でも、端点・中点・交点・線の上などに吸い付きます（種類は OSNAP の設定と同じ）。図面は動かせるので、遠くの公共点にも合わせられます。2組以上で計算し、3組以上で精度を確かめられます。');
+    if(!pairs.length) h += _editNote('別窓（動かす図形）で「動かす側の点」をタップ → 図面で「合わせる先の点」をなぞって ☑確定（PC はクリック）。別窓でも図面でも、端点・中点・交点・線の上などに吸い付きます（種類は OSNAP の設定と同じ）。動かす側の点も図面の上で指定するときは「📍 図面で組を指定」（動かす側の点 → 合わせる先の点 の順に ☑確定。続けて次の組）。図面は動かせるので、遠くの公共点にも合わせられます。2組以上で計算し、3組以上で精度を確かめられます。');
     else {
         const named = collectSurveyPoints().filter((p) => p.name || p.num);
         const rows = pairs.map((p, k) => {

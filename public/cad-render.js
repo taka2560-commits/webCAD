@@ -133,7 +133,6 @@ function _drawFrame(overlayOnly) {
         if(typeof drawCogoOverlay === 'function') drawCogoOverlay(); // 測量計算（指定した点・補助線・計算した点）
         if(typeof drawHelmOverlay === 'function') drawHelmOverlay(); // ヘルマート変換（張り合わせ点・変換後の点）
         if(typeof drawAlignOverlay === 'function') drawAlignOverlay(); // 図形の張り合わせ（動かす図形・張り合わせ点・動かした先の形。cad-align.js）
-        if(typeof drawAlignOverlay === 'function') drawAlignOverlay(); // 図形の張り合わせ（動かす図形・張り合わせ点・動かした先の形。cad-align.js）
         if(typeof drawTsOverlay === 'function') drawTsOverlay(); // TS から受信した、取り込み前の点
         if(typeof drawStakeOverlay === 'function') drawStakeOverlay(); // 杭打ち（順番の杭・済み・いまの杭・案内の線）
         if(typeof drawPrintOverlay === 'function') drawPrintOverlay(); // 印刷の枠（用紙・表題欄・方位記号の場所）

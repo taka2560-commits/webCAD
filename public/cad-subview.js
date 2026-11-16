@@ -279,6 +279,15 @@ function createSubView(opt) {
     api.setHint(opt.hint || '');
     return api;
 }
+// 別窓が、図面で点を指定するときの ☑確定・❌終了 の帯に重なっているか（タブレットの幅など。別窓のほうが前に出るので、帯を押せなくなる）。
+// 重なっていたら、呼ぶ側で指定のあいだ別窓をたたむ（v5.59.2。スマホの幅・画面いっぱいのときは、前からたたんでいる）
+function subviewCoversBar(api) {
+    if(!api || !api.isOpen() || api.collapsed) return false;
+    const bar = document.getElementById('fs-dim-actionbar');
+    if(!bar || bar.style.display === 'none') return false;
+    const a = api.el.getBoundingClientRect(), b = bar.getBoundingClientRect();
+    return a.width > 0 && b.width > 0 && !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+}
 // 2点を対角とする四角（画面の点の列）
 function _subviewRect(a, b) { return [{ x: a.x, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: b.y }, { x: a.x, y: b.y }]; }
 // スマホの幅では、プロパティパネルが別窓の見出しを隠さないように、パネルの高さを別窓の上までにする（中身はスクロール）

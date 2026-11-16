@@ -350,6 +350,7 @@ window.helmSelectSource = function(i) {
     if((window.innerWidth < 700 || v.maximized) && !v.collapsed) { v.setCollapsed(true); _helm.folded = true; }
     v.redraw();
     cogoPick('HT', 'helm');
+    if(subviewCoversBar(v)) { v.setCollapsed(true); _helm.folded = true; } // ☑確定 の帯に重なるなら、指定のあいだたたむ（タブレットの幅）
     return true;
 };
 // 点の指定のあと（パネルを描き直す前）: 図面の点が決まっていれば組にする

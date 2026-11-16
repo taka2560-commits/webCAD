@@ -293,8 +293,34 @@ async function runOne(browser, v, btn, motion) {
             _alignTapSource(q.x, q.y);
             if (!_align.sel || !cogoIsPicking()) out.bad.push('別窓のタップで点を拾えない');
             else {
+                // 別窓のタップのあと: 別窓が ☑確定 を隠していない（タブレットの幅では、重なるなら別窓をたたむ。v5.59.2）
+                await new Promise((r) => setTimeout(r, 400));
+                const bar0 = document.getElementById('fs-dim-actionbar'), ok0 = bar0 && bar0.querySelector('button[onclick="dimConfirmPoint()"]');
+                if (ok0 && getComputedStyle(sv).display !== 'none') { const sr = sv.getBoundingClientRect(), kr = ok0.getBoundingClientRect();
+                    if (!(sr.bottom <= kr.top + 1 || sr.top >= kr.bottom - 1 || sr.right <= kr.left + 1 || sr.left >= kr.right - 1)) out.bad.push('別窓が ☑確定 に重なっている（別窓のタップのあと）'); }
                 handlePointInput({ x: B[0][0], y: B[0][1] }, true);
-                for (const k of [1, 2]) { alignSelectSource({ x: A[k][0], y: A[k][1] }); handlePointInput({ x: B[k][0], y: B[k][1] }, true); }
+                alignSelectSource({ x: A[1][0], y: A[1][1] }); handlePointInput({ x: B[1][0], y: B[1][1] }, true);
+                // 📍 図面で組を指定（v5.59.2）: パネルのボタンを押せて、動かす側の点 → 合わせる先の点 の順に指定でき、☑確定 の帯が画面の中に出る。❌終了 でパネルに戻る
+                await new Promise((r) => setTimeout(r, 400));
+                const pb = document.getElementById('align-pick-draw');
+                if (!pb) out.bad.push('「図面で組を指定」のボタンが無い');
+                else {
+                    pb.scrollIntoView({ block: 'nearest' }); await new Promise((r) => setTimeout(r, 100));
+                    const br = pb.getBoundingClientRect(), bh = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);
+                    if (!(bh === pb || pb.contains(bh))) out.bad.push(`「図面で組を指定」のボタンが隠れている（${bh && (bh.id || bh.className)}）`);
+                    pb.click();
+                    await new Promise((r) => setTimeout(r, 400));
+                    const bar = document.getElementById('fs-dim-actionbar'), okb = bar && bar.querySelector('button[onclick="dimConfirmPoint()"]');
+                    if (!cogoIsPicking() || !/動かす側の点/.test(document.getElementById('command-prompt').textContent)) out.bad.push('図面で動かす側の点を指定する段階にならない');
+                    else if (!okb || getComputedStyle(bar).display === 'none' || !inView(okb.getBoundingClientRect())) out.bad.push('☑確定 の帯が出ない・画面の外');
+                    else {
+                        const sr = sv.getBoundingClientRect(), kr = okb.getBoundingClientRect();
+                        if (getComputedStyle(sv).display !== 'none' && !(sr.bottom <= kr.top + 1 || sr.top >= kr.bottom - 1 || sr.right <= kr.left + 1 || sr.left >= kr.right - 1)) out.bad.push('別窓が ☑確定 に重なっている');
+                        handlePointInput({ x: A[2][0], y: A[2][1] }, true); handlePointInput({ x: B[2][0], y: B[2][1] }, true);
+                        if (!cogoIsPicking()) out.bad.push('組のあと、続けて次の組にならない');
+                    }
+                    processCommand('CANCEL');
+                }
             }
         }
         await new Promise((r) => setTimeout(r, 700));
