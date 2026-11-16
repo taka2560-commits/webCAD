@@ -552,7 +552,7 @@ function _adoptIdleHighlight() {
         cmdState.selectedIndices = [cmdState.highlightIdx];
     }
 }
-const _SELECTION_EDIT_COMMANDS = ['E', 'ERASE', 'M', 'MOVE', 'CO', 'COPY', 'RO', 'ROTATE', 'MI', 'MIRROR', 'SC', 'SCALE', 'AR', 'ARRAY', 'J', 'JOIN'];
+const _SELECTION_EDIT_COMMANDS = ['E', 'ERASE', 'M', 'MOVE', 'CO', 'COPY', 'RO', 'ROTATE', 'MI', 'MIRROR', 'SC', 'SCALE', 'AR', 'ARRAY', 'J', 'JOIN', 'HALIGN', 'ALIGN', 'AL'];
 function issueCommand(cmd) {
     if(_SELECTION_EDIT_COMMANDS.includes(String(cmd).toUpperCase())) _adoptIdleHighlight();
     cmdState.highlightIdx=-1; addCommandLog(`コマンド: ${cmd}`); processCommand(cmd);
@@ -922,6 +922,7 @@ function _closeDrawingNow() {
 function setDrawingName(name) {
     // 別の図面になったら、前の図面の「色をまとめて変える」の選び（cad-panels.js）と座標読取の拡大の中心は使わない（v5.52）
     if(typeof lmBulkReset === 'function') lmBulkReset();
+    if(typeof alignReset === 'function') alignReset(); // 張り合わせの途中もやめる（動かす図形は前の図面のもの。cad-align.js）
     window._fsZoomAnchor = null;
     if(typeof dropboxDrawingChanged === 'function') dropboxDrawingChanged(name); // Dropbox の保存先（開いた図面のフォルダ）を覚えるか（cad-dropbox.js）
     window._drawingName = name || ''; // 新UIでは表示欄が無いため、エクスポート名などに使う

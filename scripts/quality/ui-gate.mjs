@@ -268,6 +268,51 @@ async function runOne(browser, v, btn, motion) {
         if (!r) { fail(run, `${name} のパネルが開きません`); continue; }
         if (!inside(r, vw, vh, 2)) fail(run, `${name} のパネルが画面からはみ出しています ${JSON.stringify(r)}`);
     }
+    // 図形の張り合わせ（v5.59）: 動かす図形を別窓に出し、3組を指定した結果のパネルと別窓が画面に収まり、表がはみ出さず、「▶ 動かす」が隠れずに押せる
+    const al = await page.evaluate(async () => {
+        closePropertyPanel(); resetCommand();
+        const n0 = entities.length, u0 = undoStack.length, out = { bad: [] };
+        const A = [[200, 200], [260, 200], [260, 240]], B = [[320, 300], [369.52, 333.88], [346.93, 366.89]];
+        [[0, 1], [1, 2], [2, 0]].forEach(([i, j]) => entities.push({ type: 'LINE', layer: currentLayerIndex, color: null, x1: A[i][0], y1: A[i][1], x2: A[j][0], y2: A[j][1] }));
+        cmdState.selectedIndices = [n0, n0 + 1, n0 + 2];
+        processCommand('HALIGN');
+        await new Promise((r) => setTimeout(r, 500));
+        const sv = document.getElementById('align-view');
+        const inView = (r) => r.left >= -1 && r.right <= innerWidth + 1 && r.top >= -1 && r.bottom <= innerHeight + 1;
+        if (!sv || getComputedStyle(sv).display === 'none') out.bad.push('別窓が出ない');
+        else {
+            if (!inView(sv.getBoundingClientRect())) out.bad.push('別窓が画面の外');
+            // 別窓のタップ: 動かす側の点（三角形の頂点）の上を、本物の位置で拾えるか
+            const cv = sv.querySelector('canvas').getBoundingClientRect(), s = wcsToSurvey(A[0][0], A[0][1]), q = _alignView().toScreen(s.X, s.Y);
+            if (!(q.x > 4 && q.y > 4 && q.x < cv.width - 4 && q.y < cv.height - 4)) out.bad.push('別窓に図形が収まっていない');
+            _alignTapSource(q.x, q.y);
+            if (!_align.sel || !cogoIsPicking()) out.bad.push('別窓のタップで点を拾えない');
+            else {
+                handlePointInput({ x: B[0][0], y: B[0][1] }, true);
+                for (const k of [1, 2]) { alignSelectSource({ x: A[k][0], y: A[k][1] }); handlePointInput({ x: B[k][0], y: B[k][1] }, true); }
+            }
+        }
+        await new Promise((r) => setTimeout(r, 700));
+        const p = document.getElementById('property-panel'), pr = p.getBoundingClientRect();
+        out.shown = p.style.display === 'flex';
+        if (out.shown) {
+            if (!inView(pr)) out.bad.push('パネルが画面の外');
+            const tb = document.querySelector('#property-panel .cogo-table');
+            if (!tb || document.querySelectorAll('#property-panel .cogo-table tbody tr').length !== 3) out.bad.push('表の行');
+            else { const wr = tb.parentElement.getBoundingClientRect(); if (tb.getBoundingClientRect().right > wr.right + 1 && tb.parentElement.scrollWidth <= tb.parentElement.clientWidth + 1) out.bad.push('表がはみ出す'); }
+            const go = document.getElementById('align-go');
+            if (!go || go.disabled) out.bad.push('動かすボタン');
+            else { go.scrollIntoView({ block: 'nearest' }); await new Promise((r) => setTimeout(r, 100)); const g = go.getBoundingClientRect(), hit = document.elementFromPoint(g.left + g.width / 2, g.top + g.height / 2);
+                if (!(hit === go || go.contains(hit))) out.bad.push(`動かすボタンが隠れている（${hit && (hit.id || hit.className)}）`); }
+            if (sv && getComputedStyle(sv).display !== 'none' && !inView(sv.getBoundingClientRect())) out.bad.push('別窓が画面の外（結果のあと）');
+        }
+        alignReset(); resetCommand(); closePropertyPanel(); entities.length = n0; undoStack.length = u0; render();
+        await new Promise((r) => setTimeout(r, 100));
+        if (sv && getComputedStyle(sv).display !== 'none') out.bad.push('やめても別窓が残る');
+        return out;
+    });
+    if (!al.shown) fail(run, '張り合わせ: 組を指定しても結果のパネルが出ません');
+    if (al.bad.length) fail(run, `張り合わせ: ${al.bad.join('・')}`);
     // 画層の色をまとめて変える欄（v5.52）: ボタンがパネルの中に収まり、文字が切れない
     const bulkOut = await page.evaluate(() => { const p = document.getElementById('property-panel').getBoundingClientRect();
         return [...document.querySelectorAll('.lm-bulk button, .lm-bulk input')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > p.right + 1 || r.left < p.left - 1 || e.scrollWidth > e.clientWidth + 2); }).map((e) => e.textContent.trim() || e.id); });

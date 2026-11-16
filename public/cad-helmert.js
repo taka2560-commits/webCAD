@@ -26,14 +26,16 @@ function helmSolve(pairs, mode) {
     let X0 = 0, Y0 = 0, X1 = 0, Y1 = 0;
     pairs.forEach((p) => { X0 += p.src.X; Y0 += p.src.Y; X1 += p.dst.X; Y1 += p.dst.Y; });
     X0 /= n; Y0 /= n; X1 /= n; Y1 /= n;
-    let S = 0, P = 0, Q = 0, rMax = 0;
+    let S = 0, P = 0, Q = 0, rMax = 0, D = 0;
     pairs.forEach((p) => {
         const x = p.src.X - X0, y = p.src.Y - Y0, u = p.dst.X - X1, v = p.dst.Y - Y1;
-        S += x * x + y * y; P += x * u + y * v; Q += x * v - y * u;
+        S += x * x + y * y; P += x * u + y * v; Q += x * v - y * u; D += u * u + v * v;
         rMax = Math.max(rMax, Math.hypot(x, y));
     });
     if(!(S > 1e-18)) return { ok: false, error: '変換元の張り合わせ点が同じ位置です（離れた点を選んでください）' };
     const rigid = mode === 'rigid';
+    // 1/1 でも、図面側の点がすべて同じ位置なら回転が決まらない（v5.59。以前は回転 0° として「計算できた」ことになっていた。縮尺も求めるほうは、下で縮尺 0 として断る）
+    if(rigid && !(D > 1e-18)) return { ok: false, error: '図面の張り合わせ点が同じ位置です（離れた点を選んでください）' };
     let a, b;
     if(rigid) { const th = Math.atan2(Q, P); a = Math.cos(th); b = Math.sin(th); }
     else { a = P / S; b = Q / S; }
@@ -70,13 +72,20 @@ function helmPointSigma(sol, X, Y) {
 // （全部の組で求めた残差と σ₀ を比べるだけでは、外れた組が σ₀ を大きくして自分を隠してしまい、組が少ないと見つからない）
 // 戻り値: { d（ずれ m）, sig（そのずれの標準偏差の見込み m）, flag（3倍を超える） }。除くと自由度が無いときは null
 const HELM_SIGMA_FLOOR = 0.001; // 座標は mm までなので、ばらつきの見込みは 1mm より小さくしない
+// 「ほかの組と合っていない」と知らせる境（ばらつきの見込み sig の何倍か）。v5.59
+// ばらつきは、自由度 dof の少ない組から見積もるので、少ないほど見積もりが当てにならない。ずれ d について d²/(2·sig²) は F(2, dof) に従うので、
+// 取り違えの無い組をまちがって知らせる割合が 1% になる倍率 √(dof·(0.01^(−2/dof) − 1)) を境にする（dof 1: 100、2: 14.1、4: 6.0、8: 4.2、多いと 3.03）。
+// 以前はいつも 3 倍で、3〜5組のときは、取り違えが無くても 3〜7割の確率でどれかの組に「合っていません」が出ていた
+const HELM_FLAG_ALPHA = 0.01;
+function helmFlagK(dof) { return dof > 0 ? Math.sqrt(dof * (Math.pow(HELM_FLAG_ALPHA, -2 / dof) - 1)) : Infinity; }
 function helmLeaveOneOut(pairs, mode, i) {
     const sol = helmSolve(pairs.filter((_, k) => k !== i), mode);
     if(!sol.ok || sol.sigma0 === null) return null;
     const p = pairs[i], q = helmApply(sol, p.src.X, p.src.Y);
     const d = Math.hypot(q.X - p.dst.X, q.Y - p.dst.Y);
     const sig = Math.max(sol.sigma0, HELM_SIGMA_FLOOR) * Math.sqrt(1 + 1 / sol.n + ((p.src.X - sol.X0) ** 2 + (p.src.Y - sol.Y0) ** 2) / sol.S);
-    return { d, sig, flag: d > 3 * sig };
+    const k = helmFlagK(sol.dof);
+    return { d, sig, k, flag: d > k * sig };
 }
 // 点の集まりの凸包（反時計回り）。一直線に並ぶときは両端の2点
 function _helmHull(pts) {
@@ -510,7 +519,7 @@ function _helmSolveNow() {
         p.res = { dX, dY, d, loo: null, flag: false };
         if(!p.use && sol.sigma0 !== null) { // 計算に使っていない組は、そのまま今の変換と比べる
             const sig = Math.max(sol.sigma0, HELM_SIGMA_FLOOR) * Math.sqrt(1 + 1 / sol.n + ((sp.X - sol.X0) ** 2 + (sp.Y - sol.Y0) ** 2) / sol.S);
-            p.res.flag = d > 3 * sig;
+            p.res.flag = d > helmFlagK(sol.dof) * sig;
         }
     });
     if(sol.ok) used.forEach((p, k) => { const lo = helmLeaveOneOut(up, _helm.mode, k); if(lo) { p.res.loo = lo.d; p.res.flag = lo.flag; } });
@@ -522,6 +531,7 @@ function helmTabHtml() {
     let h = `<div class="cogo-btns"><button class="prop-btn${s ? ' btn-sub' : ''}" onclick="helmPickFile()">📁 SIMA を読み込む</button>` +
         (s ? '<button class="prop-btn btn-sub" onclick="helmOpenView()">🗺 別窓を開く</button>' : '') + '</div>';
     if(!s) {
+        h += '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="issueCommand(\'HALIGN\')" title="SIMA を使わずに、図面の中の図形を点の組で合わせる（cad-align.js）">⧉ 図面の中の図形どうしを張り合わせる</button></div>';
         return h + _cogoNote('別の座標で測った SIMA を、図面の座標に合わせて取り込みます。読み込んだ SIMA は別窓に出るので、点をタップ → 図面で同じ点をなぞって ☑確定 で、張り合わせ点を2組以上指定します。TS連携で受信した SIMA も「🧮 変換して取り込む」で使えます。');
     }
     h += _cogoKv([['変換元', `${escapeHtml(s.name)}（点 ${s.points.length}${s.lots.length ? '・区画 ' + s.lots.length : ''}）`]]);
@@ -573,7 +583,7 @@ function helmResultHtml() {
     let h = _cogoKv(kv);
     if(!acc) h += '<div class="cogo-warn">⚠ ' + (sol.mode === 'sim' ? '縮尺も求めるときは、3組以上で精度を確かめられます（2組では、ちょうど合わせるだけです）' : '組を増やすと、精度を確かめられます') + '</div>';
     const flagged = _helm.pairs.map((p, k) => (p.use && p.res && p.res.flag ? k + 1 : 0)).filter(Boolean);
-    if(flagged.length) h += `<div class="cogo-warn">⚠ No.${flagged.join('・No.')} は、ほかの組と合っていません（その組を除いて求めた変換とのずれが、ばらつきの3倍を超えています）。点の取り違えが無いか確かめてください。「使う」を外すと、その組を除いて計算し直します</div>`;
+    if(flagged.length) h += `<div class="cogo-warn">⚠ No.${flagged.join('・No.')} は、ほかの組と合っていません（その組を除いて求めた変換とのずれが、ばらつきから見て大きすぎます）。点の取り違えが無いか確かめてください。「使う」を外すと、その組を除いて計算し直します</div>`;
     if(st.extra) h += `<div class="cogo-warn">⚠ 張り合わせ点で囲んだ範囲の外の点が ${st.extra}点あります（外挿。張り合わせ点から離れるほど精度が下がります）</div>`;
     const tsOn = typeof _ts !== 'undefined' && !!_ts.port;
     h += '<div class="cogo-btns"><button class="prop-btn" onclick="helmImport()">✅ 図面に取り込む</button>' +

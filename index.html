@@ -1220,6 +1220,7 @@
         <button class="tool-btn" onclick="toggleCommand('ROTATE')" title="回転 (RO)"><div class="tool-icon" style="color:#ffff00;">↻</div><span class="tool-lbl">回転</span><div class="tool-cmd">ROTATE</div></button>
         <button class="tool-btn" onclick="toggleCommand('MIRROR')" title="鏡像 (MI)"><div class="tool-icon" style="color:#ffff00;">⇋</div><span class="tool-lbl">鏡像</span><div class="tool-cmd">MIRROR</div></button>
         <button class="tool-btn" onclick="toggleCommand('SCALE')" title="尺度変更 (SC)"><div class="tool-icon" style="color:#ffff00;">⤢</div><span class="tool-lbl">尺度</span><div class="tool-cmd">SCALE</div></button>
+        <button class="tool-btn" onclick="toggleCommand('HALIGN')" title="張り合わせ (AL) - 図面の中の図形を、別窓で選んだ点と図面の点の組で、回転・移動（・縮尺）して合わせる（ヘルマート変換）"><div class="tool-icon" style="color:#ffff00;">⧉</div><span class="tool-lbl">張合せ</span><div class="tool-cmd">HALIGN</div></button>
         <button class="tool-btn" onclick="toggleCommand('ARRAY')" title="配列 (AR)"><div class="tool-icon" style="color:#ffff00;">▦</div><span class="tool-lbl">配列</span><div class="tool-cmd">ARRAY</div></button>
         <button class="tool-btn" onclick="toggleCommand('BREAK')" title="分割 (BR) - 点で分ける・等分する"><div class="tool-icon" style="color:#ffff00;">÷</div><span class="tool-lbl">分割</span><div class="tool-cmd">BREAK</div></button>
         <button class="tool-btn" onclick="toggleCommand('JOIN')" title="結合 (J) - つながった線を1本に"><div class="tool-icon" style="color:#ffff00;">⋈</div><span class="tool-lbl">結合</span><div class="tool-cmd">JOIN</div></button>
@@ -1521,6 +1522,7 @@
     <script src="cad-subview.js"></script>
     <script src="cad-helmert.js"></script>
     <script src="cad-helmert-rev.js"></script>
+    <script src="cad-align.js"></script>
     <script src="cad-fav.js"></script>
     <script src="cad-motion.js"></script>
     <script src="cad-snapsheet.js"></script>

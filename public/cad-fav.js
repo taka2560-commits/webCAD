@@ -33,6 +33,7 @@ const FAV_CATALOG = [
     { id: 'ROTATE', label: '回転', icon: '↻', color: '#ffff00', cat: 'edit' },
     { id: 'MIRROR', label: '鏡像', icon: '⇋', color: '#ffff00', cat: 'edit' },
     { id: 'SCALE', label: '尺度', icon: '⤢', color: '#ffff00', cat: 'edit' },
+    { id: 'HALIGN', label: '張合せ', icon: '⧉', color: '#ffff00', cat: 'edit' },
     { id: 'ARRAY', label: '配列', icon: '▦', color: '#ffff00', cat: 'edit' },
     { id: 'BREAK', label: '分割', icon: '÷', color: '#ffff00', cat: 'edit' },
     { id: 'JOIN', label: '結合', icon: '⋈', color: '#ffff00', cat: 'edit' },

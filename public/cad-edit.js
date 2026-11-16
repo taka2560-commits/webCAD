@@ -6,9 +6,9 @@
 
 // 図形をタップで選ぶ段階（スナップしない・カーソルの下の図形を強調する）
 const EDIT_PICK_MODES = ['WAITING_MIRROR_SELECT', 'WAITING_SCALE_SELECT', 'WAITING_ARRAY_SELECT', 'WAITING_BREAK_SELECT',
-    'WAITING_JOIN_SELECT', 'WAITING_FILLET_SELECT', 'WAITING_FILLET_SECOND'];
+    'WAITING_JOIN_SELECT', 'WAITING_FILLET_SELECT', 'WAITING_FILLET_SECOND', 'WAITING_HALIGN_SELECT'];
 // 範囲選択でも対象を選べる段階
-const EDIT_AREA_MODES = ['WAITING_MIRROR_SELECT', 'WAITING_SCALE_SELECT', 'WAITING_ARRAY_SELECT', 'WAITING_JOIN_SELECT'];
+const EDIT_AREA_MODES = ['WAITING_MIRROR_SELECT', 'WAITING_SCALE_SELECT', 'WAITING_ARRAY_SELECT', 'WAITING_JOIN_SELECT', 'WAITING_HALIGN_SELECT'];
 const EDIT_ARRAY_MAX = 20000;   // 配列で一度に作る図形の上限
 const EDIT_PREVIEW_MAX = 3000;  // 途中の表示で形を描く図形の上限（多いときは外形の枠だけ）
 const EDIT_PROMPT = {
@@ -18,6 +18,8 @@ const EDIT_PROMPT = {
     BREAK_SELECT: '分割: 分ける図形を選択', BREAK_DIVIDE: '分割: 等分する図形を選択', BREAK_POINT: '分割: 分ける点を指定',
     JOIN_SELECT: '結合: つなぐ線を選択 → ☑確定',
     FILLET_SELECT: '角の処理: 1本目の線（残す側）を選択', FILLET_SECOND: '角の処理: 2本目の線（残す側）を選択',
+    // 張り合わせ（cad-align.js）
+    HALIGN_SELECT: '張り合わせ: 動かす図形を選択',
 };
 function editIsPickMode(m) { return EDIT_PICK_MODES.includes(m); }
 function editIsAreaSelectMode(m) { return EDIT_AREA_MODES.includes(m); }
@@ -107,6 +109,7 @@ function editAreaSelect(selected) {
     }
     cmdState.selectedIndices = list;
     if(!list.length) return true;
+    if(m === 'WAITING_HALIGN_SELECT') { alignStart(list); return true; } // 張り合わせ: 動かす図形が決まった（別窓を出す。cad-align.js）
     if(m === 'WAITING_MIRROR_SELECT') { cmdState.mode = 'WAITING_MIRROR_P1'; setPrompt(EDIT_PROMPT.MIRROR_P1); }
     else if(m === 'WAITING_SCALE_SELECT') { cmdState.mode = 'WAITING_SCALE_BASE'; setPrompt(EDIT_PROMPT.SCALE_BASE); }
     else if(m === 'WAITING_ARRAY_SELECT') { _editArrayEnter(); }
@@ -134,6 +137,7 @@ function _editPanelFor(m) {
     else if(m.startsWith('WAITING_BREAK_')) _editBreakPanel();
     else if(m.startsWith('WAITING_FILLET_')) _editFilletPanel();
     else if(m === 'WAITING_JOIN_SELECT') _editJoinPanel();
+    else if(m === 'WAITING_HALIGN_SELECT') showPropertyPanel('⧉ 張り合わせ', _editNote('動かす図形を選びます（タップ・範囲選択）。選ぶと、その図形が別窓に出ます → 別窓で「動かす側の点」をタップ → 図面で「合わせる先の点」をなぞって ☑確定（2組以上）。回転・移動（・縮尺）を求めて、図形を合わせます。'));
 }
 
 // ===== 鏡像 =====
@@ -474,6 +478,7 @@ function handleEditPointInput(m, wcs) {
     case 'WAITING_FILLET_SELECT': _editFilletFirst(wcs); return true;
     case 'WAITING_FILLET_SECOND': editDoFillet(wcs); return true;
     }
+    if(typeof alignPointInput === 'function' && alignPointInput(m, wcs)) return true; // 張り合わせ（cad-align.js）
     return false;
 }
 // 画面下の ☑確定（cad-command.js の dimConfirmPoint から）。編集コマンドの段階なら処理して true
@@ -516,6 +521,7 @@ function processEditCommand(cmd) {
         if(cmdState.mode === 'WAITING_ARRAY_SET') _editArrayEnter();
         return true;
     }
+    if(typeof alignCommand === 'function' && alignCommand(cmd)) return true; // 張り合わせ（HALIGN・ALIGN・AL。cad-align.js）
     if(cmd === 'BR' || cmd === 'BREAK' || cmd === 'DIV' || cmd === 'DIVIDE') {
         if(cmd === 'DIV' || cmd === 'DIVIDE') { lastParams.breakMode = 'divide'; saveLastParams(); }
         _editBegin('BREAK', '分割', 'WAITING_BREAK_SELECT', null, '');

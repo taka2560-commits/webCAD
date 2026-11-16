@@ -34,6 +34,7 @@ function _prepareImportTarget(next, onCancel) {
 function _clearForReplace() {
     // 途中のコマンドはやめる（v5.58.3）: 続けると、消した図面の点・図形で作図していた（前の図面の円の半径寸法・前の点からの線・オフセットのエラー）
     if(cmdState.mode !== 'IDLE') resetCommand();
+    if(typeof alignReset === 'function') alignReset(); // 張り合わせの途中もやめる（cad-align.js）
     _importUndo = undoStack[undoStack.length - 1];
     _importProject = (typeof window.getProjectState === 'function') ? window.getProjectState() : null;
     entities.length = 0;

@@ -376,10 +376,13 @@ describe('計算ゲート（独立した答えとの照合）', () => {
                 closeTo('helmLeaveOneOut.d', lo.d, Math.hypot(q.X - p.dst.X, q.Y - p.dst.Y), TOL.len * 100, { i, k });
                 const sig = Math.max(e.sigma0, 0.001), ps = e.pointSigma(p.src.X, p.src.Y);
                 if(mode === 'sim') closeTo('helmLeaveOneOut.sig', lo.sig / Math.sqrt(sig * sig + (ps.sX * sig / e.sigma0) ** 2), 1, TOL.rel, { i, k });
-                assert.equal(lo.flag, lo.d > 3 * lo.sig);
+                // 境の倍率 k: 取り違えの無い組が境を超える確率 (1 + k²/dof)^(−dof/2)（F(2, dof) の上側）が 1%
+                const dofLo = 2 * (c.pairs.length - 1) - (mode === 'rigid' ? 3 : 4);
+                closeTo('helmLeaveOneOut.k（上側の確率 1%）', Math.pow(1 + lo.k * lo.k / dofLo, -dofLo / 2), 0.01, 1e-12, { i, k });
+                assert.equal(lo.flag, lo.d > lo.k * lo.sig);
                 if(k === bad) { assert.equal(lo.flag, true, `外れた組 ${k} を知らせる（${lo.d} / ${lo.sig}）`); flagged++; }
             });
-            // 外れた組を除けば、知らせる組はほとんど無い（3σ を超えるのは偶然だけ）
+            // 外れた組を除けば、知らせる組はほとんど無い（境を超えるのは偶然だけ）
             const good = c.pairs.filter((_, k) => k !== bad);
             good.forEach((_, k) => { checks++; if(W.helmLeaveOneOut(good, mode, k).flag) falseFlags++; });
         }
@@ -444,6 +447,57 @@ describe('計算ゲート（独立した答えとの照合）', () => {
             }
         } finally {
             app.eval(`_helm.src = null; _helm.pairs = []; _helm.sol = null; entities.length = 0; undoStack.length = 0;`);
+            setUnit('m');
+        }
+    }));
+
+    // ===================== 図形の張り合わせ（cad-align.js。v5.59） =====================
+    ['m', 'mm'].forEach((unit) => it(`alignCompute・alignApply: 図面の中の図形を、点の組で張り合わせる（${unit} の図面）`, () => {
+        setUnit(unit);
+        const f = unit === 'mm' ? 1000 : 1, g = O.rng(unit === 'mm' ? 312 : 311);
+        try {
+            for(let i = 0; i < 40; i++) {
+                const mode = i % 2 ? 'sim' : 'rigid', c = makePairs(g, g.int(2, 7), mode, i % 4 < 2 ? 0 : 0.005);
+                const e = O.helmertLsq(c.pairs, mode);
+                // 図面の座標の組（アプリに渡す形）。測量の座標 → 図面の座標は、テストの側の式で
+                const wp = c.pairs.map((p) => ({ src: O.surveyToWcs(f, p.src.X, p.src.Y), dst: O.surveyToWcs(f, p.dst.X, p.dst.Y), use: true }));
+                const test = Array.from({ length: 6 }, () => ({ X: c.src0.X + g.u(-1.5, 1.5) * c.spread, Y: c.src0.Y + g.u(-1.5, 1.5) * c.spread }));
+                const tw = test.map((p) => O.surveyToWcs(f, p.X, p.Y));
+                const got = app.val(`(() => { const c = alignCompute(${JSON.stringify(wp)}, '${mode}');
+                    return { ok: c.sol.ok, sig: c.sol.sigma0, dof: c.sol.dof, scale: c.sol.scale, k: c.T.k, rows: c.rows.map((r) => r.d),
+                        pts: ${JSON.stringify(tw)}.map((w) => editXformPoint(c.T, w.x, w.y)) }; })()`);
+                assert.ok(got.ok);
+                assert.equal(got.dof, 2 * c.pairs.length - (mode === 'rigid' ? 3 : 4));
+                if(e.sigma0 === null) assert.equal(got.sig, null); else closeTo('alignCompute.sigma0', got.sig, e.sigma0, 1e-9 + e.sigma0 * TOL.rel, i);
+                closeTo('alignCompute.scale', got.scale, e.scale, 1e-13 * Math.max(1, 1e4 / c.spread), i);
+                closeTo('alignCompute.T.k（図形の倍率）', got.k, e.scale, 1e-13 * Math.max(1, 1e4 / c.spread), i);
+                c.pairs.forEach((p, k) => closeTo('alignCompute.rows.d（較差 m）', got.rows[k], e.residuals[k].d, TOL.len * 10, { i, k }));
+                test.forEach((p, k) => {
+                    const want = e.apply(p.X, p.Y), w = O.surveyToWcs(f, want.X, want.Y);
+                    closePt(`alignCompute.T（${unit}・図面の座標）`, got.pts[k], w, 1e-7 * f, { unit, i, k }, 'x', 'y');
+                    note(`alignCompute.T（${unit}。m に直した差）`, Math.hypot(got.pts[k].x - w.x, got.pts[k].y - w.y) / f);
+                });
+                // コマンドで動かす: 選ぶ → 別窓で動かす側の点・図面で合わせる先の点（点の入力）→ 動かす。点・線・円（半径は縮尺ぶん）が、照らし合わせる側と同じ所へ
+                const moved = app.val(`(() => { alignReset(); resetCommand(); entities.length = 0; undoStack.length = 0;
+                    const E = ${JSON.stringify(tw.slice(0, 4))};
+                    E.forEach((w) => entities.push({ type: 'POINT', layer: 0, color: null, x: w.x, y: w.y }));
+                    entities.push({ type: 'LINE', layer: 0, color: null, x1: E[0].x, y1: E[0].y, x2: E[1].x, y2: E[1].y });
+                    entities.push({ type: 'CIRCLE', layer: 0, color: null, cx: E[2].x, cy: E[2].y, radius: 2.5 });
+                    ensureEntityIds(); cmdState.selectedIndices = entities.map((_, i) => i);
+                    lastParams.alignMode = '${mode}'; lastParams.alignKeep = false;
+                    processCommand('HALIGN');
+                    ${JSON.stringify(wp)}.forEach((p) => { alignSelectSource(p.src); _handlePointInputCore(p.dst, false); });
+                    const done = alignApplyNow() > 0;
+                    const l = entities.find((e) => e.type === 'LINE'), ci = entities.find((e) => e.type === 'CIRCLE');
+                    return { done, undo: undoStack.length, pts: entities.filter((e) => e.type === 'POINT').map((e) => ({ x: e.x, y: e.y })), line: [{ x: l.x1, y: l.y1 }, { x: l.x2, y: l.y2 }], c: { x: ci.cx, y: ci.cy }, r: ci.radius }; })()`);
+                assert.equal(moved.done, true); assert.equal(moved.undo, 1);
+                test.slice(0, 4).forEach((p, k) => { const want = e.apply(p.X, p.Y); closePt(`alignApply（${unit}・点）`, moved.pts[k], O.surveyToWcs(f, want.X, want.Y), 1e-7 * f, { i, k }, 'x', 'y'); });
+                { const want = e.apply(test[1].X, test[1].Y); closePt(`alignApply（${unit}・線の端）`, moved.line[1], O.surveyToWcs(f, want.X, want.Y), 1e-7 * f, i, 'x', 'y'); }
+                { const want = e.apply(test[2].X, test[2].Y); closePt(`alignApply（${unit}・円の中心）`, moved.c, O.surveyToWcs(f, want.X, want.Y), 1e-7 * f, i, 'x', 'y'); }
+                closeTo('alignApply（円の半径 ＝ 縮尺ぶん）', moved.r, 2.5 * e.scale, 1e-12 * Math.max(1, 1e4 / c.spread), i);
+            }
+        } finally {
+            app.eval(`alignReset(); resetCommand(); closePropertyPanel(); hideSnack(); entities.length = 0; undoStack.length = 0; lastParams.alignMode = 'rigid'; lastParams.alignKeep = false;`);
             setUnit('m');
         }
     }));

@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.58.4（2026年11月11日リリース）**
+**現在のバージョン: v5.59（2026年11月16日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -30,7 +30,7 @@
 
 ### ✏️ 描く・直す
 - 線分・ポリライン・長方形・円・円弧・楕円・文字・塗りつぶし・点（座標一覧に入る）。
-- 移動・複写・回転・削除・オフセット・トリム・延長・鏡像・尺度変更・配列・分割・等分・結合・角の処理（フィレット・面取り）、グリップで点を動かす。
+- 移動・複写・回転・削除・オフセット・トリム・延長・鏡像・尺度変更・張り合わせ（別窓で選んだ点と図面の点の組で、回転・移動・縮尺。ヘルマート変換）・配列・分割・等分・結合・角の処理（フィレット・面取り）、グリップで点を動かす。
 - **UCS の登録・管理**（v5.42）: UCS を決めたら「＋ 登録」、今の UCS の名前を下の欄・全画面に表示、UCS 管理（切り替え・名前・上書き・消す）、数値・点・線で UCS を作る。全画面の道具箱からも登録できます。
 - **出力名**（v5.41）: 書き出すときに名前の欄が出て、その回だけ名前を変えられます。☰「🏷 出力名」で図面ごとの名前のもとも決めておけます（オプションで聞かないこともできます）。
 - **円の描き方**（v5.40）: 固定半径・中心と半径に加えて、3点（円周の3点を通る）・2点（直径）・接線・接線・半径（2つの線・円に接する）。作図設定・下のバーの 🔄、コマンド欄の 3P・2P・TTR で選びます。
@@ -116,6 +116,7 @@
 | **EXTEND** | `EX` | 延長 |
 | **MIRROR** | `MI` | 鏡像 |
 | **SCALE** | `SC` | 尺度変更 |
+| **HALIGN** | `AL`・`ALIGN` | 張り合わせ（図面の中の図形を、別窓で選んだ点と図面の点の組で、回転・移動・縮尺して合わせる） |
 | **ARRAY** | `AR` | 配列 |
 | **BREAK** | `BR` | 分割（点で） |
 | **DIVIDE** | `DIV` | 等分 |
@@ -221,7 +222,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（953件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（978件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト（計算ゲートを含む）→ 品質のチェック G1 → ビルド → 画面のチェック G2（CI と同じ内容。docs/品質管理ゲート.md）
 ```
@@ -293,6 +294,7 @@ npm run check        # lint → テスト（計算ゲートを含む）→ 品�
   | `cad-snapsheet.js` | スナップのシート（OSNAP・▼ の長押し・上へなぞる → 指を滑らせて離すと入／切して閉じる。バネの動き） |
   | `cad-ping.js` | ピンの知らせ（ポンと立つ・円の波・現在地からの距離） |
   | `cad-helmert-rev.js` | SIMA の変換の逆（張り合わせ点から図面 → SIMA の変換を求め、図面の図形を SIMA の座標へ動かす） |
+  | `cad-align.js` | 図形の張り合わせ（HALIGN）: 動かす図形を別窓に出し、別窓で選んだ点 → 図面の点 の組から求めた回転・移動（・縮尺）で動かす。計算は `cad-helmert.js` の helmSolve、選び方は `cad-edit.js`、点の指定は SIMA の変換と同じ（別窓 `cad-subview.js`・測量計算の点の指定） |
   | `cad-qr.js` | このアプリを渡す QR コード（qrcode-generator。リンクは今の場所、手元の開発用なら公開の場所） |
   | `cad-ai-read.js` | 座標表の読み取り（Claude Opus 5.5。写真・PDF → 点番号・点名・X・Y・標高 → 確かめる表 → 座標一覧。API キーは使う人がそれぞれ端末に入れる。SDK は src/vendor.js の loadClaudeSdk） |
   | `cad-dropbox.js` | Dropbox から開く（アプリの中の一覧。files/list_folder・files/download）・Dropbox に保存（files/upload）。OAuth 2 PKCE でつなぐ。保存先は開いたファイルのフォルダ。Dropbox のスクリプトは読まない（v5.56） |
