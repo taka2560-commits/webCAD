@@ -323,7 +323,7 @@ function createOffsetEntity(e, d, wx, wy) {
     const copy = JSON.parse(JSON.stringify(e));
     delete copy.bbox; // 元図形のbboxを引き継ぐとスナップ/描画カリングが誤判定する
     // オフセットで作った図形は独立した新しい図形（元のブロックのグループには入れない）
-    delete copy.id; delete copy.gid; delete copy.blockName;
+    delete copy.id; delete copy.gid; delete copy.ogid; delete copy.blockName;
     if(e.type==='CIRCLE'||e.type==='ARC') {
         const dc = dist(e.cx, e.cy, wx, wy);
         if(dc > e.radius) copy.radius += d; else { copy.radius -= d; if(copy.radius<=0) return null; }
@@ -455,6 +455,7 @@ function _plineBarCleanup() {
     if(cmdState.mode === 'WAITING_PLINE_NEXT') return;
     const pc = document.getElementById('pline-close-btn'); if(pc) pc.style.display = 'none';
     const ub = document.getElementById('line-undo-btn');
+    if(typeof _alignPicking === 'function' && _alignPicking()) { alignBarSync(); return; } // 張り合わせの点の指定の途中は、張り合わせの側が決める（v5.59.3）
     if(ub && !(typeof _isLineMode === 'function' && _isLineMode(cmdState.mode))) ub.style.display = 'none'; // 線分に移ったときは、線分の側が決める
     if(typeof fitPanelAboveActionbar === 'function') fitPanelAboveActionbar();
 }
@@ -696,7 +697,7 @@ function processCommand(cmdText) {
         }
     }
     // WAITING_TEXT_STR was removed
-    if(cmdState.mode === 'WAITING_PLINE_NEXT') Promise.resolve().then(_plineBarCleanup); // 別のコマンドに移ったら、ポリラインのボタンを片付ける（v5.58.4）
+    if(cmdState.mode === 'WAITING_PLINE_NEXT' || (typeof _alignPicking === 'function' && _alignPicking())) Promise.resolve().then(_plineBarCleanup); // 別のコマンドに移ったら、ポリラインのボタンを片付ける（v5.58.4）
     if(cmd !== 'U' && cmd !== 'UNDO' && typeof lineBeforeOtherCommand === 'function') lineBeforeOtherCommand(); // 線分の下のバーを片付ける（cad-line.js）
     // 作図・編集のコマンド（鏡像・尺度変更・配列・分割・結合・角の処理）と、その途中で入れる数（倍率・半径など）（cad-edit.js）
     if(typeof processEditCommand === 'function' && processEditCommand(cmd)) return;
@@ -869,7 +870,7 @@ function processCommand(cmdText) {
     else if(cmd==='GROUP'||cmd==='G') { window.groupSelection(); }
     else if(cmd==='UNGROUP'||cmd==='EXPLODE'||cmd==='X') { window.explodeSelection(); }
     else if(cmd==='BLOCKS'||cmd==='BLOCK') { window.showBlockManagerPanel(); }
-    else if(cmd==='U'||cmd==='UNDO') { if(!(cmd==='U' && lineUndoStep())) undo(); } // 線分の途中の U は、最後に引いた線だけ消す（AutoCAD と同じ）
+    else if(cmd==='U'||cmd==='UNDO') { if(!(cmd==='U' && (lineUndoStep() || (typeof alignUndoStep === 'function' && alignUndoStep())))) undo(); } // 線分の途中の U は、最後に引いた線だけ消す（AutoCAD と同じ）
     else if(cmd==='REDO') { redo(); }
     else if(cmd==='ZE'||cmd==='ZOOM') { zoomExtents(); }
     else if(cmd==='ZOOMALL'||cmd==='ZA') { zoomExtentsAll(); } // 離れた図形も入れて全体（v5.51）

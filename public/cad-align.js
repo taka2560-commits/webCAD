@@ -34,6 +34,9 @@ const _align = {
     keys: null,     // 別窓で拾える点（図形の要の点）と、それを作ったときの図形データの世代
     folded: false,  // 図面で点を指定するあいだ、別窓をたたんだか
     loop: false,    // 「📍 図面で組を指定」の途中（組が決まったら、続けて次の組の動かす側の点へ。❌終了 でやめる）
+    hist: [],       // 張り合わせ点の「1つ戻す」の記録（組を変える前の組の写し。v5.59.3）
+    redo: [],       // 戻した分（やり直す）。新しく組を変えたら捨てる
+    histMark: 0,    // 最後に組を変えたときの、図面の ↩ の記録の数（そのあとに図面を変えていたら、Ctrl+Z は先にそちらを戻す）
     selAt: 0,       // 図面で動かす側の点を決めた時刻（☑確定 を続けて2度押したときに、同じ点を合わせる先にしないため）
     viewClosed: false, // 別窓を ✕ で閉じた（「🗺 別窓を開く」まで出さない）
 };
@@ -126,7 +129,7 @@ function alignStart(idxs) {
     const ids = (idxs || []).filter((i) => entities[i] && entities[i].type !== 'PIN').map((i) => entities[i].id);
     if(!ids.length) { _editToast('張り合わせ: 動かす図形がありません'); return false; }
     if(cogoIsPicking()) _cogo.pick = null;
-    Object.assign(_align, { on: true, ids, pairs: [], sel: null, hover: null, calc: null, keys: null, folded: false, loop: false, viewClosed: false });
+    Object.assign(_align, { on: true, ids, pairs: [], sel: null, hover: null, calc: null, keys: null, folded: false, loop: false, viewClosed: false, hist: [], redo: [], histMark: undoStack.length });
     delete _cogo.slots.AT; delete _cogo.slots.AS;
     resetCommand(); // 選ぶ段階を終える（選択の印も消す。動かす図形は、図面にオレンジで出す）
     addCommandLog(`-> [張り合わせ] 動かす図形 ${ids.length}個。別窓で動かす側の点をタップ → 図面で合わせる先の点を ☑確定（2組以上）`);
@@ -146,7 +149,8 @@ function _alignShow() {
 function alignReset() {
     const was = _align.on;
     if(cogoIsPicking() && _cogo.pick && _cogo.pick.owner === 'align') { _cogo.pick = null; resetCommand(); }
-    Object.assign(_align, { on: false, ids: [], pairs: [], sel: null, hover: null, calc: null, keys: null, folded: false, loop: false, viewClosed: false });
+    Object.assign(_align, { on: false, ids: [], pairs: [], sel: null, hover: null, calc: null, keys: null, folded: false, loop: false, viewClosed: false, hist: [], redo: [] });
+    alignBarSync();
     if(typeof _cogo !== 'undefined') { delete _cogo.slots.AT; delete _cogo.slots.AS; }
     if(_alignViewInst && _alignViewInst.isOpen()) _alignViewInst.hide();
     if(was && _alignPanelShown()) closePropertyPanel();
@@ -260,6 +264,130 @@ function _alignStamp(pr) { Object.defineProperty(pr, 'sig', { value: _alignKeyCa
 function _alignStale() {
     const cur = _alignKeyCache().sig;
     return _align.pairs.some((p) => p.use !== false && p.sig !== undefined && p.sig !== cur);
+}
+// ===== 張り合わせ点の「1つ戻す」（v5.59.3） =====
+// 組の写し（図形のしるし sig も）。組を変える前に _alignRemember() で記録する
+const ALIGN_HIST_MAX = 200;
+function _alignSnapshot() { return _align.pairs.map((p) => ({ src: { x: p.src.x, y: p.src.y }, dst: { x: p.dst.x, y: p.dst.y, name: p.dst.name || '' }, use: p.use !== false, sig: p.sig })); }
+function _alignRestore(snap) {
+    _align.pairs = snap.map((p) => { const pr = { src: { x: p.src.x, y: p.src.y }, dst: { x: p.dst.x, y: p.dst.y, name: p.dst.name || '' }, use: p.use !== false };
+        if(p.sig !== undefined) Object.defineProperty(pr, 'sig', { value: p.sig, enumerable: false, writable: true, configurable: true });
+        return pr; });
+    _align.calc = null;
+}
+function _alignRemember() {
+    _align.hist.push(_alignSnapshot());
+    if(_align.hist.length > ALIGN_HIST_MAX) _align.hist.shift();
+    _align.redo = [];
+    _align.histMark = undoStack.length;
+}
+// 最後に組を変えたあとに、図面を変えている（グループにした・図形を隠した など）。そのときの Ctrl+Z・U は、張り合わせ点ではなく、先に図面の ↩
+function _alignDrawingNewer() { return undoStack.length > _align.histMark; }
+// 図面の ↩・やり直しのあと（cad-core.js の undo・redo から）: 張り合わせのパネルを描き直す（「グループ済み」・「動かす図形が変わっています」を今の図形に合わせる）
+function alignAfterUndo() {
+    if(!_align.on) return;
+    _align.calc = null;
+    if(_alignPanelShown()) alignPanel();
+    if(_alignViewInst) _alignViewInst.redraw();
+}
+// 張り合わせの画面を使っているか（図面で点を指定している、または、ほかのコマンドの途中でなくパネルを出している）。
+// 線分などを描いている途中の Ctrl+Z は、張り合わせ点ではなく、その図形の ↩ にする
+function _alignActive() { return _align.on && (_alignPicking() || (cmdState.mode === 'IDLE' && _alignPanelShown())); }
+// 組が変わったあとの描き直し。スマホで点を指定しているあいだ（パネルを隠している）は、パネルを出し直さない
+function _alignRefresh() {
+    _align.calc = null;
+    if(!_alignPicking() || _alignPanelShown() || !(typeof panelCoversDrawing === 'function' && panelCoversDrawing())) alignPanel(); // 出ているパネルは、いつも描き直す
+    if(_alignPicking() && _cogo.pick) _alignPickPrompt(_cogo.pick.keys[_cogo.pick.i]);
+    alignBarSync();
+    if(typeof renderOverlay === 'function') renderOverlay();
+    if(_alignViewInst) _alignViewInst.redraw();
+}
+// 点の指定の帯の「↶ 1つ戻す」: 張り合わせの点を指定していて、戻せるもの（選んだ動かす側の点・組の記録）があるときだけ出す
+function alignBarSync() {
+    const ub = document.getElementById('line-undo-btn');
+    if(!ub) return;
+    if(typeof _isLineMode === 'function' && (_isLineMode(cmdState.mode) || cmdState.mode === 'WAITING_PLINE_NEXT')) return; // 線分・ポリラインの途中は、そちらが決める
+    const want = _alignPicking() && (!!_align.sel || _align.hist.length > 0);
+    if((ub.style.display !== 'none') === want) return;
+    ub.style.display = want ? '' : 'none';
+    if(typeof fitPanelAboveActionbar === 'function') fitPanelAboveActionbar(); // ボタンが増えた・減った: 帯の位置とパネルの高さを測り直す
+}
+/**
+ * ↶ 1つ戻す（帯のボタン・パネルのボタン・コマンド U・Ctrl+Z）。戻したら true（図面の ↩ はしない）。
+ *   ・合わせる先の点を待っているとき: 選んだ動かす側の点を取り消す（図面で続けて指定しているときは、動かす側の点の指定へ戻る。別窓で選んだときは、パネルへ戻る）
+ *   ・それ以外: 最後に組を変えた操作（足す・入れ替える・消す・使う／外す・点名で組にする）を取り消す
+ *   ・戻せるものが無い: 点を指定している途中なら知らせるだけ（図面の ↩ にはしない）。パネルだけのときは false（図面の ↩ になる）
+ *   ・最後に組を変えたあとに図面を変えていたら（グループにした など）、キー・U では false（先に図面の ↩。順番どおりに戻る）
+ *   force: パネルのボタンから（ほかのコマンドの途中でも、図面を変えたあとでも、張り合わせ点を戻す）
+ */
+function alignUndoStep(force) {
+    if(!_align.on || !(force ? (_alignPicking() || _alignPanelShown()) : _alignActive())) return false;
+    const picking = _alignPicking();
+    if(picking && _align.sel) {
+        _align.sel = null;
+        delete _cogo.slots.AS; delete _cogo.slots.AT;
+        addCommandLog('-> [張り合わせ] 選んだ動かす側の点を取り消しました');
+        if(typeof showToast === 'function') showToast('↶ 動かす側の点を取り消しました', 1600);
+        if(_align.loop) { cogoPick('AS', 'align'); _alignRefresh(); }
+        else processCommand('CANCEL'); // 別窓で選んだ点: 指定をやめてパネルへ（別窓で選び直す）
+        return true;
+    }
+    if(!force && !picking && _alignDrawingNewer()) return false;
+    if(!_align.hist.length) {
+        if(!picking && !force) return false;
+        if(typeof notify === 'function') notify('戻せる張り合わせ点はありません', 1800);
+        return true;
+    }
+    _align.redo.push(_alignSnapshot());
+    _alignRestore(_align.hist.pop());
+    _align.histMark = undoStack.length;
+    addCommandLog(`-> [張り合わせ] 張り合わせ点を1つ戻しました（${_align.pairs.length}組）`);
+    if(typeof showToast === 'function') showToast(`↶ 張り合わせ点を1つ戻しました（${_align.pairs.length}組）`, 1600);
+    _alignRefresh();
+    return true;
+}
+// ↷ やり直す（Ctrl+Y・Ctrl+Shift+Z・パネルのボタン）。やり直したら true
+function alignRedoStep(force) {
+    if(!_align.on || !(force ? (_alignPicking() || _alignPanelShown()) : _alignActive())) return false;
+    const picking = _alignPicking();
+    // 点を指定している途中は、やり直せるものが無くても図面のやり直しにはしない（Ctrl+Z を張り合わせ点に使うので、Ctrl+Y だけ図面に効くと戻せなくなる）
+    if(picking && (_align.sel || !_align.redo.length)) { if(typeof notify === 'function') notify('やり直せる張り合わせ点はありません', 1800); return true; }
+    if(!_align.redo.length) return false;
+    if(!force && !picking && _alignDrawingNewer()) return false;
+    _align.hist.push(_alignSnapshot());
+    _alignRestore(_align.redo.pop());
+    _align.histMark = undoStack.length;
+    addCommandLog(`-> [張り合わせ] 戻した張り合わせ点をやり直しました（${_align.pairs.length}組）`);
+    if(typeof showToast === 'function') showToast(`↷ やり直しました（${_align.pairs.length}組）`, 1600);
+    _alignRefresh();
+    return true;
+}
+window.alignUndoStep = alignUndoStep;
+window.alignRedoStep = alignRedoStep;
+// 🧩 動かす図形を1つのグループにする（1つタップすると、まとめて選べる。↩ 1回分）。中のブロック・測点・寸法のまとまりは残す（外側のグループ。cad-panels.js の groupEntities）
+window.alignGroupTargets = function() {
+    if(!_align.on) return false;
+    const idxs = _alignTargets();
+    if(idxs.length < 2) { _editToast('グループにするには、動かす図形が2個以上要ります'); return false; }
+    if(_alignGrouped(idxs)) { _editToast('動かす図形は、もう1つのグループになっています'); return false; }
+    saveUndo();
+    const kind = groupEntities(idxs);
+    if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    const extra = groupMembersOf(entities[idxs[0]]).length - idxs.length; // 同じまとまり（ブロック・測点と点名）の、動かす図形に入っていない仲間
+    if(extra > 0) addCommandLog(`-> [張り合わせ] 同じまとまりの図形 ${extra}個も、グループに入れました（動かす図形には入っていません。まとめて動かすときは、グループをタップして選び直してください）`);
+    addCommandLog(`-> [張り合わせ] 動かす図形 ${idxs.length}個をグループにしました` + (kind === 'outer' ? '（中のブロック・測点・寸法などのまとまりは、そのまま残しています）' : ''));
+    _editToast(`動かす図形 ${idxs.length}個をグループにしました（1つタップすると、まとめて選べます` + (window.groupSelectEnabled ? '）' : '。「タップでブロック全体を選択」が切のあいだは、まとめては選ばれません）'));
+    if(typeof window.updateBlockManagerContent === 'function') window.updateBlockManagerContent();
+    alignPanel();
+    render();
+    return true;
+};
+// 動かす図形が、ちょうど1つのグループ（外側のグループ、または gid のまとまり）になっているか
+function _alignGrouped(idxs) {
+    const f = entities[idxs[0]];
+    if(!f || idxs.length < 2) return false;
+    const key = (e) => (e.ogid ? 'o:' + e.ogid : (e.gid ? 'g:' + e.gid : '')), k0 = key(f);
+    return !!k0 && idxs.every((i) => key(entities[i]) === k0); // 動かす図形が、みな同じ1つのグループの中（グループに、ほかの図形も入っていてよい）
 }
 // 張り合わせの点を、図面で指定している途中か
 function _alignPicking() { return cogoIsPicking() && !!_cogo.pick && _cogo.pick.owner === 'align'; }
@@ -421,6 +549,7 @@ function _alignAfterPick() {
     const pr = _alignStamp({ src: { x: src.x, y: src.y }, dst: { x: s.x, y: s.y, name: s.name || '' }, use: true });
     const tol = 1e-9 * (Math.abs(src.x) + Math.abs(src.y) + 1);
     let k = _align.pairs.findIndex((p) => Math.abs(p.src.x - src.x) <= tol && Math.abs(p.src.y - src.y) <= tol); // 同じ点を指定し直したときは、同じ番号のまま入れ替える
+    _alignRemember(); // ↶ 1つ戻す で、この組を足す・入れ替える前に戻せる
     if(k >= 0) _align.pairs[k] = pr; else { _align.pairs.push(pr); k = _align.pairs.length - 1; }
     _align.calc = null;
     addCommandLog(`-> [張り合わせ] 組 No.${k + 1}: 合わせる先「${s.name || '(点名なし)'}」${coordLogText(s)}`);
@@ -442,10 +571,11 @@ function _alignPickPrompt(key) {
 if(typeof COGO_SLOT_LABELS !== 'undefined') {
     COGO_SLOT_LABELS.AS = ['動かす側の点', '動'];
     COGO_SLOT_LABELS.AT = ['合わせる先の点', '先'];
-    cogoRegisterPickOwner('align', { slots: () => ['AS', 'AT'], update: () => {}, step: (key) => { _alignTakeSource(); _alignPickPrompt(key); }, render: () => {
+    cogoRegisterPickOwner('align', { slots: () => ['AS', 'AT'], update: () => {}, step: (key) => { _alignTakeSource(); _alignPickPrompt(key); alignBarSync(); }, render: () => {
         // 「📍 図面で組を指定」の途中は、組が決まったら続けて次の組の動かす側の点へ（その中でパネルも描き直す）。'at' は、合わせる先の点の聞き直し
         const next = _alignAfterPick();
         if(next && _align.on) { delete _cogo.slots.AS; delete _cogo.slots.AT; cogoPick(next === 'at' ? 'AT' : 'AS', 'align'); return; }
+        alignBarSync();
         if(_align.on) alignPanel();
     } });
 }
@@ -480,11 +610,12 @@ function _alignOnTargetsOnly(p) { return _alignPointSide(p) === 'sel'; }
 function _alignChanged() {
     _align.calc = null;
     alignPanel();
+    alignBarSync(); // 点を指定している途中にパネルで組を変えた: 帯の ↶ も合わせる
     if(typeof renderOverlay === 'function') renderOverlay();
     if(_alignViewInst) _alignViewInst.redraw();
 }
-window.alignUsePair = function(k, on) { const p = _align.pairs[k]; if(!p) return; p.use = !!on; _alignChanged(); };
-window.alignDeletePair = function(k) { if(!_align.pairs[k]) return; _align.pairs.splice(k, 1); _alignChanged(); };
+window.alignUsePair = function(k, on) { const p = _align.pairs[k]; if(!p) return; if((p.use !== false) !== !!on) _alignRemember(); p.use = !!on; _alignChanged(); };
+window.alignDeletePair = function(k) { if(!_align.pairs[k]) return; _alignRemember(); _align.pairs.splice(k, 1); _alignChanged(); };
 window.alignSetMode = function(m) { lastParams.alignMode = m === 'sim' ? 'sim' : 'rigid'; saveLastParams(); _alignChanged(); };
 window.alignSetKeep = function(on) { lastParams.alignKeep = !!on; saveLastParams(); _alignChanged(); };
 // 🔗 点名が同じ点を組にする: 動かす図形の中の測点 ↔ 動かさない測点（どちらも、その点名が1つだけのとき）
@@ -502,6 +633,7 @@ window.alignPairByName = function() {
     });
     const tolOf = (p) => 1e-9 * (Math.abs(p.x) + Math.abs(p.y) + 1);
     let added = 0, skipped = 0;
+    const before = _alignSnapshot();
     src.forEach((s, name) => {
         const d = dst.get(name);
         if(!d) return;
@@ -510,6 +642,7 @@ window.alignPairByName = function() {
         _align.pairs.push(_alignStamp({ src: { x: s.x, y: s.y }, dst: { x: d.x, y: d.y, name }, use: true }));
         added++;
     });
+    if(added) { _align.hist.push(before); if(_align.hist.length > ALIGN_HIST_MAX) _align.hist.shift(); _align.redo = []; } // ↶ 1つ戻す で、まとめて足した組を戻せる
     const more = skipped ? `（同じ点名が2つ以上ある ${skipped}点は、組にしていません）` : '';
     if(added) _editToast(`点名が同じ点を ${added}組、張り合わせ点にしました${more}`);
     else _editToast(`点名が同じ測点が、動かす図形と動かさない図形の両方にありません${more}`);
@@ -617,6 +750,7 @@ function alignPanel() {
     h += `<div class="ts-sec">張り合わせ点${pairs.length ? `（計算に使う ${c.nUse} / ${pairs.length}組）` : ''}・動かす図形 ${n}個</div>`;
     h += '<div class="cogo-btns"><button class="prop-btn btn-sub" id="align-pick-draw" onclick="alignPickInDrawing()" title="図面の上で、動かす側の点 → 合わせる先の点 の順に、スナップで指定する（続けて次の組。終わるときは ❌終了）">📍 図面で組を指定</button>' +
         '<button class="prop-btn btn-sub" onclick="alignPairByName()" title="動かす図形の中の測点と、動かさない測点で、点名が同じものを組にする">🔗 点名が同じ点を組にする</button>' +
+        (n >= 2 ? `<button class="prop-btn btn-sub" id="align-group" onclick="alignGroupTargets()" ${_alignGrouped(_alignTargets()) ? 'disabled' : ''} title="動かす図形を1つのグループにする（1つタップすると、まとめて選べる。中のブロック・測点・寸法のまとまりは残す）">${_alignGrouped(_alignTargets()) ? '🧩 グループ済み' : '🧩 グループにする'}</button>` : '') +
         (_align.viewClosed ? '<button class="prop-btn btn-sub" onclick="alignOpenView()">🗺 別窓を開く</button>' : '') + '</div>';
     if(!pairs.length) h += _editNote('別窓（動かす図形）で「動かす側の点」をタップ → 図面で「合わせる先の点」をなぞって ☑確定（PC はクリック）。別窓でも図面でも、端点・中点・交点・線の上などに吸い付きます（種類は OSNAP の設定と同じ）。動かす側の点も図面の上で指定するときは「📍 図面で組を指定」（動かす側の点 → 合わせる先の点 の順に ☑確定。続けて次の組）。図面は動かせるので、遠くの公共点にも合わせられます。2組以上で計算し、3組以上で精度を確かめられます。');
     else {
@@ -628,6 +762,11 @@ function alignPanel() {
                 `<td class="c"><button class="helm-x" onclick="alignDeletePair(${k})" title="この組を消す">✕</button></td></tr>`;
         }).join('');
         h += `<div class="cogo-table-wrap"><table class="cogo-table"><thead><tr><th>No</th><th>動かす側</th><th>合わせる先</th><th>較差 mm</th><th>使う</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+    // ↶ 1つ戻す・↷ やり直す（張り合わせ点の足す・入れ替える・消す・使う／外す を戻す。Ctrl+Z・Ctrl+Y・コマンド U でも）
+    if(_align.hist.length || _align.redo.length) {
+        h += `<div class="cogo-btns"><button class="prop-btn btn-sub" id="align-undo" onclick="alignUndoStep(true)" ${_align.hist.length ? '' : 'disabled'} title="張り合わせ点を、最後に変える前に戻す（Ctrl+Z）">↶ 1つ戻す</button>` +
+            `<button class="prop-btn btn-sub" id="align-redo" onclick="alignRedoStep(true)" ${_align.redo.length ? '' : 'disabled'} title="戻した張り合わせ点をやり直す（Ctrl+Y）">↷ やり直す</button></div>`;
     }
     h += alignResultHtml(c);
     const ok = !!(c.sol && c.sol.ok);

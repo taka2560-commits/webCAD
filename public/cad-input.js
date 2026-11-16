@@ -553,8 +553,8 @@ function setupEventListeners() {
         // 欄が空のときの Ctrl+Z / Ctrl+Y: ポリラインの最後の点を取り消す・戻す（v5.58.4。座標を打って入れた点は、フォーカスが欄に残るので）
         if((e.ctrlKey || e.metaKey) && !e.altKey && commandInput.value === '') {
             const kk = (e.key || '').toLowerCase();
-            const done = (kk === 'z' && !e.shiftKey) ? (typeof plineUndoStep === 'function' && plineUndoStep())
-                : ((kk === 'y' || (kk === 'z' && e.shiftKey)) ? (typeof plineRedoStep === 'function' && plineRedoStep()) : false);
+            const done = (kk === 'z' && !e.shiftKey) ? ((typeof plineUndoStep === 'function' && plineUndoStep()) || (typeof alignUndoStep === 'function' && alignUndoStep()))
+                : ((kk === 'y' || (kk === 'z' && e.shiftKey)) ? ((typeof plineRedoStep === 'function' && plineRedoStep()) || (typeof alignRedoStep === 'function' && alignRedoStep())) : false);
             if(done) { e.preventDefault(); return; }
         }
         if(e.key==='Enter'){const v=commandInput.value.trim(); if(v){addCommandLog(v); if(processCommand(v) === false) commandInput.select(); else commandInput.value='';} else{if(cmdState.mode==='WAITING_LINE_P2'){resetCommand();addCommandLog('-> LINE終了');}else if(cmdState.mode==='WAITING_PLINE_NEXT'){finishPline(false);}else if(cmdState.mode==='WAITING_LAYOFF_TOUCH'){layoffConfirm();}}}
@@ -565,8 +565,10 @@ function setupEventListeners() {
         if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return; // 入力欄の中（文字の取り消しなど）
         if(typeof cadDialogOpen === 'function' && cadDialogOpen()) return; // 確認画面を出しているあいだ（Esc は確認画面を閉じる）
         const k = (e.key || '').toLowerCase();
-        if((e.ctrlKey || e.metaKey) && k==='z'){ e.preventDefault(); if(e.shiftKey) { if(!(typeof plineRedoStep === 'function' && plineRedoStep())) redo(); } else if(!(typeof plineUndoStep === 'function' && plineUndoStep())) undo(); return; } // ポリラインの途中は、最後に打った点を取り消す・戻す
-        if((e.ctrlKey || e.metaKey) && k==='y'){ e.preventDefault(); if(!(typeof plineRedoStep === 'function' && plineRedoStep())) redo(); return; }
+        const stepUndo = () => (typeof plineUndoStep === 'function' && plineUndoStep()) || (typeof alignUndoStep === 'function' && alignUndoStep());   // 張り合わせの途中は、張り合わせ点を1つ戻す（v5.59.3）
+        const stepRedo = () => (typeof plineRedoStep === 'function' && plineRedoStep()) || (typeof alignRedoStep === 'function' && alignRedoStep());
+        if((e.ctrlKey || e.metaKey) && k==='z'){ e.preventDefault(); if(e.shiftKey) { if(!stepRedo()) redo(); } else if(!stepUndo()) undo(); return; } // ポリラインの途中は、最後に打った点を取り消す・戻す
+        if((e.ctrlKey || e.metaKey) && k==='y'){ e.preventDefault(); if(!stepRedo()) redo(); return; }
         // Enter: 図面をクリックしたあと（フォーカスがコマンド欄に無い）でも、線分・ポリラインを終える・タッチ非表示を確定する（v5.58.3。
         // 以前はコマンド欄の中の Enter しか見ておらず、案内の「Enter:確定」どおりに押しても何も起きなかった）。
         // ボタンなどにフォーカスがあるときは、そのボタンを押す動き（ブラウザの既定）に任せる

@@ -118,6 +118,7 @@ function lineAddSegment(wcs, fromMouse) {
 
 // ↶ 1つ戻す（画面の下のバー・コマンド U）。線分の段階なら処理して true
 function lineUndoStep() {
+    if(typeof _alignPicking === 'function' && _alignPicking()) return alignUndoStep(); // 張り合わせの点の指定の途中: 選んだ点・最後の組を取り消す（cad-align.js。v5.59.3）
     if(cmdState.mode === 'WAITING_PLINE_NEXT' && typeof plineUndoStep === 'function') return plineUndoStep(); // ポリライン: 最後に打った点（cad-command.js）
     if(!_isLineMode(cmdState.mode)) return false;
     cmdState.lineCand = null;

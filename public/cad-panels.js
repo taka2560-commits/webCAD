@@ -63,6 +63,8 @@ window.updateBlockManagerContent = function() {
     const sel = cmdState.selectedIndices || [];
     const selIdx = sel.length ? sel : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
     const selGids = new Set(); selIdx.forEach(i => { const e = entities[i]; if(e && e.gid) selGids.add(e.gid); });
+    const selOuter = selIdx.some(i => entities[i] && entities[i].ogid); // 外側のグループ（v5.59.3）
+    const selKeys = new Set(); selIdx.forEach(i => { const e = entities[i]; if(e && e.ogid) selKeys.add('o:' + e.ogid); else if(e && e.gid) selKeys.add(e.gid); }); // まとまりの数（外側のグループは、それを1つと数える。下のバーと同じ数え方）
     const btn = (label, onclick, color, extra) => `<button class="status-btn" style="font-size:11px; padding:2px 8px; height:26px; border-radius:8px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); color:${color || '#ddd'}; cursor:pointer; ${extra || ''}" onclick="${onclick}">${label}</button>`;
 
     let html = `
@@ -74,12 +76,15 @@ window.updateBlockManagerContent = function() {
     // 選択中のグループに対する操作
     if(selIdx.length > 0) {
         const first = entities[selIdx[0]];
-        const isGroup = selGids.size >= 1;
-        const label = isGroup ? `🧩 ${escapeHtml(first && first.blockName || 'グループ')}${selGids.size > 1 ? ` 他${selGids.size - 1}` : ''} (${selIdx.length}個)` : `${selIdx.length}個を選択中`;
+        const isGroup = selGids.size >= 1 || selOuter;
+        // 選んだ図形が、ちょうど1つのまとまりの中だけか（そうでなければ、まとめてグループにできる）
+        const og0 = first && first.ogid;
+        const oneGroup = !!first && selIdx.every(i => { const e = entities[i]; return !!e && (og0 ? e.ogid === og0 : (!e.ogid && !!e.gid && e.gid === first.gid)); });
+        const label = isGroup ? `🧩 ${escapeHtml(selOuter ? 'グループ' : (first && first.blockName || 'グループ'))}${selKeys.size > 1 ? ` 他${selKeys.size - 1}` : ''} (${selIdx.length}個)` : `${selIdx.length}個を選択中`;
         html += `<div style="font-size:12px; color:var(--brand); font-weight:bold;">${label}</div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
             ${isGroup ? btn('分解（グループ解除）', 'explodeSelection()', '#ffcc00') : ''}
-            ${(!isGroup && selIdx.length > 1) ? btn('🧩 グループ化', 'groupSelection()', '#00ff88') : ''}
+            ${(selIdx.length > 1 && !oneGroup) ? btn('🧩 グループ化', 'groupSelection()', '#00ff88') : ''}
             ${btn('🔍 ズーム', 'zoomToSelection()', '#61afef')}
             ${btn('🚫 隠す', 'hideSelectedEntities()', '#ff6b6b')}
             ${btn('✕ 選択解除', 'clearSelection(); render();', '#aaa')}
@@ -145,14 +150,32 @@ window.zoomToSelection = function() {
     const sel = (cmdState.selectedIndices && cmdState.selectedIndices.length) ? cmdState.selectedIndices : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
     if(sel.length) zoomToEntities(sel);
 };
+// 図形の集まりを1つのグループにする（↩ の記録は呼ぶ側）。戻り値: 'outer'（外側のグループ）・'gid'（ふつうのグループ）。
+// まとまり（ブロック・測点と点名・寸法・グループ）を含むときは、中のまとまりを残して外側のグループ（ogid）にする。
+// 以前は全部を1つの gid に書き換えていて、測点と点名の組・ブロックの測点の一覧が壊れた（v5.59.3）
+function groupEntities(idxs) {
+    const list = (idxs || []).map(i => entities[i]).filter(Boolean);
+    if(list.some(e => e.gid || e.ogid)) {
+        // 中のまとまりは割らない: 選んだ図形と同じまとまり（gid）の仲間は、選んでいなくても一緒に入れる
+        // （ブロックの円だけ・測点の点だけを入れると、動かしたときに属性の文字・点名の文字が置いていかれる）
+        const gids = new Set(list.filter(e => e.gid).map(e => e.gid)), all = new Set(list);
+        entities.forEach(e => { if(e && e.gid && gids.has(e.gid)) all.add(e); });
+        const og = newGroupId('o');
+        all.forEach(e => { e.ogid = og; });
+        return 'outer';
+    }
+    const gid = newGroupId('u');
+    list.forEach(e => { e.gid = gid; if(!e.blockName) e.blockName = 'グループ'; });
+    return 'gid';
+}
 // 選択図形をグループ化（既にブロック名があるものはその名前を保持）
 window.groupSelection = function() {
     const sel = (cmdState.selectedIndices && cmdState.selectedIndices.length) ? cmdState.selectedIndices.slice() : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
     if(sel.length < 2) { addCommandLog('-> グループ化するには2個以上の図形を選択してください（範囲選択やブロック一覧の☑で複数選択できます）'); showToast('2個以上選択してからグループ化してください'); return; }
     saveUndo();
-    const gid = newGroupId('u');
-    sel.forEach(i => { const e = entities[i]; if(e) { e.gid = gid; if(!e.blockName) e.blockName = 'グループ'; } });
-    addCommandLog(`-> ${sel.length}個の図形をグループ化しました`);
+    const kind = groupEntities(sel);
+    if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    addCommandLog(`-> ${sel.length}個の図形をグループ化しました` + (kind === 'outer' ? '（中のブロック・測点・寸法などのまとまりは、そのまま残しています）' : ''));
     showToast(`${sel.length}個をグループ化しました`);
     updatePropertiesPanel();
     if(typeof window.updateBlockManagerContent === 'function') window.updateBlockManagerContent();
@@ -161,6 +184,21 @@ window.groupSelection = function() {
 // 選択中のグループを分解（gid/blockName を外す）。ブロックの部品を個別に編集したいときに使う
 window.explodeSelection = function() {
     const sel = (cmdState.selectedIndices && cmdState.selectedIndices.length) ? cmdState.selectedIndices : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
+    // 外側のグループ（v5.59.3）: 先に外側だけを外す（中のブロック・測点・寸法のまとまりは残る。もう一度 分解 で、中のまとまりを分解）
+    const ogs = new Set(); sel.forEach(i => { const e = entities[i]; if(e && e.ogid) ogs.add(e.ogid); });
+    if(ogs.size > 0) {
+        saveUndo();
+        let m = 0;
+        entities.forEach(e => { if(e && e.ogid && ogs.has(e.ogid)) { delete e.ogid; m++; } });
+        if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
+        addCommandLog(`-> ${ogs.size}個のグループを分解しました（${m}個の図形。中のブロック・測点・寸法などのまとまりは残ります）`);
+        showToast(`グループを分解しました（${m}個）`);
+        cmdState.selectedIndices = [];
+        updatePropertiesPanel();
+        if(typeof window.updateBlockManagerContent === 'function') window.updateBlockManagerContent();
+        render();
+        return;
+    }
     const gids = new Set(); sel.forEach(i => { const e = entities[i]; if(e && e.gid) gids.add(e.gid); });
     if(gids.size === 0) { addCommandLog('-> 分解できるグループが選択されていません'); return; }
     saveUndo();
@@ -202,11 +240,11 @@ function updateSelectionBar() {
     const n = sel.length > 0 ? sel.length : (cmdState.highlightIdx >= 0 ? 1 : 0);
     if(cmdState.mode !== 'IDLE' || n === 0) { bar.style.display = 'none'; if(typeof layoutTabsUpdate === 'function') layoutTabsUpdate(); return; }
     const idxs = sel.length ? sel : [cmdState.highlightIdx];
-    const gids = new Set(); idxs.forEach(i => { const e = entities[i]; if(e && e.gid) gids.add(e.gid); });
+    const gids = new Set(); idxs.forEach(i => { const e = entities[i]; if(e && e.ogid) gids.add('o:' + e.ogid); else if(e && e.gid) gids.add(e.gid); }); // 外側のグループは、それを1つと数える
     const first = entities[idxs[0]];
     const label = document.getElementById('sel-label');
     if(label) {
-        if(gids.size >= 1 && first && first.gid) label.textContent = `🧩 ${first.blockName || 'グループ'}${gids.size > 1 ? ` 他${gids.size - 1}` : ''} (${n}個)`;
+        if(gids.size >= 1 && first && (first.gid || first.ogid)) label.textContent = `🧩 ${first.ogid ? 'グループ' : (first.blockName || 'グループ')}${gids.size > 1 ? ` 他${gids.size - 1}` : ''} (${n}個)`;
         else label.textContent = `${n}個選択`;
     }
     const gbtn = document.getElementById('sel-group-btn');

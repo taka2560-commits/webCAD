@@ -8,7 +8,7 @@ const WEBCAD_FORMAT = 'webcad';
 const WEBCAD_VERSION = 1;
 const WEBCAD_EXT = '.webcad';
 // 図形の項目で、文字のことがあるもの（実物の DWG・DXF とアプリで作る図形から集めた。ほかの項目の文字は捨てる）
-const _WC_STR_KEYS = new Set(['type', 'color', 'lt', 'text', 'halign', 'valign', 'hiddenBy', 'gid', 'blockName', 'name', 'num',
+const _WC_STR_KEYS = new Set(['type', 'color', 'lt', 'text', 'halign', 'valign', 'hiddenBy', 'gid', 'ogid', 'blockName', 'name', 'num',
     'lotName', 'lotNum', 'subType', 'dimDir', 'textOverride', 'time', 'desc']);
 const _WC_TYPES = new Set(['LINE', 'CIRCLE', 'ARC', 'RECTANG', 'PLINE', 'POINT', 'ELLIPSE', 'TEXT', 'DIMENSION', 'HATCH', 'PIN']);
 const _WC_PHOTO_KEY = /^[A-Za-z0-9_-]{1,64}$/; // 写真の番号（画面の onclick に入るので、形を確かめる）

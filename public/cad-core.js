@@ -420,11 +420,25 @@ function getGroupMembers(gid) {
     entities.forEach((e, i) => { if(e.gid === gid) out.push(i); });
     return out;
 }
+// 外側のグループ（v5.59.3）: ブロック・測点・寸法などのまとまり（gid）を含む図形を、中のまとまりを壊さずに1つにまとめる。
+// 図形の ogid が同じものが仲間。中のまとまりの gid はそのまま残す（測点と点名の組・ブロックの部品・寸法の部品は gid で見分けているため）
+function getOuterGroupMembers(ogid) {
+    const out = [];
+    if(!ogid) return out;
+    entities.forEach((e, i) => { if(e && e.ogid === ogid) out.push(i); });
+    return out;
+}
+// 図形 e を含むまとまりの全 index（外側のグループがあればそれ、無ければ gid のまとまり）。まとまりに入っていなければ []
+function groupMembersOf(e) {
+    if(!e) return [];
+    if(e.ogid) { const m = getOuterGroupMembers(e.ogid); if(m.length) return m; }
+    return e.gid ? getGroupMembers(e.gid) : [];
+}
 // 図形1つの index から、グループ選択ONなら同じグループの全 index を返す
 function expandGroupTargets(idx) {
     const e = entities[idx];
     if(!e) return [];
-    if(window.groupSelectEnabled && e.gid) { const m = getGroupMembers(e.gid); if(m.length) return m; }
+    if(window.groupSelectEnabled) { const m = groupMembersOf(e); if(m.length) return m; }
     return [idx];
 }
 function escapeHtml(s) {
@@ -444,7 +458,7 @@ function selectEntityAt(sx, sy) {
     const idx = hitTestEntity(sx, sy);
     if(idx < 0) { clearSelection(); return; }
     const e = entities[idx];
-    const members = (window.groupSelectEnabled && e.gid) ? getGroupMembers(e.gid) : [];
+    const members = window.groupSelectEnabled ? groupMembersOf(e) : [];
     const sel = cmdState.selectedIndices || [];
     const sameSingle = cmdState.highlightIdx === idx && sel.length === 0;
     const sameGroup = members.length > 1 && sel.length === members.length && sel.includes(idx);
@@ -646,9 +660,24 @@ function _actionbarAvoidButtons(bar) {
     bar.classList.add('ab-up');
     done();
 }
+// たたんで画面の下に寄せた別窓（スマホの幅）が、点の指定の帯に重なるなら、帯のすぐ上へよける。
+// 帯にボタンが増えて2段になったとき（張り合わせの ↶ 1つ戻す・特大のボタン）に、別窓の見出しが ☑確定 を隠さないように（v5.59.3）
+function _subviewsAvoidBar(bar) {
+    if(!bar) return;
+    const bs = getComputedStyle(bar);
+    if(bs.display === 'none' || bs.visibility === 'hidden') return;
+    const br = bar.getBoundingClientRect();
+    if(!(br.height > 0)) return;
+    for(const el of _panelFitSubviews) {
+        if(!el || !el.isConnected || el.style.display === 'none' || !el.classList.contains('collapsed') || el.dataset.dockFrom === undefined) continue;
+        const b = el.getBoundingClientRect();
+        if(b.height > 0 && b.left < br.right && b.right > br.left && b.bottom > br.top - 4 && b.top < br.bottom) el.style.top = Math.max(60, Math.round(br.top - b.height - 6)) + 'px';
+    }
+}
 function fitPanelAboveActionbar() {
     const p = document.getElementById('property-panel'), bar = document.getElementById('fs-dim-actionbar');
     _actionbarAvoidButtons(bar);
+    _subviewsAvoidBar(bar);
     if(!p) return;
     // 一度外してから測り直すと、パネルの中のスクロールが先頭に戻るので、決まった高さを直接入れる（同じなら触らない）。
     // max-height なので、もともと短いパネルには何も起きない
@@ -1092,5 +1121,5 @@ function saveUndo() {
     // 自動保存トリガー
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
-function undo() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); if(typeof guideNotify === 'function') guideNotify('undo'); if(!undoStack.length){notify('元に戻す操作がありません', 1800);return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
-function redo() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); if(!redoStack.length){notify('やり直す操作がありません', 1800);return;} _bumpGeomEpoch(); undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); }
+function undo() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); if(typeof guideNotify === 'function') guideNotify('undo'); if(!undoStack.length){notify('元に戻す操作がありません', 1800);return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); if(typeof alignAfterUndo === 'function') alignAfterUndo(); }
+function redo() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); if(!redoStack.length){notify('やり直す操作がありません', 1800);return;} _bumpGeomEpoch(); undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); if(typeof alignAfterUndo === 'function') alignAfterUndo(); }

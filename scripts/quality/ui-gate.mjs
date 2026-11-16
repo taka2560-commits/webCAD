@@ -318,8 +318,18 @@ async function runOne(browser, v, btn, motion) {
                         if (getComputedStyle(sv).display !== 'none' && !(sr.bottom <= kr.top + 1 || sr.top >= kr.bottom - 1 || sr.right <= kr.left + 1 || sr.left >= kr.right - 1)) out.bad.push('別窓が ☑確定 に重なっている');
                         handlePointInput({ x: A[2][0], y: A[2][1] }, true); handlePointInput({ x: B[2][0], y: B[2][1] }, true);
                         if (!cogoIsPicking()) out.bad.push('組のあと、続けて次の組にならない');
+                        // ↶ 1つ戻す（v5.59.3）: 組ができたら帯に出て、画面の中にある。押すと組が1つ減る
+                        await new Promise((r) => setTimeout(r, 300));
+                        const ubn = document.getElementById('line-undo-btn'), np = _align.pairs.length;
+                        if (!ubn || getComputedStyle(ubn).display === 'none' || !inView(ubn.getBoundingClientRect()) || !inView(bar.getBoundingClientRect())) out.bad.push('↶ 1つ戻す が帯に出ない・画面の外');
+                        else { ubn.click(); if (_align.pairs.length !== np - 1 || !cogoIsPicking()) out.bad.push('↶ 1つ戻す で組が戻らない'); alignRedoStep(); if (_align.pairs.length !== np) out.bad.push('やり直しで組が戻らない'); }
                     }
                     processCommand('CANCEL');
+                    await new Promise((r) => setTimeout(r, 200));
+                    const ub2 = document.getElementById('line-undo-btn');
+                    if (ub2 && ub2.style.display !== 'none') out.bad.push('指定を終えても ↶ 1つ戻す が残る');
+                    const gb = document.getElementById('align-group');
+                    if (!gb) out.bad.push('「グループにする」のボタンが無い');
                 }
             }
         }

@@ -727,6 +727,249 @@ describe('図形の張り合わせ（HALIGN）', () => {
         });
     });
 
+    // ===== 張り合わせ点の「1つ戻す」と、動かす図形のグループ化（v5.59.3） =====
+    describe('1つ戻す・グループにする', () => {
+        const key = () => app.val('cogoIsPicking() && _cogo.pick ? _cogo.pick.keys[_cogo.pick.i] : ""');
+        const prompt = () => app.val(`document.getElementById('command-prompt').textContent`);
+        const ub = () => app.val(`document.getElementById('line-undo-btn').style.display`);
+        const pairs = () => JSON.parse(app.val('JSON.stringify(_align.pairs.map((p) => [p.src.x, p.src.y, p.dst.x, p.dst.y, p.use]))'));
+        const keydown = (k, opt) => app.eval(`document.body.dispatchEvent(new window.KeyboardEvent('keydown', Object.assign({ key: '${k}', bubbles: true, cancelable: true }, ${JSON.stringify(opt || {})})))`);
+
+        it('図面で指定している途中: 選んだ動かす側の点を取り消す → 最後の組を取り消す → やり直す。図面の ↩ はしない。戻せるものが無ければ知らせるだけ', () => {
+            start([0, 1, 2, 3]);
+            const u0 = app.val('undoStack.length');
+            app.eval('alignPickInDrawing()');
+            assert.equal(ub(), 'none', '戻せるものが無いあいだは、↶ を出さない');
+            pt(0, 0);
+            assert.equal(key(), 'AT');
+            assert.equal(ub(), '', '動かす側の点を選んだら、帯に ↶ 1つ戻す');
+            assert.equal(app.val('alignUndoStep()'), true);
+            assert.equal(app.val('_align.sel'), null);
+            assert.equal(key(), 'AS', '動かす側の点の指定へ戻る（続きの指定は続く）');
+            assert.match(prompt(), /^組 No\.1: 動かす側の点/);
+            assert.match(toast(), /動かす側の点を取り消しました/);
+            pt(0, 0); pt(1000, 1000); pt(40, 0); pt(1000, 1040);
+            assert.deepEqual(pairs(), [[0, 0, 1000, 1000, true], [40, 0, 1000, 1040, true]]);
+            assert.equal(ub(), '');
+            // 帯の ↶（lineUndoStep）: 最後の組を取り消す
+            assert.equal(app.val('lineUndoStep()'), true);
+            assert.deepEqual(pairs(), [[0, 0, 1000, 1000, true]]);
+            assert.equal(key(), 'AS');
+            assert.match(prompt(), /^組 No\.2: 動かす側の点/);
+            // やり直す
+            assert.equal(app.val('alignRedoStep()'), true);
+            assert.deepEqual(pairs(), [[0, 0, 1000, 1000, true], [40, 0, 1000, 1040, true]]);
+            assert.match(prompt(), /^組 No\.3: 動かす側の点/);
+            // コマンド U・Ctrl+Z でも（図面の ↩ にはしない）
+            app.eval(`processCommand('U')`);
+            assert.deepEqual(pairs(), [[0, 0, 1000, 1000, true]]);
+            keydown('z', { ctrlKey: true });
+            assert.deepEqual(pairs(), []);
+            assert.equal(ub(), 'none');
+            keydown('z', { ctrlKey: true }); // もう戻せない: 知らせるだけ
+            assert.equal(app.val('undoStack.length'), u0, '図面の ↩ はしていない');
+            assert.equal(key(), 'AS');
+            keydown('y', { ctrlKey: true }); keydown('z', { ctrlKey: true, shiftKey: true });
+            assert.deepEqual(pairs(), [[0, 0, 1000, 1000, true], [40, 0, 1000, 1040, true]], 'Ctrl+Y・Ctrl+Shift+Z でやり直す');
+            // 新しく組を足したら、やり直しは捨てる
+            app.eval('alignUndoStep()');
+            pt(40, 25); pt(975, 1040);
+            assert.equal(app.val('_align.redo.length'), 0);
+            assert.equal(app.val('alignRedoStep()'), true, '指定の途中は、やり直せるものが無くても知らせるだけ（図面のやり直しにしない）');
+            assert.equal(pairs().length, 2);
+            app.eval(`processCommand('CANCEL')`);
+            assert.equal(ub(), 'none', '指定を終えたら、帯の ↶ を残さない');
+        });
+
+        it('パネルで: 消した組・外した「使う」・入れ替えた組・点名でまとめて足した組を戻せる。図形のしるしも戻る。戻せるものが無ければ図面の ↩', () => {
+            start([0, 1, 2, 3]);
+            assert.doesNotMatch(panel(), /↶ 1つ戻す/, '戻せるものが無いあいだは、ボタンを出さない');
+            assert.equal(app.val('alignUndoStep()'), false, '戻せるものが無ければ、図面の ↩ に任せる');
+            pair(0, 0, 1000, 1000); pair(40, 0, 1000, 1040);
+            assert.match(panel(), /↶ 1つ戻す/);
+            assert.equal(app.val(`document.getElementById('align-redo').disabled`), true);
+            app.eval('alignDeletePair(0)');
+            assert.deepEqual(pairs(), [[40, 0, 1000, 1040, true]]);
+            app.eval('alignUndoStep()');
+            assert.deepEqual(pairs(), [[0, 0, 1000, 1000, true], [40, 0, 1000, 1040, true]], '消した組が、元の番号に戻る');
+            assert.equal(app.val('typeof _align.pairs[0].sig'), 'string', '図形のしるしも戻る');
+            assert.equal(app.val('Object.keys(_align.pairs[0]).join(",")'), 'src,dst,use');
+            assert.equal(app.val(`document.getElementById('align-redo').disabled`), false);
+            app.eval('alignUsePair(1, false)');
+            assert.equal(pairs()[1][4], false);
+            const h = app.val('_align.hist.length');
+            app.eval('alignUsePair(1, false)'); // 同じ値: 記録を増やさない
+            assert.equal(app.val('_align.hist.length'), h);
+            app.eval('alignUndoStep()');
+            assert.equal(pairs()[1][4], true);
+            pair(40, 0, 999, 1040); // 同じ動かす側の点: 入れ替え
+            assert.deepEqual(pairs()[1], [40, 0, 999, 1040, true]);
+            app.eval('alignUndoStep()');
+            assert.deepEqual(pairs()[1], [40, 0, 1000, 1040, true]);
+            // Ctrl+Z（パネルを出していて、ほかのコマンドの途中でない）
+            const u0 = app.val('undoStack.length');
+            keydown('z', { ctrlKey: true });
+            assert.equal(pairs().length, 1);
+            assert.equal(app.val('undoStack.length'), u0);
+            // ほかのコマンド（線分）の途中の Ctrl+Z は、張り合わせ点ではなく、ふつうの ↩
+            app.eval(`processCommand('LINE')`);
+            assert.equal(app.val('_alignActive()'), false);
+            assert.equal(app.val('alignUndoStep()'), false);
+            assert.equal(pairs().length, 1);
+            app.eval(`processCommand('CANCEL'); processCommand('HALIGN');`);
+            // 点名でまとめて足した組は、1回で戻る
+            app.eval(`alignReset(); entities.length = 0; entities.push({ type: 'POINT', layer: 0, color: null, x: 0, y: 0, name: 'A' }, { type: 'POINT', layer: 0, color: null, x: 40, y: 0, name: 'B' }, { type: 'POINT', layer: 0, color: null, x: 500, y: 500, name: 'A' }, { type: 'POINT', layer: 0, color: null, x: 500, y: 540, name: 'B' });
+                _bumpGeomEpoch(); cmdState.selectedIndices = [0, 1]; processCommand('HALIGN'); alignPairByName();`);
+            assert.equal(pairs().length, 2);
+            app.eval('alignUndoStep()');
+            assert.equal(pairs().length, 0);
+            app.eval('alignRedoStep()');
+            assert.equal(pairs().length, 2);
+        });
+
+        it('別窓で選んだ点を取り消すと、指定をやめてパネルへ戻る。スマホの幅では、指定のあいだに戻してもパネルを出さない', () => {
+            start([0, 1]);
+            app.eval(`alignSelectSource({ x: 0, y: 0, t: '端点' })`);
+            assert.equal(ub(), '');
+            assert.equal(app.val('alignUndoStep()'), true);
+            assert.equal(app.val('cogoIsPicking()'), false);
+            assert.equal(app.val('_align.sel'), null);
+            assert.match(panel(), /張り合わせ点/);
+            assert.equal(ub(), 'none');
+            // スマホの幅
+            app.eval('window.innerWidth = 390; alignPickInDrawing();');
+            pt(0, 0); pt(1000, 1000); pt(40, 0); pt(1000, 1040);
+            assert.equal(panel(), '');
+            app.eval('alignUndoStep()');
+            assert.equal(pairs().length, 1);
+            assert.equal(panel(), '', 'パネルは隠したまま');
+            assert.equal(key(), 'AS');
+            app.eval(`processCommand('CANCEL')`);
+            assert.match(panel(), /あと 1組/);
+            // 張り合わせをやめたら、記録も捨てる
+            app.eval('alignCancel()');
+            assert.equal(app.val('_align.hist.length + _align.redo.length'), 0);
+            assert.equal(app.val('alignUndoStep() || alignRedoStep()'), false);
+        });
+
+        it('🧩 グループにする: 動かす図形を1つのグループに（↩ 1回分）。もうグループなら押せない。動かしたあとも、1つタップするとまとめて選べる', () => {
+            start([0, 1, 2, 3]);
+            assert.match(panel(), /🧩 グループにする/);
+            const u0 = app.val('undoStack.length');
+            assert.equal(app.val('alignGroupTargets()'), true);
+            assert.equal(app.val('undoStack.length'), u0 + 1);
+            const g = app.val('entities[0].gid');
+            assert.ok(g && app.val(`[1, 2, 3].every((i) => entities[i].gid === '${g}') && entities[4].gid === undefined`));
+            assert.match(toast(), /動かす図形 4個をグループにしました/);
+            assert.match(panel(), /🧩 グループ済み/);
+            assert.equal(app.val(`document.getElementById('align-group').disabled`), true);
+            assert.equal(app.val('alignGroupTargets()'), false);
+            assert.equal(app.val('undoStack.length'), u0 + 1);
+            assert.equal(app.val('_align.on'), true, '張り合わせは続く');
+            pair(0, 0, 1000, 1000); pair(40, 0, 1000, 1040);
+            go();
+            assert.deepEqual([...app.val('expandGroupTargets(2)')], [0, 1, 2, 3], '動かしたあとも、まとめて選べる');
+            // もう一度 張り合わせ: 1つタップすると、同じ図形がまとめて動かす図形になる
+            app.eval(`processCommand('HALIGN'); window.__hit = hitTestEntity; hitTestEntity = () => 3; try { handlePointInput({ x: 0, y: 0 }, true); } finally { hitTestEntity = window.__hit; }`);
+            assert.deepEqual([...app.val('_alignTargets()')], [0, 1, 2, 3]);
+            assert.match(panel(), /🧩 グループ済み/);
+        });
+
+        it('グループにする: 測点（点と点名のまとまり）を含むときは、中のまとまりを残す。1個だけ・張り合わせの外では何もしない', () => {
+            assert.equal(app.val('alignGroupTargets()'), false);
+            app.eval(SHAPES + `entities.push({ type: 'POINT', layer: 0, color: null, x: 0, y: 0, name: 'K1', gid: 'p1', blockName: '測点' }, { type: 'TEXT', layer: 0, color: null, x: 1, y: 0.6, text: 'K1', height: 2, gid: 'p1', blockName: '測点', ptLabel: true });
+                cmdState.selectedIndices = [0, 1, 6, 7]; processCommand('HALIGN'); alignGroupTargets();`);
+            const og = app.val('entities[0].ogid');
+            assert.ok(og && app.val(`[1, 6, 7].every((i) => entities[i].ogid === '${og}')`));
+            assert.deepEqual([...app.val('[entities[0].gid || "", entities[6].gid, entities[7].gid]')], ['', 'p1', 'p1'], '測点と点名の組はそのまま');
+            assert.match(app.val(`document.getElementById('command-log').textContent`), /中のブロック・測点・寸法などのまとまりは、そのまま残しています/);
+            assert.match(panel(), /🧩 グループ済み/);
+            // 元の図形を残して置く（複写）: 複写どうしの新しいグループになる
+            app.eval('alignSetKeep(true)');
+            pair(0, 0, 1000, 1000); pair(40, 0, 1000, 1040);
+            go();
+            const n = app.val('entities.length');
+            const cg = app.val(`entities[${n - 1}].ogid`);
+            assert.ok(cg && cg !== og);
+            assert.equal(app.val(`entities.filter((e) => e.ogid === '${cg}').length`), 4);
+            app.eval('lastParams.alignKeep = false');
+            // 1個だけ
+            app.eval(`alignReset(); cmdState.selectedIndices = [4]; processCommand('HALIGN');`);
+            assert.doesNotMatch(panel(), /グループにする/);
+            assert.equal(app.val('alignGroupTargets()'), false);
+        });
+
+        // ===== G3（別の担当の点検）で見つかった点の直し =====
+        it('Ctrl+Z は順番どおり: 組を指定したあとにグループにしたら、先にグループ化を戻す（図面の ↩）。そのあと張り合わせ点。パネルのボタンは、いつも張り合わせ点', () => {
+            start([0, 1, 2, 3]);
+            pair(0, 0, 1000, 1000); pair(40, 0, 1000, 1040);
+            const u0 = app.val('undoStack.length');
+            app.eval('alignGroupTargets()');
+            assert.match(panel(), /🧩 グループ済み/);
+            keydown('z', { ctrlKey: true });
+            assert.equal(app.val('undoStack.length'), u0, '図面の ↩（グループ化を戻した）');
+            assert.equal(app.val('entities[0].gid'), undefined);
+            assert.equal(pairs().length, 2, '張り合わせ点はそのまま');
+            assert.match(panel(), /🧩 グループにする/, '↩ のあと、パネルも「グループ済み」から戻る');
+            assert.equal(app.val(`document.getElementById('align-group').disabled`), false);
+            keydown('z', { ctrlKey: true });
+            assert.equal(pairs().length, 1, '次の Ctrl+Z は張り合わせ点');
+            assert.equal(app.val('undoStack.length'), u0);
+            keydown('y', { ctrlKey: true });
+            assert.equal(pairs().length, 2);
+            // 図面を変えたあとでも、パネルの「↶ 1つ戻す」は張り合わせ点を戻す
+            app.eval('alignGroupTargets()');
+            app.eval(`document.getElementById('align-undo').onclick ? 0 : 0; alignUndoStep(true);`);
+            assert.equal(pairs().length, 1);
+            assert.ok(app.val('entities[0].gid'), 'グループはそのまま');
+            assert.match(app.val(`document.getElementById('align-undo').getAttribute('onclick') + document.getElementById('align-redo').getAttribute('onclick')`), /alignUndoStep\(true\)alignRedoStep\(true\)/);
+            // ほかのコマンド（線分）の途中でも、パネルのボタンは効く（キーは、その図形の ↩）
+            app.eval(`processCommand('LINE')`);
+            assert.equal(app.val('alignUndoStep()'), false);
+            assert.equal(app.val('alignRedoStep(true)'), true);
+            assert.equal(pairs().length, 2);
+            app.eval(`processCommand('CANCEL')`);
+        });
+
+        it('点の指定から、そのまま別のコマンドに移っても、帯に ↶ 1つ戻す を残さない。指定の途中にパネルで組を変えたら、帯の ↶ も出る。指定の途中の Ctrl+Y は図面のやり直しにしない', async () => {
+            start([0, 1, 2, 3]);
+            app.eval('alignPickInDrawing()');
+            pt(0, 0);
+            assert.equal(ub(), '');
+            app.eval(`processCommand('MOVE')`);
+            await raf();
+            assert.equal(ub(), 'none', '移動に移ったら消す');
+            app.eval(`processCommand('CANCEL'); processCommand('HALIGN'); alignPickInDrawing();`);
+            assert.equal(ub(), 'none');
+            // 指定の途中に、パネルで点名の組を足した（PC ではパネルが出ている）
+            app.eval(`_align.pairs.push(_alignStamp({ src: { x: 0, y: 0 }, dst: { x: 1000, y: 1000, name: '' }, use: true })); alignDeletePair(0);`);
+            assert.equal(app.val('_align.hist.length'), 1);
+            assert.equal(ub(), '', '戻せるものができたので、帯に ↶');
+            // 指定の途中の Ctrl+Y: やり直せるものが無くても、図面のやり直しにしない
+            app.eval(`saveUndo(); entities.push({ type: 'LINE', layer: 0, color: null, x1: 5, y1: 5, x2: 6, y2: 6 }); undo(); alignPickInDrawing();`);
+            const n = app.val('entities.length'), r = app.val('redoStack.length');
+            assert.ok(r >= 1);
+            keydown('y', { ctrlKey: true });
+            assert.equal(app.val('entities.length'), n);
+            assert.equal(app.val('redoStack.length'), r, '図面のやり直しはしていない');
+            pt(0, 0);
+            assert.equal(app.val('alignRedoStep()'), true, '合わせる先の点を待っているあいだも同じ');
+            assert.equal(app.val('redoStack.length'), r);
+            app.eval(`processCommand('CANCEL')`);
+        });
+
+        it('グループにする: 動かす図形と同じまとまりの仲間も入れる（中のまとまりは割らない）。入れたことを記録に出し、ボタンは「グループ済み」', () => {
+            // ばらの線2本（0・1）と、測点 K1 の点だけ（6。点名の文字 7 は選んでいない）
+            app.eval(SHAPES + `entities.push({ type: 'POINT', layer: 0, color: null, x: 0, y: 0, name: 'K1', gid: 'p1', blockName: '測点' }, { type: 'TEXT', layer: 0, color: null, x: 1, y: 0.6, text: 'K1', height: 2, gid: 'p1', blockName: '測点', ptLabel: true });
+                window.groupSelectEnabled = false; cmdState.selectedIndices = [0, 1, 6]; processCommand('HALIGN'); window.groupSelectEnabled = true; alignGroupTargets();`);
+            const og = app.val('entities[0].ogid');
+            assert.ok(og && app.val(`[1, 6, 7].every((i) => entities[i].ogid === '${og}')`), '点名の文字（7）も入る');
+            assert.match(app.val(`document.getElementById('command-log').textContent`), /同じまとまりの図形 1個も、グループに入れました/);
+            assert.match(panel(), /🧩 グループ済み/);
+            assert.equal(app.val('alignGroupTargets()'), false, 'もう一度は押せない（同じことの繰り返しにしない）');
+        });
+    });
+
     // ===== 別窓のスナップ（v5.59.1）: 端点・頂点・中心だけでなく、図形（中点・交点・四半円点・線の上）にも吸い付く =====
     describe('別窓のスナップ', () => {
         let saved;

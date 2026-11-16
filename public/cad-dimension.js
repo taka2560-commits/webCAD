@@ -820,6 +820,7 @@ function handleDimPointInput(mode, wcs) {
                 const copy = JSON.parse(JSON.stringify(entities[i]));
                 delete copy.id; // 複写は新しい図形（固有IDは追加後に新しく付く）
                 if(copy.gid) { if(!gidMap[copy.gid]) gidMap[copy.gid] = (typeof newGroupId === 'function') ? newGroupId('c') : copy.gid + '_c'; copy.gid = gidMap[copy.gid]; }
+                if(copy.ogid) { const k = 'o:' + copy.ogid; if(!gidMap[k]) gidMap[k] = (typeof newGroupId === 'function') ? newGroupId('c') : copy.ogid + '_c'; copy.ogid = gidMap[k]; } // 外側のグループも
                 moveEntity(copy, dx, dy);
                 copies.push(copy);
             });

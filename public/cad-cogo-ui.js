@@ -149,7 +149,7 @@ function _cogoShowBar(withConfirm) {
     ab.style.display = 'flex';
     const cb = ab.querySelector('button[onclick="dimConfirmPoint()"]');
     if(cb) cb.style.display = withConfirm ? '' : 'none';
-    ['dim-mode-toggle', 'dim-dir-toggle', 'pline-close-btn'].forEach((id) => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+    ['dim-mode-toggle', 'dim-dir-toggle', 'pline-close-btn', 'line-undo-btn'].forEach((id) => { const el = document.getElementById(id); if(el) el.style.display = 'none'; }); // ↶ 1つ戻す は、張り合わせの指定のときだけ持ち主が出す（step）
     if(typeof _hideMeasureButtons === 'function') _hideMeasureButtons();
     if(typeof fitPanelAboveActionbarSoon === 'function') fitPanelAboveActionbarSoon(); // 開いているパネルがバーに隠れないように（v5.58.4）
 }

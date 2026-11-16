@@ -207,7 +207,7 @@ function _dxoDimDef(e, P, k) {
 // 拡張データ WEBCAD の文字（寸法の中身の JSON。日本語は \\uXXXX にして、250 字ずつ。最初に「WEBCAD:」）
 function dxfOutXdataChunks(e) {
     const keep = Object.assign({}, e);
-    ['id', 'bbox', '_hits', 'gid', 'blockName', 'layer'].forEach(k => delete keep[k]);
+    ['id', 'bbox', '_hits', 'gid', 'ogid', 'blockName', 'layer'].forEach(k => delete keep[k]);
     const json = JSON.stringify(keep).replace(/[\u007f-￿]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
     const out = [];
     const s = DXF_OUT_APP + ':' + json;

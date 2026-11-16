@@ -138,6 +138,11 @@ function editCloneEntity(e, gidMap) {
         if(!gidMap[c.gid]) gidMap[c.gid] = (typeof newGroupId === 'function') ? newGroupId('c') : c.gid + '_c';
         c.gid = gidMap[c.gid];
     }
+    if(c.ogid && gidMap) { // 外側のグループも、複写どうしの新しいグループに
+        const k = 'o:' + c.ogid;
+        if(!gidMap[k]) gidMap[k] = (typeof newGroupId === 'function') ? newGroupId('c') : c.ogid + '_c';
+        c.ogid = gidMap[k];
+    }
     return c;
 }
 // 元の図形の属性（画層・色・グループなど）を引き継いだ、形だけ違う図形
