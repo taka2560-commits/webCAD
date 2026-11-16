@@ -575,7 +575,7 @@ const GUIDE_HINTS = [
     { key: 'SCALE', title: '⤢ 尺度変更', prefix: 'WAITING_SCALE_', steps: [
         { modes: ['SELECT'], text: '大きさを変える図形をタップ' }, { modes: ['BASE'], text: '基点（動かない点）をタップ。倍率はパネルで（長さからも求められます）' }] },
     { key: 'HALIGN', title: '⧉ 張り合わせ', prefix: 'WAITING_HALIGN_', steps: [
-        { modes: ['SELECT'], text: '動かす図形をタップ（範囲選択もできます）。選ぶと別窓に出るので、別窓で動かす側の点をタップ → 図面で合わせる先の点を ☑確定' }] },
+        { modes: ['SELECT'], text: '動かす図形をタップ（範囲選択もできます）。選ぶと別窓に出るので、別窓で動かす側の点をタップ（端点・中点・交点・線の上などに吸い付きます）→ 図面で合わせる先の点を ☑確定' }] },
     { key: 'ARRAY', title: '▦ 配列', prefix: 'WAITING_ARRAY_', steps: [
         { modes: ['SELECT'], text: '並べる図形をタップ' },
         { modes: ['SET'], text: 'パネルで数と間隔を決めて ☑確定（円形に並べるときは、先に中心をタップ）' }] },

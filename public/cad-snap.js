@@ -148,9 +148,12 @@ function _ellNearest(e, px, py) {
 // ===== スナップ点の収集 =====
 // F: 使うスナップの種類（osnapState、または「次の1点だけ」の指定）
 // radiusPx: 吸着半径（画面px）。渡されたときは、交点の計算をカーソルの近くを通る線だけに絞る
-function collectSnapPoints(wx, wy, baseWcs, F, radiusPx) {
+// opt: 図面とは別の小さな図面（別窓）で使うとき（v5.59.1）。scale: 1単位あたりの画素数（無ければ図面の view.scale）・only(e): 対象にする図形だけ true（見えているかは見ない）
+function collectSnapPoints(wx, wy, baseWcs, F, radiusPx, opt) {
     F = F || osnapState;
     if(!F.main) return [];
+    const vs = (opt && opt.scale > 0) ? opt.scale : view.scale;
+    const only = (opt && typeof opt.only === 'function') ? opt.only : null;
     const pts = [];
     const has = (k) => !!F[k];
     const hasCursor = wx !== undefined && wy !== undefined;
@@ -161,7 +164,7 @@ function collectSnapPoints(wx, wy, baseWcs, F, radiusPx) {
     // 近接点（線の上のカーソルに一番近い点）。延長のために、カーソルに一番近い線も覚えておく
     const addNear = (px, py, src) => {
         if(hasCursor && src) {
-            const d = dist(px, py, wx, wy) * view.scale;
+            const d = dist(px, py, wx, wy) * vs;
             if(d < _snapHoverTmp.d) { _snapHoverTmp.d = d; _snapHoverTmp.src = src; }
         }
         if(!has('near')) return;
@@ -170,15 +173,15 @@ function collectSnapPoints(wx, wy, baseWcs, F, radiusPx) {
     };
     const addPerp = (px, py, extra) => {
         // 基点が線の上にあると、垂線の足＝基点そのものになる（長さ0の線になるだけなので候補にしない）
-        if(baseWcs && dist(px, py, baseWcs.x, baseWcs.y) * view.scale < 0.5) return;
+        if(baseWcs && dist(px, py, baseWcs.x, baseWcs.y) * vs < 0.5) return;
         push(px, py, (extra && extra.ext) ? '垂線(延長)' : '垂線', extra);
     };
-    const isVisible = (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden;
+    const isVisible = only ? (e) => !!only(e) : (e) => (e.layer === undefined || !layers[e.layer] || layers[e.layer].visible) && !e.hidden; // only があるときは、呼ぶ側が決める（別窓に描いている図形）
 
     // マウスカーソル周辺でのみ検索するカリング
     let wxMin, wxMax, wyMin, wyMax;
     if(hasCursor) {
-        const searchRad = 100 / view.scale; // 画面上100px程度の範囲
+        const searchRad = 100 / vs; // 画面上100px程度の範囲
         wxMin = wx - searchRad; wxMax = wx + searchRad;
         wyMin = wy - searchRad; wyMax = wy + searchRad;
     }
@@ -206,7 +209,7 @@ function collectSnapPoints(wx, wy, baseWcs, F, radiusPx) {
         }
     };
     // 円・円弧（onArc で描かれている範囲を判定）: 四半円点・近接点・垂線・接線
-    const baseAway = (cx, cy) => baseWcs && dist(baseWcs.x, baseWcs.y, cx, cy) * view.scale >= 0.5;
+    const baseAway = (cx, cy) => baseWcs && dist(baseWcs.x, baseWcs.y, cx, cy) * vs >= 0.5;
     const addCircleSnaps = (cx, cy, r, onArc, src) => {
         const P = (a) => ({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
         if(has('qua')) for(let k = 0; k < 4; k++) { const a = (ucs.angle || 0) + k * Math.PI / 2; if(onArc(a)) { const p = P(a); push(p.x, p.y, '四半円点'); } }
@@ -304,7 +307,7 @@ function collectSnapPoints(wx, wy, baseWcs, F, radiusPx) {
         // 交点がカーソルから吸着半径内にあるなら、その交点を通る2本の線はどちらもカーソルの近くを通る。
         // そこで、カーソルの近くを通る線だけを組み合わせる（図形の多い図面での計算を大きく減らし、
         // 以前の「300本まで」の打ち切りで指の下の線が漏れることも無くなる）
-        const rw = (hasCursor && radiusPx) ? radiusPx / view.scale : undefined;
+        const rw = (hasCursor && radiusPx) ? radiusPx / vs : undefined;
         const addSeg = (x1, y1, x2, y2) => {
             if(segs.length >= MAX_SEGS) return;
             if(!inWin(Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2))) return;
@@ -498,8 +501,9 @@ function findSnap(sx, sy, wx, wy) {
 }
 
 // ===== スナップ記号の描画 =====
-// (x, y) は画面座標、m は記号の大きさ（半径）。線の色・太さは呼び出し側で設定する
-function drawSnapShape(type, x, y, m) {
+// (x, y) は画面座標、m は記号の大きさ（半径）。線の色・太さは呼び出し側で設定する。g: 描く先（無ければ図面。別窓に描くときに渡す）
+function drawSnapShape(type, x, y, m, g) { _drawSnapShapeOn(g || ctx, type, x, y, m); }
+function _drawSnapShapeOn(ctx, type, x, y, m) {
     ctx.beginPath();
     switch(type === '延長交点' ? type : _snapBaseType(type)) {
         case '端点': ctx.moveTo(x, y - m); ctx.lineTo(x + m, y + m * 0.7); ctx.lineTo(x - m, y + m * 0.7); ctx.closePath(); break;

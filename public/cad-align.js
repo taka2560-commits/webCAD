@@ -1,10 +1,11 @@
 // ===== Web CAD 図形の張り合わせ（図面の中の図形を、ヘルマート変換で合わせる） =====
-// cad-align.js - コマンド HALIGN（別名 ALIGN・AL）。v5.59
+// cad-align.js - コマンド HALIGN（別名 ALIGN・AL）。v5.59（別窓の点は、図形へのスナップでも指定できる。v5.59.1）
 //   図面の中の図形（別の図面から取り込んだ区画・任意座標で描いた現況など）を、同じ図面の中の点（遠くの公共点でも）に合わせて、
 //   回転・移動（・縮尺）で動かす。
 //   ・対象の選び方は、鏡像・尺度変更と同じ（選んでから始める／タップ／範囲選択。cad-edit.js の _editBegin・editAreaSelect）
 //   ・張り合わせ点の指定は、SIMA の変換（cad-helmert.js）と同じ別窓の方式:
 //       動かす図形を別窓（cad-subview.js）に出す → 別窓で「動かす側の点」をタップ → 図面で「合わせる先の点」をなぞって ☑確定。
+//       別窓のタップは、動かす図形に吸い付く（図面のスナップと同じ計算。端点・中心・挿入点はいつも。中点・交点・四半円点・図心・等分点・近接点は OSNAP の設定のとおり）
 //       図面は自由に動かせるので、動かす図形から遠く離れた点（公共点など）にも合わせられる
 //   ・縮尺: 「1/1」（回転・移動だけ）／「縮尺も求める」（ヘルマート変換）。縮尺を求めたときは、文字・寸法の大きさも同じ倍率で変わる（尺度変更と同じ）
 //   ・計算は SIMA の張り合わせ（helmSolve）と同じもの。測量座標（X＝北・Y＝東、m）で、重心を引いてから求める
@@ -18,12 +19,16 @@ const ALIGN_CMDS = ['HALIGN', 'ALIGN', 'AL'];
 const ALIGN_HINT = '動かす側の点をタップ → 図面で合わせる先の点をなぞって ☑確定';
 const ALIGN_MIRROR_RATIO = 0.2; // 裏返しにした組のほうが、ばらつきがこの割合より小さければ「鏡像かもしれません」と知らせる
 const ALIGN_TAP_PX = 22;        // 別窓のタップで点を拾う近さ（SIMA の変換と同じ）
+const ALIGN_SNAP_ALWAYS = ['end', 'cen', 'ins'];                       // 別窓でいつも吸い付く種類（OSNAP を切っていても。v5.59 からの点）
+const ALIGN_SNAP_PREF = ['mid', 'int', 'qua', 'gce', 'div', 'near'];   // OSNAP の設定（種類ごとの入・切）のとおりに吸い付く種類
 const ALIGN_VIEW_MAX = 5000;    // 別窓に形を描く図形の上限（多いときは、初めのこの数だけ）
 const _align = {
     on: false,      // 張り合わせの途中（図形を選び終えてから、動かす・やめるまで）
     ids: [],        // 動かす図形（図形の ID。↩ などで配列が変わっても同じ図形を指す）
     pairs: [],      // 張り合わせ点の組 [{ src: { x, y }, dst: { x, y, name }, use }]（図面の座標）
-    sel: null,      // 別窓で選んだ「動かす側の点」（図面で合わせる先の点を指定する前）
+    sel: null,      // 別窓で選んだ「動かす側の点」（図面で合わせる先の点を指定する前）{ x, y, t: 吸い付いた種類 }
+    hover: null,    // 別窓でマウスの下にある、吸い付く点の下見 { x, y, t }（PC だけ）
+    hoverEp: -1,    // 下見を作ったときの図形データの世代（図形が変わったら、下見を捨てる）
     calc: null,     // 計算の結果（alignCompute。組・縮尺が変わったら作り直す）
     keys: null,     // 別窓で拾える点（図形の要の点）と、それを作ったときの図形データの世代
     folded: false,  // 図面で点を指定するあいだ、別窓をたたんだか
@@ -118,7 +123,7 @@ function alignStart(idxs) {
     const ids = (idxs || []).filter((i) => entities[i] && entities[i].type !== 'PIN').map((i) => entities[i].id);
     if(!ids.length) { _editToast('張り合わせ: 動かす図形がありません'); return false; }
     if(cogoIsPicking()) _cogo.pick = null;
-    Object.assign(_align, { on: true, ids, pairs: [], sel: null, calc: null, keys: null, folded: false, viewClosed: false });
+    Object.assign(_align, { on: true, ids, pairs: [], sel: null, hover: null, calc: null, keys: null, folded: false, viewClosed: false });
     delete _cogo.slots.AT;
     resetCommand(); // 選ぶ段階を終える（選択の印も消す。動かす図形は、図面にオレンジで出す）
     addCommandLog(`-> [張り合わせ] 動かす図形 ${ids.length}個。別窓で動かす側の点をタップ → 図面で合わせる先の点を ☑確定（2組以上）`);
@@ -138,7 +143,7 @@ function _alignShow() {
 function alignReset() {
     const was = _align.on;
     if(cogoIsPicking() && _cogo.pick && _cogo.pick.owner === 'align') { _cogo.pick = null; resetCommand(); }
-    Object.assign(_align, { on: false, ids: [], pairs: [], sel: null, calc: null, keys: null, folded: false, viewClosed: false });
+    Object.assign(_align, { on: false, ids: [], pairs: [], sel: null, hover: null, calc: null, keys: null, folded: false, viewClosed: false });
     if(typeof _cogo !== 'undefined') delete _cogo.slots.AT;
     if(_alignViewInst && _alignViewInst.isOpen()) _alignViewInst.hide();
     if(was && _alignPanelShown()) closePropertyPanel();
@@ -153,6 +158,7 @@ function _alignView() {
         _alignViewInst = createSubView({
             id: 'align-view', title: '⧉ 動かす図形', posKey: 'cad_align_view_pos', sizeKey: 'cad_align_view_size', hint: ALIGN_HINT,
             onTap: (X, Y, sx, sy) => _alignTapSource(sx, sy),
+            onHover: (sx, sy) => _alignHover(sx, sy),
             onDraw: (g, api) => _alignDrawView(g, api),
             onFit: () => _alignFitView(),
             onClose: () => { _align.viewClosed = true; },
@@ -167,6 +173,7 @@ window.alignOpenView = function() {
     v.open(); v.setCollapsed(false); _alignFitView();
 };
 function _alignFitView() {
+    _align.hover = null; _alignHoverNext = null; // 見え方が変わるので、下見は消す（マウスを動かすと出し直す）
     const b = editBoundsOf(_alignTargets().map((i) => entities[i]));
     if(!b) return;
     const a = wcsToSurvey(b.minX, b.minY), c = wcsToSurvey(b.maxX, b.maxY);
@@ -213,32 +220,103 @@ function _alignKeyPoints(e) {
     if(t === 'PLINE') return e.points || [];
     if(t === 'CIRCLE' || t === 'ELLIPSE') return [{ x: e.cx, y: e.cy }];
     if(t === 'ARC') return [{ x: e.cx, y: e.cy }, { x: e.cx + e.radius * Math.cos(e.startAngle), y: e.cy + e.radius * Math.sin(e.startAngle) }, { x: e.cx + e.radius * Math.cos(e.endAngle), y: e.cy + e.radius * Math.sin(e.endAngle) }];
-    if(t === 'POINT' || t === 'TEXT') return [{ x: e.x, y: e.y }];
+    // 測点の点名の文字は、測点からずらして置いているので拾わない（測点の近くをタップしたとき、測点ではなく文字の位置を拾ってしまう。図面のスナップと同じ）
+    if(t === 'POINT' || t === 'TEXT') return (t === 'TEXT' && e.ptLabel) ? [] : [{ x: e.x, y: e.y }];
     if(t === 'HATCH') return _alignKeyPoints(e.target);
     return [];
 }
-// 別窓で拾える点（動かす図形の要の点。重なった点は1つに）。図形が変わったら作り直す
-function _alignKeys() {
-    const ep = typeof _geomEpoch !== 'undefined' ? _geomEpoch : 0;
-    if(_align.keys && _align.keys.ep === ep && _align.keys.n === entities.length) return _align.keys.pts;
-    const seen = new Set(), pts = [];
-    _alignTargets().forEach((i) => _alignKeyPoints(entities[i]).forEach((q) => {
-        if(!isFinite(q.x) || !isFinite(q.y)) return;
-        const k = q.x + ',' + q.y;
-        if(seen.has(k)) return;
-        seen.add(k); pts.push({ x: q.x, y: q.y });
-    }));
-    _align.keys = { ep, n: entities.length, pts };
-    return pts;
+// 要の点の種類（図面のスナップの呼び方）: 円・楕円・円弧の1つ目は中心、文字は挿入点、ほかは端点
+function _alignKeyType(e, k) {
+    const t = e.type === 'HATCH' && e.target ? e.target.type : e.type;
+    if(t === 'CIRCLE' || t === 'ELLIPSE' || (t === 'ARC' && k === 0)) return '中心';
+    return t === 'TEXT' ? '挿入点' : '端点';
 }
-// 別窓でタップした位置のいちばん近い点を選ぶ
+// 別窓で拾える点（動かす図形の要の点。重なった点は1つに）と、動かす図形の集まり。図形が変わったら作り直す
+function _alignKeyCache() {
+    const ep = typeof _geomEpoch !== 'undefined' ? _geomEpoch : 0;
+    if(_align.keys && _align.keys.ep === ep && _align.keys.n === entities.length) return _align.keys;
+    const seen = new Set(), pts = [], set = new Set();
+    _alignTargets().forEach((i) => {
+        const e = entities[i];
+        set.add(e);
+        _alignKeyPoints(e).forEach((q, n) => {
+            if(!isFinite(q.x) || !isFinite(q.y)) return;
+            const k = q.x + ',' + q.y;
+            if(seen.has(k)) return;
+            seen.add(k); pts.push({ x: q.x, y: q.y, t: _alignKeyType(e, n) });
+        });
+    });
+    return (_align.keys = { ep, n: entities.length, pts, set });
+}
+function _alignKeys() { return _alignKeyCache().pts; }
+// 別窓で吸い付く種類: 端点・中心・挿入点はいつも。ほかは、図面の OSNAP の設定（種類ごとの入・切）と同じ。
+// 垂線・接線（基点が要る）と延長（線の取得が要る）は、別窓では使わない
+function _alignSnapFlags() {
+    const F = { main: true, divN: osnapState.divN };
+    ALIGN_SNAP_ALWAYS.forEach((k) => { F[k] = true; });
+    ALIGN_SNAP_PREF.forEach((k) => { F[k] = !!osnapState[k]; });
+    return F;
+}
+/**
+ * 図面の座標 w の近く（画面で R 画素より近く）で、動かす図形に吸い付く点を探す。k: 1単位あたりの画素数（別窓の倍率）。
+ * 戻り値: { x, y（図面の座標）, t（種類: 端点・中点・中心・交点・挿入点・四半円点・図心・等分点・近接点） } | null
+ *   点の求め方は、図面のスナップ（cad-snap.js の collectSnapPoints）と同じ。相手は動かす図形だけ（動かさない図形・それとの交点には吸い付かない）。
+ *   選び方も図面と同じ2段: 幾何の点（端点・中点・交点 …）が近くにあれば、その中でいちばん近い点。無いときだけ、線の上の点（近接点）
+ */
+function alignSnapPoint(w, k, R) {
+    if(!_align.on || !w || !isFinite(w.x) || !isFinite(w.y) || !(k > 0) || !isFinite(k)) return null;
+    R = R > 0 ? R : ALIGN_TAP_PX;
+    const cache = _alignKeyCache(), keep = _snapHoverTmp;
+    let pts;
+    _snapHoverTmp = { d: Infinity, src: null }; // 捨ての入れ物に替えてから呼ぶ（図面の「延長」の取得待ちの中身を、別窓の動きで書き換えない）
+    try { pts = collectSnapPoints(w.x, w.y, null, _alignSnapFlags(), R, { scale: k, only: (e) => cache.set.has(e) }); }
+    finally { _snapHoverTmp = keep; }
+    let best = null;
+    const see = (p) => {
+        const d = Math.hypot(p.x - w.x, p.y - w.y) * k;
+        if(!(d < R)) return;
+        const tier = _snapTier(p.t);
+        if(!best || tier < best.tier || (tier === best.tier && d < best.d)) best = { x: p.x, y: p.y, t: p.t, tier, d };
+    };
+    pts.forEach(see);
+    cache.pts.forEach(see); // 要の点（文字の位置・塗りつぶしの頂点・見えていない図形の点など、スナップが出さない点も。v5.59 から拾えた点）
+    return best && { x: best.x, y: best.y, t: best.t };
+}
+// 別窓の位置 (sx, sy)（画素）で、吸い付く点を探す
+function alignSnapAt(sx, sy) {
+    if(!_align.on || !isFinite(sx) || !isFinite(sy)) return null;
+    const v = _alignView(), s = v.toSurvey(sx, sy);
+    return alignSnapPoint(surveyToWcs(s.X, s.Y), v.scale() / surveyUnitFactor(), ALIGN_TAP_PX);
+}
+// マウスの下の、吸い付く点の下見（PC。別窓に記号と種類を出す）。
+// 探すのは1コマに1回まで（図形が数万個あると1回に数十 ms かかるので、マウスの動きのたびには探さない。コマの中で最後の位置だけを探す）
+let _alignHoverBusy = false, _alignHoverNext = null;
+function _alignSetHover(h) {
+    const a = _align.hover;
+    _align.hoverEp = typeof _geomEpoch !== 'undefined' ? _geomEpoch : 0;
+    if((!h && !a) || (h && a && h.x === a.x && h.y === a.y && h.t === a.t)) return;
+    _align.hover = h;
+    if(_alignViewInst) _alignViewInst.redraw();
+}
+function _alignHover(sx, sy) {
+    if(sx === null || sx === undefined) { _alignHoverNext = null; _alignSetHover(null); return; }
+    if(_alignHoverBusy) { _alignHoverNext = [sx, sy]; return; }
+    _alignSetHover(alignSnapAt(sx, sy));
+    _alignHoverBusy = true;
+    requestAnimationFrame(() => {
+        _alignHoverBusy = false;
+        const n = _alignHoverNext;
+        _alignHoverNext = null;
+        if(n) _alignHover(n[0], n[1]);
+    });
+}
+// 別窓でタップした位置で、動かす図形に吸い付く点を選ぶ（端点・中点・交点・中心・線の上 …）
 function _alignTapSource(sx, sy) {
     if(!_align.on) return;
     const v = _alignView();
-    let best = null, bd = ALIGN_TAP_PX;
-    _alignKeys().forEach((p) => { const s = wcsToSurvey(p.x, p.y), q = v.toScreen(s.X, s.Y), d = Math.hypot(q.x - sx, q.y - sy); if(d < bd) { bd = d; best = p; } });
+    const best = alignSnapAt(sx, sy);
     if(!best) {
-        if(typeof showToast === 'function') showToast('点（端点・頂点・中心・測点）の近くをタップしてください（拡大すると選びやすくなります）', 2800);
+        if(typeof showToast === 'function') showToast('図形の近くをタップしてください（端点・中点・交点・線の上などに吸い付きます。拡大すると選びやすくなります）', 2800);
         if(typeof motionShake === 'function') motionShake(v.el.querySelector('.subview-hint')); // UIの動き（試用）: 別窓の案内を揺らす
         return;
     }
@@ -247,11 +325,15 @@ function _alignTapSource(sx, sy) {
 // 動かす側の点を選び（別窓のタップ）、図面で合わせる先の点を指定する（☑確定）
 function alignSelectSource(pt) {
     if(!_align.on || !pt || !isFinite(pt.x) || !isFinite(pt.y)) return false;
-    _align.sel = { x: pt.x, y: pt.y };
+    const kind = typeof pt.t === 'string' ? pt.t : '';
+    _align.sel = { x: pt.x, y: pt.y, t: kind };
+    _align.hover = null;
     _align.viewClosed = false;
     const v = _alignView();
     v.open();
-    addCommandLog(`-> [張り合わせ] 動かす側の点 ${coordLogText(pt)} を選びました。図面で合わせる先の点をなぞって ☑確定`);
+    addCommandLog(`-> [張り合わせ] 動かす側の点${kind ? `（${kind}）` : ''} ${coordLogText(pt)} を選びました。図面で合わせる先の点をなぞって ☑確定`);
+    // どこに吸い付いたかを知らせる（スマホでは、このあと別窓をたたむので、別窓の記号が見えなくなる）
+    if(kind && typeof showToast === 'function') showToast(`動かす側の点: ${kind}。図面で合わせる先の点をなぞって ☑確定`, 2600);
     // スマホ・画面いっぱいの別窓では、図面が見えるように別窓をたたむ（自分でたたんでいたら、そのまま）。指定が終わると広げ直す
     if((window.innerWidth < 700 || v.maximized) && !v.collapsed) { v.setCollapsed(true); _align.folded = true; }
     v.redraw();
@@ -271,7 +353,7 @@ function _alignAfterPick() {
     const src = _align.sel;
     _align.sel = null;
     if(!_align.on || !src) return;
-    const pr = { src, dst: { x: s.x, y: s.y, name: s.name || '' }, use: true };
+    const pr = { src: { x: src.x, y: src.y }, dst: { x: s.x, y: s.y, name: s.name || '' }, use: true };
     const tol = 1e-9 * (Math.abs(src.x) + Math.abs(src.y) + 1);
     let k = _align.pairs.findIndex((p) => Math.abs(p.src.x - src.x) <= tol && Math.abs(p.src.y - src.y) <= tol); // 同じ点を指定し直したときは、同じ番号のまま入れ替える
     if(k >= 0) _align.pairs[k] = pr; else { _align.pairs.push(pr); k = _align.pairs.length - 1; }
@@ -437,7 +519,7 @@ function alignPanel() {
     h += `<div class="ts-sec">張り合わせ点${pairs.length ? `（計算に使う ${c.nUse} / ${pairs.length}組）` : ''}・動かす図形 ${n}個</div>`;
     h += '<div class="cogo-btns"><button class="prop-btn btn-sub" onclick="alignPairByName()" title="動かす図形の中の測点と、動かさない測点で、点名が同じものを組にする">🔗 点名が同じ点を組にする</button>' +
         (_align.viewClosed ? '<button class="prop-btn btn-sub" onclick="alignOpenView()">🗺 別窓を開く</button>' : '') + '</div>';
-    if(!pairs.length) h += _editNote('別窓（動かす図形）で「動かす側の点」をタップ → 図面で「合わせる先の点」をなぞって ☑確定（PC はクリック。端点・測点に吸い付きます）。図面は動かせるので、遠くの公共点にも合わせられます。2組以上で計算し、3組以上で精度を確かめられます。');
+    if(!pairs.length) h += _editNote('別窓（動かす図形）で「動かす側の点」をタップ → 図面で「合わせる先の点」をなぞって ☑確定（PC はクリック）。別窓でも図面でも、端点・中点・交点・線の上などに吸い付きます（種類は OSNAP の設定と同じ）。図面は動かせるので、遠くの公共点にも合わせられます。2組以上で計算し、3組以上で精度を確かめられます。');
     else {
         const named = collectSurveyPoints().filter((p) => p.name || p.num);
         const rows = pairs.map((p, k) => {
@@ -519,7 +601,16 @@ function _alignDrawView(g, api) {
     if(_align.sel) {
         const q = S(_align.sel.x, _align.sel.y);
         g.strokeStyle = '#00ffff'; g.lineWidth = 2; g.beginPath(); g.arc(q.x, q.y, 11, 0, Math.PI * 2); g.stroke();
-        g.fillStyle = '#00ffff'; g.textAlign = 'left'; g.fillText('→ 図面で指定', q.x + 14, q.y + 12);
+        g.fillStyle = '#00ffff'; g.textAlign = 'left'; g.fillText((_align.sel.t ? _align.sel.t + ' ' : '') + '→ 図面で指定', q.x + 14, q.y + 12);
+    }
+    // マウスの下の、吸い付く点の下見（図面のスナップと同じ記号と、種類の名前）。図形が変わっていたら（↩ など）出さない
+    if(_align.hover && _align.hoverEp !== (typeof _geomEpoch !== 'undefined' ? _geomEpoch : 0)) _align.hover = null;
+    if(_align.hover) {
+        const q = S(_align.hover.x, _align.hover.y);
+        g.strokeStyle = '#ffcc00'; g.lineWidth = 2; g.setLineDash([]);
+        drawSnapShape(_align.hover.t, q.x, q.y, 6, g);
+        g.font = 'bold 11px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillStyle = '#ffcc00';
+        g.fillText(_align.hover.t, q.x + 11, q.y - 11);
     }
 }
 

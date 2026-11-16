@@ -5,6 +5,7 @@
 //       □ で画面いっぱい（パネルと同じ .win-max）・❐ で元の大きさ。見えていた範囲が、そのまま大きく見えるように倍率も合わせる。
 //       「全体」で点をすべて表示する（onFit）。
 //   中の図面: ホイール・2本指で拡大縮小、1本指・ドラッグで移動、タップで onTap（測量座標と画面の位置）。
+//             マウスを動かすと onHover（画面の位置。窓の外へ出ると null）。吸い付く点の下見に使う（v5.59.1）。
 //   囲む: startShape('rect' | 'lasso', done) のあとの1回のドラッグで、四角・なぞった形を描き、done（測量座標の多角形）を呼ぶ。
 //   座標は測量座標（X＝北・Y＝東）。右が東、上が北（図面と同じ向き）。描くのは onDraw（g: 2D コンテキスト, api）。
 // （ブラウザでは同じスコープに読み込まれるため、関数・変数はそのまま共有される）
@@ -218,7 +219,10 @@ function createSubView(opt) {
     });
     cv.addEventListener('pointermove', (e) => {
         const id = e.pointerId === undefined ? 1 : e.pointerId;
-        if(!ptrs.has(id)) return;
+        if(!ptrs.has(id)) { // 押していないマウスの動き: 吸い付く点の下見（タッチには無い）
+            if(opt.onHover && e.pointerType === 'mouse' && !shape) { const q = local(e); opt.onHover(q.x, q.y); }
+            return;
+        }
         const p = local(e);
         ptrs.set(id, p);
         if(shape && shape.pts && ptrs.size === 1) {
@@ -236,7 +240,7 @@ function createSubView(opt) {
             v.Y = pinch.mid.Y - (mx - w / 2) / v.s; v.X = pinch.mid.X + (my - h / 2) / v.s;
             api.redraw();
         } else if(drag) {
-            if(!drag.moved && Math.hypot(p.x - drag.x, p.y - drag.y) > SUBVIEW_TAP_PX) drag.moved = true;
+            if(!drag.moved && Math.hypot(p.x - drag.x, p.y - drag.y) > SUBVIEW_TAP_PX) { drag.moved = true; if(opt.onHover) opt.onHover(null, null); } // 動かしはじめたら、下見を消す
             if(drag.moved) { v.Y = drag.Y - (p.x - drag.x) / v.s; v.X = drag.X + (p.y - drag.y) / v.s; api.redraw(); }
         }
         e.preventDefault();
@@ -255,10 +259,12 @@ function createSubView(opt) {
             return;
         }
         if(drag && !drag.moved && ptrs.size === 0 && opt.onTap) { const q = api.toSurvey(p.x, p.y); opt.onTap(q.X, q.Y, p.x, p.y); }
+        else if(drag && drag.moved && ptrs.size === 0 && opt.onHover && e.pointerType === 'mouse') opt.onHover(p.x, p.y); // 動かし終えた所で、下見を出し直す
         if(ptrs.size === 0) { drag = null; pinch = null; }
         else if(ptrs.size === 1) { const [q] = [...ptrs.values()]; drag = { x: q.x, y: q.y, X: v.X, Y: v.Y, moved: true }; pinch = null; }
     };
     cv.addEventListener('pointerup', up);
+    cv.addEventListener('pointerleave', () => { if(opt.onHover) opt.onHover(null, null); });
     cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId === undefined ? 1 : e.pointerId); drag = null; pinch = null; });
     cv.addEventListener('wheel', (e) => {
         e.preventDefault();
@@ -266,6 +272,7 @@ function createSubView(opt) {
         v.s = Math.max(1e-6, Math.min(1e6, v.s * (e.deltaY > 0 ? 1 / 1.15 : 1.15)));
         const { w, h } = size();
         v.Y = before.Y - (p.x - w / 2) / v.s; v.X = before.X + (p.y - h / 2) / v.s;
+        if(opt.onHover && ptrs.size === 0) opt.onHover(p.x, p.y); // 倍率が変わったので、マウスの下の下見を作り直す（古い印を残さない）
         api.redraw();
     }, { passive: false });
     window.addEventListener('resize', () => { if(api.isOpen()) { applyPanelPosition(el); api.redraw(); } api.fitPanel(); });

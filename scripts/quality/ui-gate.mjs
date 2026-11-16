@@ -285,6 +285,11 @@ async function runOne(browser, v, btn, motion) {
             // 別窓のタップ: 動かす側の点（三角形の頂点）の上を、本物の位置で拾えるか
             const cv = sv.querySelector('canvas').getBoundingClientRect(), s = wcsToSurvey(A[0][0], A[0][1]), q = _alignView().toScreen(s.X, s.Y);
             if (!(q.x > 4 && q.y > 4 && q.x < cv.width - 4 && q.y < cv.height - 4)) out.bad.push('別窓に図形が収まっていない');
+            // 別窓のスナップ（v5.59.1）: 線の真ん中の近くは中点に、端点と中点のあいだの線の上は近接点に吸い付く（本物の別窓の大きさ・倍率で）
+            const sm = wcsToSurvey((A[0][0] + A[1][0]) / 2, (A[0][1] + A[1][1]) / 2), qm = _alignView().toScreen(sm.X, sm.Y), hm = alignSnapAt(qm.x + 3, qm.y + 3);
+            if (!hm || hm.t !== '中点' || hm.x !== 230 || hm.y !== 200) out.bad.push(`別窓で線の中点に吸い付かない（${JSON.stringify(hm)}）`);
+            const sn = wcsToSurvey(A[0][0] + 0.22 * (A[1][0] - A[0][0]), A[0][1]), qn = _alignView().toScreen(sn.X, sn.Y), hn = alignSnapAt(qn.x, qn.y - 4);
+            if (Math.hypot(qn.x - q.x, qn.y - q.y) > 30 && Math.hypot(qn.x - qm.x, qn.y - qm.y) > 30 && (!hn || hn.t !== '近接点' || Math.abs(hn.y - 200) > 1e-9)) out.bad.push(`別窓で線の上に吸い付かない（${JSON.stringify(hn)}）`);
             _alignTapSource(q.x, q.y);
             if (!_align.sel || !cogoIsPicking()) out.bad.push('別窓のタップで点を拾えない');
             else {

@@ -4,6 +4,7 @@
 //   ・計算は、アプリとは別の式（図面の座標を複素数にした最小二乗）で求めた値と照らし合わせる（m・mm の図面、公共座標の大きさ）
 //   ・選び方は鏡像・尺度変更と同じ（選んでから始める・タップ・範囲選択）
 //   ・張り合わせ点は SIMA の変換と同じ別窓の方式（別窓で動かす側の点をタップ → 図面で合わせる先の点を ☑確定）
+//   ・別窓のタップは、動かす図形に吸い付く（端点・中点・交点・中心・四半円点・線の上。図面のスナップと同じ計算。v5.59.1）
 //   ・組の入れ替え・使う／外す・点名で組にする・鏡像の知らせ・合わない組の知らせ・確かめの画面・全体表示・↩ 1回で戻る
 const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
@@ -169,16 +170,16 @@ describe('図形の張り合わせ（HALIGN）', () => {
         assert.deepEqual([...app.val('_alignTargets()')], [1]);
     });
 
-    it('別窓のタップ: いちばん近い点（端点・頂点・中心・測点）を拾う。遠ければ知らせる。拾ったら、図面で合わせる先の点を指定する段階になる', () => {
+    it('別窓のタップ: 近くの点（端点・頂点・中心・測点）を拾う。遠ければ知らせる。拾ったら、図面で合わせる先の点を指定する段階になる', () => {
         start([0, 1, 2, 3]);
         const keys = app.val('_alignKeys().map(p => p.x + "," + p.y)');
         assert.deepEqual([...keys].sort(), ['0,0', '20,10', '40,0', '40,25', '5,5'], '重なった端点は1つ');
         const scr = app.val(`(() => { const s = wcsToSurvey(40, 25), q = _alignView().toScreen(s.X, s.Y); return [q.x, q.y]; })()`);
         app.eval(`_alignTapSource(${scr[0] + 400}, ${scr[1] + 400})`);
-        assert.match(toast(), /点（端点・頂点・中心・測点）の近くをタップ/);
+        assert.match(toast(), /図形の近くをタップしてください（端点・中点・交点・線の上などに吸い付きます/);
         assert.equal(app.val('_align.sel'), null);
         app.eval(`_alignTapSource(${scr[0] + 6}, ${scr[1] - 5})`);
-        assert.deepEqual({ ...app.val('_align.sel') }, { x: 40, y: 25 });
+        assert.deepEqual({ ...app.val('_align.sel') }, { x: 40, y: 25, t: '端点' });
         assert.equal(app.val('cogoIsPicking() && _cogo.pick.owner'), 'align');
         assert.match(app.val(`document.getElementById('command-prompt').textContent`), /合わせる先の点をなぞって ☑確定/);
         assert.doesNotThrow(() => app.eval('_alignViewInst.drawNow(); drawAlignOverlay();'));
@@ -466,6 +467,207 @@ describe('図形の張り合わせ（HALIGN）', () => {
         assert.doesNotMatch(panel(), /組が少ないので/, '縮尺も求める: 4組あれば見分けられる');
         app.eval('alignDeletePair(3)');
         assert.match(panel(), /組が少ないので/, '縮尺も求める: 3組では見分けられない');
+    });
+
+    // ===== 別窓のスナップ（v5.59.1）: 端点・頂点・中心だけでなく、図形（中点・交点・四半円点・線の上）にも吸い付く =====
+    describe('別窓のスナップ', () => {
+        let saved;
+        beforeEach(() => { saved = app.val('JSON.stringify(osnapState)'); });
+        const restore = () => app.eval(`Object.assign(osnapState, ${saved})`);
+        // 動かす図形: 線 (0,0)-(40,0)・線 (40,0)-(40,25)・円 中心 (20,10) 半径 4・文字 (5,5)・斜めの線 (0,-10)-(30,20)（y=0 の線と (10,0) で交わる）
+        // 動かさない図形: 遠くの線2本と、動かす線を (30,0) で横切る線 (30,-4)-(30,6)
+        const begin = () => app.eval(SHAPES + `entities.push({ type: 'LINE', layer: 0, color: null, x1: 0, y1: -10, x2: 30, y2: 20 }, { type: 'LINE', layer: 0, color: null, x1: 30, y1: -4, x2: 30, y2: 6 });
+            cmdState.selectedIndices = [0, 1, 2, 3, 6]; processCommand('HALIGN');`);
+        const snap = (x, y, k) => { const r = app.val(`alignSnapPoint({ x: ${x}, y: ${y} }, ${k}, 22)`); return r && { ...r }; };
+
+        it('吸い付く点: 中点・交点・端点・中心・四半円点・挿入点。幾何の点が近くに無いときだけ、線の上の点（近接点）', () => {
+            try {
+                begin();
+                assert.deepEqual(snap(20.5, 0.8, 5), { x: 20, y: 0, t: '中点' }, '線の真ん中の近く');
+                assert.deepEqual(snap(10.3, 0.2, 20), { x: 10, y: 0, t: '交点' }, '動かす図形どうしの交点（y = x − 10 と y = 0）');
+                assert.deepEqual(snap(39.7, 0.4, 5), { x: 40, y: 0, t: '端点' });
+                assert.deepEqual(snap(20.4, 10.3, 20), { x: 20, y: 10, t: '中心' });
+                assert.deepEqual(snap(24.3, 10.2, 20), { x: 24, y: 10, t: '四半円点' });
+                assert.deepEqual(snap(5.2, 5.1, 5), { x: 5, y: 5, t: '挿入点' }, '文字の位置');
+                // 線の上（端点・中点から離れた所）: 線に下ろした点
+                assert.deepEqual(snap(33, 1, 20), { x: 33, y: 0, t: '近接点' });
+                // 円の上: 中心からその向きへ、半径ぶん
+                const c = snap(17.1, 12.7, 20), a = Math.atan2(2.7, -2.9); // 斜めの線が円と交わる右上は避ける
+                assert.equal(c.t, '近接点');
+                assert.ok(near(c.x, 20 + 4 * Math.cos(a), 1e-12) && near(c.y, 10 + 4 * Math.sin(a), 1e-12), JSON.stringify(c));
+                // 何も無い所
+                assert.equal(snap(60, 60, 5), null);
+            } finally { restore(); }
+        });
+
+        it('動かさない図形には吸い付かない（その図形の中点・それとの交点にも）。図面の表示の倍率にはよらない', () => {
+            try {
+                begin();
+                assert.equal(snap(1000.2, 1020.1, 5), null, '動かさない線の中点');
+                const nx = snap(30.1, 0.1, 20);
+                assert.ok(nx.t === '近接点' && near(nx.x, 30.1, 1e-12) && nx.y === 0, '動かさない線との交点 (30,0) ではなく、動かす線の上の点: ' + JSON.stringify(nx));
+                // 図面のスナップ（ふつうの呼び方）は、今までどおり全部の図形が相手
+                const all = app.val(`collectSnapPoints(30.1, 0.1, null, Object.assign({}, osnapState, { main: true }), 22).filter((p) => p.t === '交点' && Math.hypot(p.x - 30, p.y) < 1e-9).length`);
+                assert.equal(all, 1, '図面では、動かさない線との交点も出る');
+                // 図面を大きく・小さく表示していても、別窓の結果は同じ（別窓の倍率だけで決まる）
+                for (const s of [0.001, 1, 5000]) {
+                    app.eval(`view.scale = ${s}`);
+                    assert.deepEqual(snap(20.5, 0.8, 5), { x: 20, y: 0, t: '中点' }, `view.scale ${s}`);
+                    assert.deepEqual(snap(10.3, 0.2, 20), { x: 10, y: 0, t: '交点' }, `view.scale ${s}`);
+                    assert.equal(snap(1000.2, 1020.1, 5), null);
+                }
+                // 図面の「延長」の取得待ち（カーソルの下の線の覚え）を、別窓の動きで書き換えない
+                app.eval(`_snapHoverTmp = { d: 1.5, src: { kind: 'seg', x1: 1, y1: 2, x2: 3, y2: 4 } }; alignSnapPoint({ x: 33, y: 1 }, 20, 22);`);
+                assert.deepEqual({ ...app.val('_snapHoverTmp.src') }, { kind: 'seg', x1: 1, y1: 2, x2: 3, y2: 4 });
+                app.eval('_snapHoverTmp = null');
+            } finally { restore(); }
+        });
+
+        it('種類は OSNAP の設定のとおり（中点を切れば中点には吸い付かない）。端点・中心・挿入点は、OSNAP を切っていても吸い付く', () => {
+            try {
+                begin();
+                app.eval('osnapState.mid = false');
+                assert.deepEqual(snap(20.5, 0.8, 5), { x: 20.5, y: 0, t: '近接点' });
+                app.eval('osnapState.near = false');
+                assert.equal(snap(20.5, 0.8, 5), null, '中点も近接点も切った');
+                app.eval('osnapState.int = false');
+                assert.equal(snap(10.3, 0.2, 20), null);
+                // OSNAP 全体を切っても（図面では自由な点になる）、別窓は種類ごとの設定で吸い付く
+                app.eval(`Object.assign(osnapState, ${saved}); osnapState.main = false; osnapState.mid = true;`);
+                assert.deepEqual(snap(20.5, 0.8, 5), { x: 20, y: 0, t: '中点' });
+                app.eval(`['end', 'mid', 'cen', 'int', 'near', 'qua', 'ins', 'gce', 'div'].forEach((k) => { osnapState[k] = false; });`);
+                assert.deepEqual(snap(39.7, 0.4, 5), { x: 40, y: 0, t: '端点' });
+                assert.deepEqual(snap(20.4, 10.3, 20), { x: 20, y: 10, t: '中心' });
+                assert.deepEqual(snap(5.2, 5.1, 5), { x: 5, y: 5, t: '挿入点' });
+                assert.equal(snap(24.3, 10.2, 40), null, '四半円点は設定のとおり');
+                // 等分点（3等分）を入れると出る
+                app.eval('osnapState.div = true; osnapState.divN = 3;');
+                const d = snap(13.5, 0.3, 20);
+                assert.equal(d.t, '等分点');
+                assert.ok(near(d.x, 40 / 3, 1e-12) && d.y === 0);
+            } finally { restore(); }
+        });
+
+        it('見えていない画層の図形も、別窓に描いているので吸い付く（端点だけでなく中点も）', () => {
+            try {
+                app.eval(SHAPES + `layers.push({ name: '隠す', color: '#ffffff', visible: false });
+                    entities.push({ type: 'LINE', layer: 1, color: null, x1: 100, y1: 100, x2: 120, y2: 100 }, { type: 'LINE', layer: 0, color: null, x1: 200, y1: 100, x2: 220, y2: 100, hidden: true });
+                    cmdState.selectedIndices = [0, 6, 7]; processCommand('HALIGN');`);
+                assert.deepEqual(snap(110.2, 100.3, 5), { x: 110, y: 100, t: '中点' });
+                assert.deepEqual(snap(200.3, 100.2, 5), { x: 200, y: 100, t: '端点' });
+                assert.deepEqual(snap(210.1, 100.2, 5), { x: 210, y: 100, t: '中点' });
+            } finally { restore(); }
+        });
+
+        it('別窓のタップ: 線の真ん中をタップすると中点。種類を知らせて、図面で合わせる先の点を指定する段階へ。組には座標だけを入れる', () => {
+            try {
+                begin();
+                const scr = (x, y) => app.val(`(() => { const s = wcsToSurvey(${x}, ${y}), q = _alignView().toScreen(s.X, s.Y); return [q.x, q.y]; })()`);
+                const m = scr(20, 0);
+                app.eval(`_alignTapSource(${m[0] + 3}, ${m[1] - 4})`);
+                assert.deepEqual({ ...app.val('_align.sel') }, { x: 20, y: 0, t: '中点' });
+                assert.match(toast(), /動かす側の点: 中点。図面で合わせる先の点をなぞって ☑確定/);
+                assert.match(app.val(`document.getElementById('command-log').textContent`), /動かす側の点（中点）/);
+                assert.equal(app.val('cogoIsPicking() && _cogo.pick.owner'), 'align');
+                assert.doesNotThrow(() => app.eval('_alignViewInst.drawNow(); drawAlignOverlay();'));
+                pt(1020, 1000);
+                assert.deepEqual({ ...app.val('_align.pairs[0].src') }, { x: 20, y: 0 });
+                // 交点をタップ → 2組目。動かすと、中点・交点が、合わせる先にぴったり合う（90° 回して (1000,1000) へ: (x, y) → (1000 − y… ではなく、ここは平行移動）
+                const x = scr(10, 0);
+                app.eval(`_alignTapSource(${x[0] - 2}, ${x[1] + 2})`);
+                assert.deepEqual({ ...app.val('_align.sel') }, { x: 10, y: 0, t: '交点' });
+                pt(1010, 1000);
+                assert.equal(app.val('_align.pairs.length'), 2);
+                go();
+                const l = app.val('({ a: [entities[0].x1, entities[0].y1], b: [entities[0].x2, entities[0].y2], r: entities[2].radius, c: [entities[2].cx, entities[2].cy] })');
+                assert.ok(near(l.a[0], 1000, 1e-9) && near(l.a[1], 1000, 1e-9) && near(l.b[0], 1040, 1e-9) && near(l.b[1], 1000, 1e-9), JSON.stringify(l));
+                assert.ok(near(l.c[0], 1020, 1e-9) && near(l.c[1], 1010, 1e-9) && l.r === 4);
+            } finally { restore(); }
+        });
+
+        it('PC: マウスを動かすと、吸い付く点の下見が出る（記号と種類）。別窓の外へ出ると消える。タッチの動きでは出さない', () => {
+            try {
+                begin();
+                const cv = `_alignViewInst.canvas`;
+                const move = (x, y, type) => app.eval(`(() => { const e = new window.Event('pointermove'); Object.assign(e, { clientX: ${x}, clientY: ${y}, pointerId: 7, pointerType: '${type}' }); ${cv}.dispatchEvent(e); })()`);
+                const m = app.val(`(() => { const s = wcsToSurvey(20, 0), q = _alignView().toScreen(s.X, s.Y); return [q.x, q.y]; })()`);
+                move(m[0] + 2, m[1] + 3, 'touch');
+                assert.equal(app.val('_align.hover'), null);
+                move(m[0] + 2, m[1] + 3, 'mouse');
+                assert.deepEqual({ ...app.val('_align.hover') }, { x: 20, y: 0, t: '中点' });
+                assert.doesNotThrow(() => app.eval('_alignViewInst.drawNow()'));
+                app.eval(`${cv}.dispatchEvent(new window.Event('pointerleave'))`);
+                assert.equal(app.val('_align.hover'), null);
+                // 図面のスナップの記号を、別の描く先（別窓）にも描ける。渡さなければ今までどおり図面へ
+                const calls = app.val(`(() => { const log = []; const g = { beginPath() { log.push('b'); }, rect() { log.push('r'); }, moveTo() {}, lineTo() {}, arc() { log.push('a'); }, closePath() {}, stroke() { log.push('s'); }, setLineDash() {} };
+                    drawSnapShape('中点', 10, 10, 6, g); drawSnapShape('中心', 10, 10, 6, g); return log.join(''); })()`);
+                assert.equal(calls, 'brsbas');
+                assert.doesNotThrow(() => app.eval(`drawSnapShape('端点', 10, 10, 6)`));
+                // 選ぶと下見は消える。やめても残らない
+                move(m[0] + 2, m[1] + 3, 'mouse');
+                app.eval(`_alignTapSource(${m[0] + 2}, ${m[1] + 3})`);
+                assert.equal(app.val('_align.hover'), null);
+                move(m[0] + 2, m[1] + 3, 'mouse');
+                app.eval('alignReset()');
+                assert.equal(app.val('_align.hover'), null);
+            } finally { restore(); }
+        });
+
+        // ===== G3（別の担当の点検）で見つかった点の直し =====
+        it('測点の近くをタップしたら、測点を拾う（点名の文字の位置は拾わない）。公共座標の区画の図心も、ずれない', () => {
+            try {
+                // 測点（点＋点名の文字。文字は測点から少しずらして置く）と、公共座標の小さな四角の区画
+                app.eval(`entities.push({ type: 'POINT', layer: 0, color: null, x: 0, y: 0, name: 'K1', gid: 'g1' }, { type: 'TEXT', layer: 0, color: null, x: 1, y: 0.6, text: 'K1', height: 2, gid: 'g1', blockName: '測点', ptLabel: true },
+                    { type: 'PLINE', layer: 0, color: null, closed: true, points: [{ x: 128120.2, y: -59917.2 }, { x: 128121.2, y: -59917.2 }, { x: 128121.2, y: -59916.2 }, { x: 128120.2, y: -59916.2 }] });
+                    cmdState.selectedIndices = [0, 1, 2]; processCommand('HALIGN');`);
+                assert.deepEqual([...app.val('_alignKeys().slice(0, 1).map((p) => [p.x, p.y, p.t].join(","))')], ['0,0,端点']);
+                assert.equal(app.val('_alignKeys().some((p) => p.x === 1 && p.y === 0.6)'), false, '点名の文字の位置は、拾える点に入れない');
+                for (const [x, y] of [[1, 0.6], [0.9, 0.5], [0.3, -0.2], [1.5, 1]]) assert.deepEqual(snap(x, y, 5), { x: 0, y: 0, t: '端点' }, `(${x}, ${y}) の近く`);
+                // 図心（OSNAP で入れたとき）: 1辺 1m の四角の真ん中。以前は座標をそのまま掛け合わせていて、ここで 1cm ほどずれた
+                app.eval('osnapState.gce = true');
+                const c = snap(128120.71, -59916.69, 100);
+                assert.equal(c.t, '図心');
+                assert.ok(near(c.x, 128120.7, 1e-9) && near(c.y, -59916.7, 1e-9), JSON.stringify(c));
+                // 面積 0（一直線）・点が無いときは、今までどおり頂点の平均・原点
+                const z = app.val(`[_polygonCentroid([{ x: 100000, y: 5 }, { x: 100002, y: 5 }, { x: 100004, y: 5 }]), _polygonCentroid([])]`);
+                assert.deepEqual([{ ...z[0] }, { ...z[1] }], [{ x: 100002, y: 5 }, { x: 0, y: 0 }]);
+            } finally { restore(); }
+        });
+
+        it('下見の印を古いまま残さない: ホイールで拡大したら作り直す。図形が変わったら（↩ など）消す。図面の「延長」の覚えは書き換えない', async () => {
+            try {
+                begin();
+                const ev = (type, x, y, extra) => app.eval(`(() => { const e = new window.Event('${type}', { cancelable: true }); Object.assign(e, { clientX: ${x}, clientY: ${y}, pointerId: 7, pointerType: 'mouse' }, ${JSON.stringify(extra || {})}); _alignViewInst.canvas.dispatchEvent(e); })()`);
+                const m = app.val(`(() => { const s = wcsToSurvey(20, 0), q = _alignView().toScreen(s.X, s.Y); return [q.x, q.y]; })()`);
+                await raf(); // 前のテストのマウスの動きのコマが終わってから
+                ev('pointermove', m[0] + 15, m[1] + 4);
+                assert.deepEqual({ ...app.val('_align.hover') }, { x: 20, y: 0, t: '中点' });
+                await raf();
+                // その場でホイールで拡大: マウスの下は、中点から離れた線の上になる。下見も、クリックで選ばれる点と同じになる
+                for (let i = 0; i < 8; i++) { ev('wheel', m[0] + 15, m[1] + 4, { deltaY: -100 }); await raf(); }
+                const h = app.val('_align.hover'), tap = app.val(`alignSnapAt(${m[0] + 15}, ${m[1] + 4})`);
+                assert.equal(h.t, '近接点');
+                assert.deepEqual({ ...h }, { ...tap }, '下見とクリックで選ばれる点が同じ');
+                // 図形が変わった（世代が進んだ）: 次に描くときに下見を消す
+                app.eval('_bumpGeomEpoch(); _alignViewInst.drawNow();');
+                assert.equal(app.val('_align.hover'), null);
+                // 全体（別窓の見え方を合わせ直す）でも消す
+                ev('pointermove', m[0] + 15, m[1] + 4); await raf();
+                app.eval('_alignFitView()');
+                assert.equal(app.val('_align.hover'), null);
+                // 続けて来たマウスの動きは、1コマに1回だけ探す（最後の位置で）
+                await raf();
+                const n = app.val(`(() => { let n = 0; const f = alignSnapAt; alignSnapAt = (x, y) => { n++; return f(x, y); };
+                    try { for(let i = 0; i < 30; i++) _alignHover(${m[0]} + i * 0.1, ${m[1]}); } finally { alignSnapAt = f; } return n; })()`);
+                assert.ok(n <= 1, `1コマの中で探した回数: ${n}`);
+                await raf(); await raf();
+                assert.deepEqual({ ...app.val('_align.hover') }, { x: 20, y: 0, t: '中点' }, '最後の位置の下見が出る');
+                // 図面の「延長」の取得待ち（カーソルにいちばん近い線の覚え）は、中身も書き換えない
+                app.eval(`_snapHoverTmp = { d: 9.5, src: { kind: 'seg', x1: 1, y1: 2, x2: 3, y2: 4 } }; alignSnapPoint({ x: 33, y: 0.05 }, 20, 22);`);
+                assert.deepEqual(JSON.parse(app.val('JSON.stringify(_snapHoverTmp)')), { d: 9.5, src: { kind: 'seg', x1: 1, y1: 2, x2: 3, y2: 4 } });
+                app.eval('_snapHoverTmp = null');
+            } finally { restore(); }
+        });
     });
 
     it('未捕捉エラーが起きない', () => { assert.deepEqual(app.errors(), []); });

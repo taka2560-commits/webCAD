@@ -61,19 +61,21 @@ function makeSurveyPointEntities(p, h, layerPt, layerLbl) {
     }
     return out;
 }
-// 多角形の重心（面積0なら頂点の平均）
+// 多角形の重心（面積0なら頂点の平均）。1点目からの差で計算する（公共座標・mm の図面でも桁が落ちないように。v5.59.1。
+// 以前は座標をそのまま掛け合わせていて、公共座標の小さな区画では図心が mm〜数十 cm ずれた）
 function _polygonCentroid(pts) {
-    let a = 0, cx = 0, cy = 0;
+    if(!pts.length) return { x: 0, y: 0 };
+    const ox = pts[0].x, oy = pts[0].y;
+    let a = 0, cx = 0, cy = 0, sx = 0, sy = 0;
     for(let i = 0; i < pts.length; i++) {
         const p = pts[i], q = pts[(i + 1) % pts.length];
-        const c = p.x * q.y - q.x * p.y;
-        a += c; cx += (p.x + q.x) * c; cy += (p.y + q.y) * c;
+        const px = p.x - ox, py = p.y - oy, qx = q.x - ox, qy = q.y - oy;
+        const c = px * qy - qx * py;
+        a += c; cx += (px + qx) * c; cy += (py + qy) * c;
+        sx += px; sy += py;
     }
-    if(Math.abs(a) < 1e-12) {
-        const n = pts.length || 1;
-        return { x: pts.reduce((s, p) => s + p.x, 0) / n, y: pts.reduce((s, p) => s + p.y, 0) / n };
-    }
-    return { x: cx / (3 * a), y: cy / (3 * a) };
+    if(Math.abs(a) < 1e-12) return { x: ox + sx / pts.length, y: oy + sy / pts.length };
+    return { x: ox + cx / (3 * a), y: oy + cy / (3 * a) };
 }
 // 多角形の面積（座標法）。1点目からの差で計算する（公共座標・mm の図面でも桁が落ちないように。v5.49.2）
 function polygonArea(pts) {

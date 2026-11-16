@@ -502,6 +502,108 @@ describe('計算ゲート（独立した答えとの照合）', () => {
         }
     }));
 
+    // 別窓のスナップ（v5.59.1）: 動かす側の点を、中点・交点・線の上・円の上で指定したときの座標（公共座標の大きさ・m と mm の図面）。
+    // 答えは、テストの側の式（平均・連立方程式・直線への垂線の足・中心からの向き）で求める
+    ['m', 'mm'].forEach((unit) => it(`alignSnapPoint: 別窓で吸い付く点（中点・交点・線の上・円の上。${unit} の図面）`, () => {
+        setUnit(unit);
+        const f = unit === 'mm' ? 1000 : 1, g = O.rng(unit === 'mm' ? 322 : 321);
+        try {
+            app.eval(`window.__os = JSON.stringify(osnapState); ['end', 'mid', 'cen', 'int', 'near', 'qua', 'ins'].forEach((k) => { osnapState[k] = true; }); osnapState.gce = false; osnapState.div = false;`);
+            const done = { mid: 0, near: 0, circle: 0 };
+            for(let i = 0; i < 60; i++) {
+                const b = randBase(g), L = Math.pow(10, g.u(0, 2.5)); // 図形の大きさ 1m〜300m
+                const P = (u, v) => O.surveyToWcs(f, b.X + u * L, b.Y + v * L);
+                // 2本の線（しっかり交わる向き）と円
+                const a0 = g.u(0, Math.PI), a1 = a0 + g.u(0.5, Math.PI - 0.5), c0 = { u: g.u(-0.2, 0.2), v: g.u(-0.2, 0.2) };
+                const seg = (a, t0, t1) => [P(c0.u + t0 * Math.cos(a), c0.v + t0 * Math.sin(a)), P(c0.u + t1 * Math.cos(a), c0.v + t1 * Math.sin(a))];
+                const s1 = seg(a0, -g.u(0.2, 0.4), g.u(0.9, 1.4)), s2 = seg(a1, -g.u(0.2, 0.4), g.u(0.9, 1.4)); // 交点は、端からも中点からも離れた所（80 画素より遠く）
+                const cc = P(g.u(2, 3), g.u(2, 3)), R = L * f * g.u(0.2, 0.6);
+                app.eval(`alignReset(); resetCommand(); entities.length = 0; undoStack.length = 0;
+                    entities.push({ type: 'LINE', layer: 0, color: null, x1: ${s1[0].x}, y1: ${s1[0].y}, x2: ${s1[1].x}, y2: ${s1[1].y} }, { type: 'LINE', layer: 0, color: null, x1: ${s2[0].x}, y1: ${s2[0].y}, x2: ${s2[1].x}, y2: ${s2[1].y} },
+                        { type: 'CIRCLE', layer: 0, color: null, cx: ${cc.x}, cy: ${cc.y}, radius: ${R} });
+                    ensureEntityIds(); cmdState.selectedIndices = [0, 1, 2]; processCommand('HALIGN');`);
+                // 別窓の倍率: 図形の大きさ（L）が 400 画素。22 画素 ＝ L の 5.5%
+                const k = 400 / (L * f), px = 1 / k, ask = (w) => { const r = app.val(`alignSnapPoint({ x: ${w.x}, y: ${w.y} }, ${k}, 22)`); return r && { ...r }; };
+                const tol = 1e-9 * f * Math.max(1, L / 10); // 図面の単位で（m の図面で 1e-9 m。大きい図形は、座標の桁ぶん）
+                // 中点（1本目の線）: 両端の平均。少しずらした所から
+                const mid = { x: s1[0].x / 2 + s1[1].x / 2, y: s1[0].y / 2 + s1[1].y / 2 };
+                // 交点: 2本の直線の連立方程式を、2本目の線の上の位置で解く（アプリは1本目の線の上の位置で求めるので、丸めの出方が別になる）
+                const d1 = { x: s1[1].x - s1[0].x, y: s1[1].y - s1[0].y }, d2 = { x: s2[1].x - s2[0].x, y: s2[1].y - s2[0].y }, w0 = { x: s2[0].x - s1[0].x, y: s2[0].y - s1[0].y };
+                const den = d1.x * d2.y - d1.y * d2.x, uu = (w0.x * d1.y - w0.y * d1.x) / den, X = { x: s2[0].x + uu * d2.x, y: s2[0].y + uu * d2.y };
+                const far = Math.hypot(mid.x - X.x, mid.y - X.y) * k > 60; // 中点と交点が離れている組だけ、別々に確かめる
+                if(far) {
+                    done.mid++;
+                    const gm = ask({ x: mid.x + 4 * px, y: mid.y - 3 * px });
+                    assert.equal(gm && gm.t, '中点', JSON.stringify({ i, gm }));
+                    closePt(`alignSnapPoint 中点（${unit}）`, gm, mid, tol, { i }, 'x', 'y');
+                    const gx = ask({ x: X.x - 3 * px, y: X.y + 4 * px });
+                    assert.equal(gx && gx.t, '交点', JSON.stringify({ i, gx }));
+                    closePt(`alignSnapPoint 交点（${unit}）`, gx, X, tol / Math.abs(Math.sin(a1 - a0)), { i }, 'x', 'y');
+                }
+                // 線の上（1本目。端・中点・交点から 40 画素より離れた所を探す）: 線への垂線の足
+                const len1 = Math.hypot(d1.x, d1.y), n1 = { x: -d1.y / len1, y: d1.x / len1 };
+                for(const t of [0.2, 0.3, 0.7, 0.8]) {
+                    const on = { x: s1[0].x + t * d1.x, y: s1[0].y + t * d1.y };
+                    if([s1[0], s1[1], mid, X].some((q) => Math.hypot(q.x - on.x, q.y - on.y) * k < 40)) continue;
+                    const off = 6 * px, gn = ask({ x: on.x + n1.x * off, y: on.y + n1.y * off });
+                    assert.equal(gn && gn.t, '近接点', JSON.stringify({ i, t, gn }));
+                    closePt(`alignSnapPoint 線の上（${unit}）`, gn, on, tol, { i, t }, 'x', 'y');
+                    done.near++;
+                    break;
+                }
+                // 円の上（四半円点から離れた向き）: 中心からその向きへ半径ぶん。中心・四半円点
+                if(R * k > 60) {
+                    done.circle++;
+                    const th = g.u(0.5, 1.0) + Math.floor(g.u(0, 4)) * Math.PI / 2, on = { x: cc.x + R * Math.cos(th), y: cc.y + R * Math.sin(th) };
+                    const gc = ask({ x: cc.x + (R + 5 * px) * Math.cos(th), y: cc.y + (R + 5 * px) * Math.sin(th) });
+                    assert.equal(gc && gc.t, '近接点', JSON.stringify({ i, gc }));
+                    closePt(`alignSnapPoint 円の上（${unit}）`, gc, on, tol, { i }, 'x', 'y');
+                    const gq = ask({ x: cc.x + R + 3 * px, y: cc.y + 2 * px });
+                    assert.equal(gq && gq.t, '四半円点');
+                    closePt(`alignSnapPoint 四半円点（${unit}）`, gq, { x: cc.x + R, y: cc.y }, tol, { i }, 'x', 'y');
+                }
+                const g0 = ask({ x: cc.x + 3 * px, y: cc.y + 3 * px });
+                assert.deepEqual(g0, { x: cc.x, y: cc.y, t: '中心' });
+            }
+            assert.ok(done.mid >= 55 && done.near >= 40 && done.circle >= 50, `確かめた数が少ない: ${JSON.stringify(done)}`);
+        } finally {
+            app.eval(`Object.assign(osnapState, JSON.parse(window.__os)); alignReset(); resetCommand(); closePropertyPanel(); hideSnack(); entities.length = 0; undoStack.length = 0;`);
+            setUnit('m');
+        }
+    }));
+
+    // 図心（v5.59.1 で直した）: 公共座標・mm の図面でも桁が落ちない。答えは、頂点の平均を引いてから求める（アプリは1点目を引く）
+    ['m', 'mm'].forEach((unit) => it(`_polygonCentroid: 多角形の図心（公共座標・${unit} の図面）。スナップの「図心」も同じ値`, () => {
+        setUnit(unit);
+        const f = unit === 'mm' ? 1000 : 1, g = O.rng(unit === 'mm' ? 332 : 331);
+        try {
+            app.eval(`window.__os = JSON.stringify(osnapState); osnapState.gce = true;`);
+            for(let i = 0; i < N_RANDOM; i++) {
+                const size = Math.pow(10, g.u(-0.5, 2.5)), poly = randPolygon(g, g.int(3, 9), randBase(g), size); // 0.3m〜300m
+                const w = poly.map((p) => O.surveyToWcs(f, p.X, p.Y));
+                const mx = w.reduce((s, p) => s + p.x, 0) / w.length, my = w.reduce((s, p) => s + p.y, 0) / w.length;
+                let a = 0, cx = 0, cy = 0;
+                w.forEach((p, k) => { const q = w[(k + 1) % w.length], px = p.x - mx, py = p.y - my, qx = q.x - mx, qy = q.y - my, c = px * qy - qx * py; a += c; cx += (px + qx) * c; cy += (py + qy) * c; });
+                const want = { x: mx + cx / (3 * a), y: my + cy / (3 * a) };
+                const tol = 1e-9 * f * Math.max(1, size);
+                closePt(`_polygonCentroid（${unit}）`, app.val(`_polygonCentroid(${JSON.stringify(w)})`), want, tol, { i }, 'x', 'y');
+                note(`_polygonCentroid（${unit}。m に直した差）`, Math.hypot(app.val(`_polygonCentroid(${JSON.stringify(w)}).x`) - want.x, app.val(`_polygonCentroid(${JSON.stringify(w)}).y`) - want.y) / f);
+                if(i % 10) continue;
+                // 張り合わせの別窓で、図心に吸い付く（図心の近くに頂点・辺が無い倍率で）
+                app.eval(`alignReset(); resetCommand(); entities.length = 0; undoStack.length = 0;
+                    entities.push({ type: 'PLINE', layer: 0, color: null, closed: true, points: ${JSON.stringify(w)} }); ensureEntityIds(); cmdState.selectedIndices = [0]; processCommand('HALIGN');`);
+                const got = app.val(`alignSnapPoint({ x: ${want.x}, y: ${want.y} }, ${1 / (size * f)}, 22)`); // 図形の大きさ ＝ 1 画素（図心だけが、ちょうどその位置にある）
+                assert.equal(got && got.t === '図心' || got && Math.hypot(got.x - want.x, got.y - want.y) <= tol, true, JSON.stringify({ i, got, want }));
+                const all = app.val(`collectSnapPoints(${want.x}, ${want.y}, null, { main: true, gce: true }, 22).filter((p) => p.t === '図心')`);
+                assert.equal(all.length, 1);
+                closePt(`スナップの図心（${unit}）`, all[0], want, tol, { i }, 'x', 'y');
+            }
+        } finally {
+            app.eval(`Object.assign(osnapState, JSON.parse(window.__os)); alignReset(); resetCommand(); closePropertyPanel(); hideSnack(); entities.length = 0; undoStack.length = 0;`);
+            setUnit('m');
+        }
+    }));
+
     it('（v5.49.2 で直した）helmReverseXform: mm の図面で、任意座標の図面を公共座標の SIMA に合わせても、離れた所が 0.01mm 以内', () => {
         // 図面の点は原点の近く（任意座標）、SIMA は公共座標。広がり 3km の張り合わせ点・重心から 5km までの点。
         // 以前は変換の向きを「重心と、そこから 1 単位（mm の図面では 1mm）ずらした点の写り先の差」で求めていて、
