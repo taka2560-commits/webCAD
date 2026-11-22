@@ -802,9 +802,9 @@
         .tv-all { font-size: 11px; padding: 2px 10px; border-radius: 10px; background: rgba(97,175,239,0.15); border: 1px solid rgba(97,175,239,0.4); color: #61afef; cursor: pointer; font-weight: bold; }
         .tv-note { font-size: 11px; color: #aaa; line-height: 1.5; }
         .tv-note b { color: var(--green); }
-        /* 絞っているあいだは、上のバーの 👁 に黄色の印（パネルを閉じても気づけるように） */
-        .top-btn.tv-on { position: relative; border-color: #ffcc00; }
-        .top-btn.tv-on::after { content: ''; position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; border-radius: 50%; background: #ffcc00; }
+        /* 絞っているあいだは、上のバーの 👁 に「絞」の印（パネルを閉じても気づけるように）。保存の「未保存」の黄色い丸とは別の形にする（v5.60.1） */
+        .top-btn.tv-on, .fsd-btn.tv-on { position: relative; border-color: #ffcc00; }
+        .top-btn.tv-on::after, .fsd-btn.tv-on::after { content: '絞'; position: absolute; top: 0; right: 0; min-width: 15px; height: 15px; padding: 0 2px; box-sizing: border-box; border-radius: 8px; background: #ffcc00; color: #1e2228; font: 700 10px/15px 'Segoe UI', sans-serif; text-align: center; }
         .lm-ghost-row input[type="range"] { flex: 1; min-width: 0; height: 24px; margin: 0; accent-color: var(--brand); cursor: pointer; }
         .lm-ghost-row span:last-child { min-width: 36px; text-align: right; font-family: Consolas, monospace; color: #ddd; }
         .lm-list { max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
@@ -1688,6 +1688,7 @@
         function enablePseudoFullscreen() {
             isPseudoFullscreen = true;
             document.body.classList.add('fullscreen-mode');
+            if(typeof typeViewRemind === 'function') typeViewRemind(); // 種類で絞っていれば知らせる（全画面では上のバーの印が見えない）
             window._fsZoomAnchor = null; // 入るたびに、拡大の中心は読み直す
             window.scrollTo(0, 1); // iOSのURLバー配置ハック
             setTimeout(() => { if(window.resizeCanvas) window.resizeCanvas(); }, 100);
@@ -1704,7 +1705,7 @@
         // フルスクリーン状態の監視 (PC/Android/iPad等のネイティブAPI動作時用)
         function onFullscreenChange() {
             if (document.fullscreenElement || document.webkitFullscreenElement) {
-                if(!document.body.classList.contains('fullscreen-mode')) window._fsZoomAnchor = null;
+                if(!document.body.classList.contains('fullscreen-mode')) { window._fsZoomAnchor = null; if(typeof typeViewRemind === 'function') typeViewRemind(); }
                 document.body.classList.add('fullscreen-mode');
             } else {
                 document.body.classList.remove('fullscreen-mode');

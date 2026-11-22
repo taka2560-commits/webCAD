@@ -118,6 +118,7 @@ function _buildSaveData(name) {
 // ===== 復元データの適用 =====
 function applyProjectData(data) {
     if (!data) return false;
+    if (typeof typeViewSyncSoon === 'function') typeViewSyncSoon(); // 開いた図面が種類で絞ってあるかを、上のバーの 👁 の印に合わせる（図形を入れ終えてから。cad-typeview.js）
     // レイアウトを見ていたら、先にモデルに戻る（あとで前の図面のモデルの位置に戻され、開いた図面の表示の位置が消えていた）
     if (typeof layoutShowModel === 'function') layoutShowModel(true);
     // エンティティ

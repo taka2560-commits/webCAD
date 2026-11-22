@@ -1114,6 +1114,7 @@ function _applyUndoSnapshot(s) {
     if(typeof window.updateCoordListContent === 'function' && document.getElementById('coord-list-rows')) window.updateCoordListContent(); // 開いている座標一覧も
 }
 function saveUndo() {
+    if(typeof typeViewSyncSoon === 'function') typeViewSyncSoon(); // このあとの操作で「種類で絞る」の様子が変わるかもしれない: 終わってから、👁 の印を合わせる（cad-typeview.js）
     ensureEntityIds(); // 履歴にもIDを残し、元に戻した後も選択が同じ図形を指すようにする
     _bumpGeomEpoch();
     undoStack.push(_undoSnapshot());

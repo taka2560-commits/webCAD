@@ -123,7 +123,7 @@ window.toggleBlockVisibility = function(i) {
     if(idxs.length === 0) return;
     const allHidden = idxs.every(k => entities[k].hidden);
     saveUndo();
-    idxs.forEach(k => { entities[k].hidden = !allHidden; });
+    idxs.forEach(k => { entities[k].hidden = !allHidden; delete entities[k].hiddenBy; }); // 自分で出す・隠す: 隠した理由（種類で絞る 'type' など）は消す（残ると、あとで「すべて表示」で勝手に出る。v5.60.1）
     if(!allHidden) { cmdState.selectedIndices = (cmdState.selectedIndices || []).filter(k => !idxs.includes(k)); if(idxs.includes(cmdState.highlightIdx)) cmdState.highlightIdx = -1; }
     addCommandLog(`-> ブロック「${name}」を${allHidden ? '表示' : '非表示'}にしました (${idxs.length}個)`);
     updatePropertiesPanel();
@@ -216,7 +216,7 @@ window.hideSelectedEntities = function() {
     const sel = (cmdState.selectedIndices && cmdState.selectedIndices.length) ? cmdState.selectedIndices.slice() : (cmdState.highlightIdx >= 0 ? [cmdState.highlightIdx] : []);
     if(sel.length === 0) return;
     saveUndo();
-    sel.forEach(i => { if(entities[i]) entities[i].hidden = true; });
+    sel.forEach(i => { if(entities[i]) { entities[i].hidden = true; delete entities[i].hiddenBy; } }); // 自分で隠した図形にする（種類で隠れていた部品も。「すべて表示」では出さない。v5.60.1）
     addCommandLog(`-> ${sel.length}個の図形を非表示にしました（再表示: 画層管理の「隠れ図形を再表示」）`);
     showToast(`${sel.length}個を非表示にしました`);
     clearSelection();
@@ -898,7 +898,7 @@ window.changeEntityProp = function(idx, prop, val, el) {
     else if(prop==='textOverride') entities[idx].textOverride = val===''?null:val;
     else if(prop==='lt') { if(!val || String(val).toUpperCase() === 'BYLAYER') delete entities[idx].lt; else entities[idx].lt = String(val); } // 線種（空は画層に従う）
     else if(prop==='lw') { const w = Number(val); if(val === '' || val === null || !(w >= 0)) delete entities[idx].lw; else entities[idx].lw = w; } // 線の太さ（1/100 mm）
-    else if(prop==='hidden') entities[idx].hidden = (val === 'true' || val === true);
+    else if(prop==='hidden') { entities[idx].hidden = (val === 'true' || val === true); delete entities[idx].hiddenBy; } // 自分で切り替えた: 隠した理由は消す（v5.60.1）
     else {
         let num = parseFloat(val);
         // 座標・長さの欄は表示の単位（オプションの座標・長さの単位）で入るので、図面の単位に直す

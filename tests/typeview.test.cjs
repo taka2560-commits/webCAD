@@ -166,4 +166,100 @@ describe('種類で絞る（見たい種類だけ表示）', () => {
         assert.equal(app.val(`typeViewTap('line')`), 0, '全部がその種類なら、何も隠さない');
         assert.deepEqual(app.errors(), []);
     });
+
+    // ===== G3（別の担当の点検）で見つかった点の直し（v5.60.1） =====
+    const tick = () => new Promise((r) => setTimeout(r, 30));
+    // 0 ブロックの線・1 ブロックの円・2 ブロックの文字（同じまとまり「記号」）・3 線・4 円
+    const BLOCK = `entities.push({ type: 'LINE', layer: 0, color: null, x1: 0, y1: 0, x2: 4, y2: 0, gid: 'b1', blockName: '記号' }, { type: 'CIRCLE', layer: 0, color: null, cx: 2, cy: 2, radius: 1, gid: 'b1', blockName: '記号' },
+        { type: 'TEXT', layer: 0, color: null, x: 2, y: 4, text: 'N', height: 1, gid: 'b1', blockName: '記号' }, { type: 'LINE', layer: 0, color: null, x1: 20, y1: 0, x2: 30, y2: 0 }, { type: 'CIRCLE', layer: 0, color: null, cx: 40, cy: 0, radius: 3 }); ensureEntityIds(); _bumpGeomEpoch();`;
+    const hid = () => [...app.val('entities.map((e) => (e.hidden ? (e.hiddenBy || "self") : "-"))')];
+
+    it('絞っているあいだに自分で隠した図形は、「すべて表示」で出てこない（🚫 隠す・ブロック管理の 👁・プロパティの表示は、隠した理由を消す）', () => {
+        // 🚫 隠す: 線だけにして、ブロック（線をタップ → まとまり全部）を隠す
+        app.eval(BLOCK + `typeViewTap('line'); cmdState.selectedIndices = [0, 1, 2]; cmdState.highlightIdx = 0; hideSelectedEntities();`);
+        assert.deepEqual(hid(), ['self', 'self', 'self', '-', 'type']);
+        app.eval('typeViewClear()');
+        assert.deepEqual(hid(), ['self', 'self', 'self', '-', '-'], 'ブロックは丸ごと隠れたまま（以前は、円と文字だけ出てきた）');
+        assert.match(app.val(`(showLayerManagerPanel(), document.getElementById('property-panel').textContent)`), /隠れ図形を再表示 \(3個\)/);
+        // ブロック管理の 👁 で出す: 見えている図形に「種類で隠した」印を残さない
+        // （一部でも見えているブロックの 👁 は「隠す」。もう一度で「表示」）
+        app.eval(`showHiddenEntities(); typeViewTap('line'); showBlockManagerPanel(); toggleBlockVisibility(_blockNameCache.indexOf('記号'));`);
+        assert.deepEqual([...app.val('entities.slice(0, 3).map((e) => !!e.hidden + ":" + (e.hiddenBy || ""))')], ['true:', 'true:', 'true:'], '隠す: 自分で隠した図形になる');
+        app.eval(`toggleBlockVisibility(_blockNameCache.indexOf('記号'));`);
+        assert.deepEqual([...app.val('entities.slice(0, 3).map((e) => !!e.hidden + ":" + (e.hiddenBy || ""))')], ['false:', 'false:', 'false:'], '表示: 印を残さない');
+        app.eval(`cmdState.selectedIndices = [1]; cmdState.highlightIdx = 1; hideSelectedEntities(); typeViewClear();`);
+        assert.deepEqual(hid(), ['-', 'self', '-', '-', '-'], '自分で隠した円は隠れたまま');
+        // ブロック管理の 👁 で隠す・プロパティの表示スイッチ
+        app.eval(`showHiddenEntities(); typeViewTap('line'); updateBlockManagerContent(); toggleBlockVisibility(_blockNameCache.indexOf('記号')); typeViewClear();`);
+        assert.deepEqual(hid(), ['self', 'self', 'self', '-', '-']);
+        app.eval(`showHiddenEntities(); typeViewTap('line'); changeEntityProp(4, 'hidden', false);`);
+        assert.equal(app.val('entities[4].hidden === false && entities[4].hiddenBy === undefined'), true);
+        app.eval(`changeEntityProp(4, 'hidden', true); typeViewClear();`);
+        assert.deepEqual(hid(), ['-', '-', '-', '-', 'self']);
+    });
+
+    it('👁 の印を、絞っている・いないに合わせる: 図面を開いたとき（図面名が無くても）・ほかの操作で絞りが無くなったとき。全画面の引き出しのボタンにも付く', async () => {
+        const fsd = () => app.val(`[...document.querySelectorAll('.fsd-btn[onclick^="toggleLayerPanel()"]')].map((b) => b.classList.contains('tv-on')).join(',')`);
+        app.eval(BLOCK + `typeViewTap('line');`);
+        assert.equal(badge(), true);
+        assert.equal(fsd(), 'true', '全画面の引き出しの「👁 画層管理」にも');
+        const saved = app.val(`JSON.stringify(_buildSaveData('絞った図面'))`);
+        // 絞っていない図面を開く → 印が消える。絞った図面を開く → 印が付く（図面名の無い保存でも）
+        app.eval(`typeViewClear();`);
+        const plain = app.val(`JSON.stringify(_buildSaveData('ふつうの図面'))`);
+        app.eval(`typeViewTap('line');`);
+        app.window.__plain = plain; app.window.__saved = saved;
+        app.eval(`(() => { const d = JSON.parse(window.__plain); delete d.drawingName; applyProjectData(d); })()`);
+        await tick();
+        assert.equal(app.val('typeViewActive()'), false);
+        assert.equal(badge(), false);
+        app.eval(`(() => { const d = JSON.parse(window.__saved); delete d.drawingName; applyProjectData(d); })()`);
+        await tick();
+        assert.equal(app.val('typeViewActive()'), true);
+        assert.equal(badge(), true, '開いた図面が絞ってあれば、印が付く');
+        // ほかの操作で、種類で隠した図形が無くなった: 印も消える
+        app.eval(`cmdState.selectedIndices = []; cmdState.highlightIdx = -1; saveUndo(); entities.forEach((e) => { if(e.hiddenBy === 'type') { e.hidden = false; delete e.hiddenBy; } });`);
+        assert.equal(badge(), true, 'その場ではまだ');
+        await tick();
+        assert.equal(badge(), false, '操作のあとで合わせる');
+        assert.equal(fsd(), 'false');
+    });
+
+    it('全画面（座標読取）に入るとき、絞っていれば知らせる。コマンドの途中で絞ったら、そのコマンドを終える（隠した図形に操作が届かないように）', () => {
+        app.eval(BLOCK);
+        assert.equal(app.val('typeViewRemind()'), false);
+        app.eval(`typeViewTap('line'); showToast('x', 10);`);
+        assert.equal(app.val('typeViewRemind()'), true);
+        assert.match(toast(), /種類で絞っています（線 だけ表示）。隠した図形は、読めません・吸い付きません/);
+        app.eval(`typeViewClear(); cmdState.selectedIndices = [4]; processCommand('MOVE');`);
+        assert.notEqual(app.val('cmdState.mode'), 'IDLE');
+        app.eval(`typeViewTap('line')`);
+        assert.equal(app.val('cmdState.mode'), 'IDLE', '移動の途中で絞ったら、移動をやめる');
+        assert.equal(app.val('entities[4].hidden && entities[4].cx === 40'), true);
+        // タッチで非表示（同じパネルの操作）は続ける
+        app.eval(`typeViewClear(); showLayerManagerPanel(); issueCommand('LAYOFF');`);
+        assert.equal(app.val('cmdState.mode'), 'WAITING_LAYOFF_TOUCH');
+        app.eval(`typeViewTap('circle')`);
+        assert.equal(app.val('cmdState.mode'), 'WAITING_LAYOFF_TOUCH');
+        app.eval(`processCommand('CANCEL'); typeViewClear();`);
+    });
+
+    it('分け方: 引出線の矢印（塗り）は「線」。ブロックの測点（属性つきのブロック）は、記号も点名も「点」。表示している種類が無くなったときの説明', () => {
+        app.eval(`entities.push({ type: 'HATCH', layer: 0, color: null, arrow: 1, imp: true, target: { type: 'PLINE', closed: true, points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }] } },
+            { type: 'LINE', layer: 0, color: null, x1: 0, y1: 0, x2: 9, y2: 9 },
+            { type: 'CIRCLE', layer: 0, color: null, cx: 10, cy: 10, radius: 0.3, gid: 'bp', blockName: '杭', ins: { x: 10, y: 10 } }, { type: 'TEXT', layer: 0, color: null, x: 11, y: 11, text: 'B1', height: 1, attTag: '点名', gid: 'bp', blockName: '杭', ins: { x: 10, y: 10 } },
+            { type: 'CIRCLE', layer: 0, color: null, cx: 30, cy: 30, radius: 2 }, { type: 'TEXT', layer: 0, color: null, x: 0, y: 20, text: 'メモ', height: 1 }); ensureEntityIds(); _bumpGeomEpoch();`);
+        assert.deepEqual([...app.val('(() => { const pg = _typeViewPointGids(); return entities.map((e) => typeViewCatOf(e, pg)); })()')], ['line', 'line', 'point', 'point', 'circle', 'text']);
+        app.eval(`typeViewTap('line')`);
+        assert.deepEqual(shownIdx(), [0, 1], '線だけ: 引出線の矢印は線と一緒に残る');
+        app.eval(`typeViewClear(); typeViewTap('point');`);
+        assert.deepEqual(shownIdx(), [2, 3], '点だけ: ブロックの測点は、記号の円も点名も出る');
+        app.eval(`typeViewClear(); typeViewTap('circle');`);
+        assert.deepEqual(shownIdx(), [4], '円だけ: 測点の記号の円は出さない');
+        // 表示している種類の図形を全部消した
+        app.eval(`entities.splice(4, 1); _bumpGeomEpoch(); showLayerManagerPanel();`);
+        assert.match(panel(), /いま表示している種類はありません（5個 を隠しています）/);
+        assert.doesNotMatch(panel(), /（なし）/);
+        assert.deepEqual(app.errors(), []);
+    });
 });
