@@ -789,6 +789,22 @@
         /* 画層一括管理: うっすら表示の濃さのスライダーと、画層の一覧（1行＝👁️・色・名前）。
            画面いっぱい（□）のときは、一覧だけをパネルの高さいっぱいでスクロールし（上の操作は動かさない）、行を大きくして何列かに並べる */
         .lm-ghost-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #bbb; }
+        /* 種類で絞る（画層管理のパネル。cad-typeview.js。v5.60）: 種類のボタン（押すと、その種類だけ表示）。絞っているあいだは、表示中が緑・隠しているものが点線 */
+        .tv-box { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; background: rgba(255,255,255,0.05); border-radius: 6px; }
+        .tv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: bold; color: #ddd; min-height: 24px; }
+        .tv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .tv-chip { min-height: calc(32px * var(--btn-k, 1)); padding: 4px 10px; border-radius: var(--r-pill); background: rgba(40,44,52,0.9); border: 1px solid rgba(255,255,255,0.22); color: #ddd; font: 600 12px 'Segoe UI', sans-serif; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+        .tv-chip b { font-weight: 600; font-size: 11px; color: #999; }
+        .tv-chip.on { border-color: var(--green); color: var(--green); background: rgba(0,255,136,0.12); }
+        .tv-chip.on b { color: var(--green); }
+        .tv-chip.off { color: #888; border-style: dashed; }
+        .tv-chip:active { transform: scale(0.94); }
+        .tv-all { font-size: 11px; padding: 2px 10px; border-radius: 10px; background: rgba(97,175,239,0.15); border: 1px solid rgba(97,175,239,0.4); color: #61afef; cursor: pointer; font-weight: bold; }
+        .tv-note { font-size: 11px; color: #aaa; line-height: 1.5; }
+        .tv-note b { color: var(--green); }
+        /* 絞っているあいだは、上のバーの 👁 に黄色の印（パネルを閉じても気づけるように） */
+        .top-btn.tv-on { position: relative; border-color: #ffcc00; }
+        .top-btn.tv-on::after { content: ''; position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; border-radius: 50%; background: #ffcc00; }
         .lm-ghost-row input[type="range"] { flex: 1; min-width: 0; height: 24px; margin: 0; accent-color: var(--brand); cursor: pointer; }
         .lm-ghost-row span:last-child { min-width: 36px; text-align: right; font-family: Consolas, monospace; color: #ddd; }
         .lm-list { max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
@@ -1523,6 +1539,7 @@
     <script src="cad-helmert.js"></script>
     <script src="cad-helmert-rev.js"></script>
     <script src="cad-align.js"></script>
+    <script src="cad-typeview.js"></script>
     <script src="cad-fav.js"></script>
     <script src="cad-motion.js"></script>
     <script src="cad-snapsheet.js"></script>

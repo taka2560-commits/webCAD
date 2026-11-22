@@ -475,6 +475,7 @@ window.updateLayerManagerContent = function() {
                 🔄 表示反転
             </button>
         </div>
+        ${(!bulk && typeof typeViewHtml === 'function') ? typeViewHtml() : ''}
         ${bulk ? `
         <div class="lm-bulk" role="group" aria-label="画層の色・線種をまとめて変える">
             <div class="lm-bulk-help">変える画層にチェックを付け、下でする事を選んで、いちばん下のボタンを押します</div>
@@ -505,7 +506,7 @@ window.updateLayerManagerContent = function() {
         <button class="prop-btn lm-bulk-start" onclick="lmBulkColorMode(true)" title="いくつかの画層（すべてでも）を選んで、色をまとめて変えます。図形の個別の色・線種を外して画層に従わせることもできます">🎨 画層の色・線種をまとめて変える</button>`}
         ${(() => {
             // 取り込み時に非表示にした図形を、種類ごとに表示する（円弧・塗りつぶし・そのほか）。取り込んだ塗りつぶしは、また隠せる
-            const hid = entities.filter(en => en.hidden);
+            const hid = entities.filter(en => en.hidden && en.hiddenBy !== 'type'); // 「種類で絞る」で隠した図形は、上の「すべて表示」で戻す（cad-typeview.js）
             const nFill = hid.filter(en => en.hiddenBy === 'fill').length, nArc = hid.filter(en => en.hiddenBy !== 'fill' && en.type === 'ARC').length;
             const nOther = hid.length - nFill - nArc;
             const nShownFill = entities.filter(en => en.type === 'HATCH' && en.imp && !en.arrow && !en.hidden).length;

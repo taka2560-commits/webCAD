@@ -1,6 +1,6 @@
 # Antigravity Web CAD
 
-**現在のバージョン: v5.59.3（2026年11月16日リリース）**
+**現在のバージョン: v5.60（2026年11月22日リリース）**
 
 [![CI](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml/badge.svg)](https://github.com/taka2560-commits/webCAD/actions/workflows/ci.yml)
 
@@ -222,7 +222,7 @@ npm install          # 依存ライブラリ（dxf-parser / dxf-writer / libredw
 npm run dev          # 開発サーバー（Service Worker は登録されず、常に最新のコードで動作）
 npm run build        # 本番ビルド（dist/）
 npm run preview      # 本番ビルドの確認（Service Worker・オフライン動作の検証はこちらで）
-npm test             # 自動テスト（1015件。アプリを jsdom 上で実際に動かして確認）
+npm test             # 自動テスト（1022件。アプリを jsdom 上で実際に動かして確認）
 npm run lint         # 構文・未定義変数のチェック
 npm run check        # lint → テスト（計算ゲートを含む）→ 品質のチェック G1 → ビルド → 画面のチェック G2（CI と同じ内容。docs/品質管理ゲート.md）
 ```
@@ -295,6 +295,7 @@ npm run check        # lint → テスト（計算ゲートを含む）→ 品�
   | `cad-ping.js` | ピンの知らせ（ポンと立つ・円の波・現在地からの距離） |
   | `cad-helmert-rev.js` | SIMA の変換の逆（張り合わせ点から図面 → SIMA の変換を求め、図面の図形を SIMA の座標へ動かす） |
   | `cad-align.js` | 図形の張り合わせ（HALIGN）: 動かす図形を別窓に出し、別窓で選んだ点 → 図面の点 の組から求めた回転・移動（・縮尺）で動かす。計算は `cad-helmert.js` の helmSolve、選び方は `cad-edit.js`、点の指定は SIMA の変換と同じ（別窓 `cad-subview.js`・測量計算の点の指定） |
+  | `cad-typeview.js` | 種類で絞る（画層管理のパネル。線だけ・円だけ・文字だけ…と、見たい種類の図形だけを表示する。図形ごとの非表示 hidden に hiddenBy 'type' を付ける）。v5.60 |
   | `cad-qr.js` | このアプリを渡す QR コード（qrcode-generator。リンクは今の場所、手元の開発用なら公開の場所） |
   | `cad-ai-read.js` | 座標表の読み取り（Claude Opus 5.5。写真・PDF → 点番号・点名・X・Y・標高 → 確かめる表 → 座標一覧。API キーは使う人がそれぞれ端末に入れる。SDK は src/vendor.js の loadClaudeSdk） |
   | `cad-dropbox.js` | Dropbox から開く（アプリの中の一覧。files/list_folder・files/download）・Dropbox に保存（files/upload）。OAuth 2 PKCE でつなぐ。保存先は開いたファイルのフォルダ。Dropbox のスクリプトは読まない（v5.56） |

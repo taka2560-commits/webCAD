@@ -952,6 +952,7 @@ function setDrawingName(name) {
     // 別の図面になったら、前の図面の「色をまとめて変える」の選び（cad-panels.js）と座標読取の拡大の中心は使わない（v5.52）
     if(typeof lmBulkReset === 'function') lmBulkReset();
     if(typeof alignReset === 'function') alignReset(); // 張り合わせの途中もやめる（動かす図形は前の図面のもの。cad-align.js）
+    if(typeof typeViewSync === 'function') setTimeout(() => typeViewSync(true), 0); // 開いた図面が種類で絞ってあれば、上のバーの 👁 に印（図形を入れ終えてから。cad-typeview.js）
     window._fsZoomAnchor = null;
     if(typeof dropboxDrawingChanged === 'function') dropboxDrawingChanged(name); // Dropbox の保存先（開いた図面のフォルダ）を覚えるか（cad-dropbox.js）
     window._drawingName = name || ''; // 新UIでは表示欄が無いため、エクスポート名などに使う
@@ -1121,5 +1122,5 @@ function saveUndo() {
     // 自動保存トリガー
     if(typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
-function undo() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); if(typeof guideNotify === 'function') guideNotify('undo'); if(!undoStack.length){notify('元に戻す操作がありません', 1800);return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); if(typeof alignAfterUndo === 'function') alignAfterUndo(); }
-function redo() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); if(!redoStack.length){notify('やり直す操作がありません', 1800);return;} _bumpGeomEpoch(); undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); if(typeof alignAfterUndo === 'function') alignAfterUndo(); }
+function undo() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); if(typeof guideNotify === 'function') guideNotify('undo'); if(!undoStack.length){notify('元に戻す操作がありません', 1800);return;} _bumpGeomEpoch(); redoStack.push(_undoSnapshot()); _applyUndoSnapshot(undoStack.pop()); render(); addCommandLog('-> 元に戻す'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); if(typeof alignAfterUndo === 'function') alignAfterUndo(); if(typeof typeViewSync === 'function') typeViewSync(true); }
+function redo() { if(typeof layoutActive === 'function' && layoutActive()) layoutShowModel(); if(!redoStack.length){notify('やり直す操作がありません', 1800);return;} _bumpGeomEpoch(); undoStack.push(_undoSnapshot()); _applyUndoSnapshot(redoStack.pop()); render(); addCommandLog('-> やり直し'); if(typeof scheduleAutoSave === 'function') scheduleAutoSave(); if(typeof alignAfterUndo === 'function') alignAfterUndo(); if(typeof typeViewSync === 'function') typeViewSync(true); }

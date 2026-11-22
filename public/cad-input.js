@@ -611,7 +611,8 @@ function setupEventListeners() {
 }
 
 // 非表示フラグ付き図形（取り込み時に非表示にした円弧・塗りつぶしなど）の再表示。kind: 'arc' 円弧・'fill' 塗りつぶし・'other' そのほか・省くと全部
-function _hiddenKindOf(e) { return e.hiddenBy === 'fill' ? 'fill' : e.type === 'ARC' ? 'arc' : 'other'; }
+// 「種類で絞る」で隠した図形（hiddenBy 'type'）は別の種類（'type'）: 円弧・そのほかのボタンでは出さない（省いたとき＝SHOWALL は全部出す）
+function _hiddenKindOf(e) { return e.hiddenBy === 'type' ? 'type' : e.hiddenBy === 'fill' ? 'fill' : e.type === 'ARC' ? 'arc' : 'other'; }
 window.showHiddenEntities = function(kind) {
     const list = entities.filter(e => e.hidden && (!kind || _hiddenKindOf(e) === kind));
     const hiddenCount = list.length;
@@ -624,5 +625,6 @@ window.showHiddenEntities = function(kind) {
     if(typeof _bumpGeomEpoch === 'function') _bumpGeomEpoch();
     addCommandLog(`-> 非表示だった${what} ${hiddenCount}個 を表示しました（元に戻すにはUndo）`);
     if (typeof window.updateLayerManagerContent === 'function') window.updateLayerManagerContent();
+    if(typeof typeViewSync === 'function') typeViewSync(true); // 上のバーの 👁 の印（種類で絞っているか）
     render();
 };

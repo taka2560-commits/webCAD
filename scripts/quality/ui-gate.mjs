@@ -358,6 +358,42 @@ async function runOne(browser, v, btn, motion) {
     const bulkOut = await page.evaluate(() => { const p = document.getElementById('property-panel').getBoundingClientRect();
         return [...document.querySelectorAll('.lm-bulk button, .lm-bulk input')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.right > p.right + 1 || r.left < p.left - 1 || e.scrollWidth > e.clientWidth + 2); }).map((e) => e.textContent.trim() || e.id); });
     if (bulkOut.length) fail(run, `画層の色をまとめて変える欄がはみ出しています: ${bulkOut.join(', ')}`);
+    // 種類で絞る（v5.60）: 画層管理のパネルに種類のボタンが収まり、押すとその種類だけになって、上のバーの 👁 に印が付く。「すべて表示」で戻る
+    const tv = await page.evaluate(async () => {
+        const bad = [], n0 = entities.length, u0 = undoStack.length;
+        if (typeof lmBulkColorMode === 'function') lmBulkColorMode(false);
+        closePropertyPanel(); resetCommand();
+        entities.push({ type: 'LINE', layer: currentLayerIndex, color: null, x1: 0, y1: 0, x2: 10, y2: 0 }, { type: 'CIRCLE', layer: currentLayerIndex, color: null, cx: 5, cy: 5, radius: 2 }, { type: 'ARC', layer: currentLayerIndex, color: null, cx: 5, cy: 5, radius: 3, startAngle: 0, endAngle: 1 },
+            { type: 'TEXT', layer: currentLayerIndex, color: null, x: 0, y: 8, text: 'A', height: 1 }, { type: 'POINT', layer: currentLayerIndex, color: null, x: 9, y: 9, name: 'K' }, { type: 'DIMENSION', layer: currentLayerIndex, color: null, subType: 'LINEAR', p1: { x: 0, y: 0 }, p2: { x: 10, y: 0 }, offset: 3 },
+            { type: 'HATCH', layer: currentLayerIndex, color: null, target: { type: 'CIRCLE', cx: 5, cy: 5, radius: 1 } });
+        _bumpGeomEpoch(); showLayerManagerPanel();
+        await new Promise((r) => setTimeout(r, 500));
+        const p = document.getElementById('property-panel'), pr = p.getBoundingClientRect(), box = document.getElementById('tv-box');
+        if (!box) bad.push('種類のボタンが出ない');
+        else {
+            const chips = [...box.querySelectorAll('.tv-chip')];
+            if (chips.length < 7) bad.push(`種類のボタンが足りない（${chips.length}）`);
+            const out = chips.filter((c) => { const r = c.getBoundingClientRect(); return r.right > pr.right + 1 || r.left < pr.left - 1 || c.scrollWidth > c.clientWidth + 2 || r.height < 28; }).map((c) => c.textContent.trim());
+            if (out.length) bad.push(`種類のボタンがはみ出す・小さい: ${out.join(', ')}`);
+            const line = box.querySelector('.tv-chip[data-tv="line"]');
+            line.scrollIntoView({ block: 'nearest' }); await new Promise((r) => setTimeout(r, 100));
+            const lr = line.getBoundingClientRect(), hit = document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
+            if (!(hit === line || line.contains(hit))) bad.push(`「線」のボタンが隠れている（${hit && (hit.id || hit.className)}）`);
+            line.click();
+            await new Promise((r) => setTimeout(r, 300));
+            const mine = entities.slice(n0).map((e) => (e.hidden ? 1 : 0)).join('');
+            if (mine !== '0111111') bad.push(`線だけにならない（${mine}）`);
+            const eye = document.querySelector('button[onclick="toggleLayerPanel()"]');
+            if (!eye || !eye.classList.contains('tv-on')) bad.push('👁 に印が付かない');
+            const all = document.getElementById('tv-all');
+            if (!all) bad.push('「すべて表示」が出ない');
+            else { const ar = all.getBoundingClientRect(); if (ar.right > pr.right + 1 || ar.width < 40) bad.push('「すべて表示」がはみ出す'); all.click(); await new Promise((r) => setTimeout(r, 200)); if (entities.slice(n0).some((e) => e.hidden)) bad.push('「すべて表示」で戻らない'); }
+            const note = box.querySelector('.tv-note'); if (note && note.scrollWidth > note.clientWidth + 2) bad.push('説明の文が切れる');
+        }
+        closePropertyPanel(); entities.length = n0; undoStack.length = u0; _bumpGeomEpoch(); typeViewSync(true); render();
+        return bad;
+    });
+    if (tv.length) fail(run, `種類で絞る: ${tv.join('・')}`);
     // 座標表の読み取り結果（v5.55）: 値の欄がパネルに収まり、重ならず、数が切れない（スマホの幅でも X・Y・標高が全部見える）
     const ai = await page.evaluate(() => {
         closePropertyPanel();
